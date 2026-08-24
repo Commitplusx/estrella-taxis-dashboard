@@ -19,10 +19,8 @@ export function useTraccarSocket({ onDevices, onPositions, onEvents }: UseTracca
 
   useEffect(() => {
     const connect = () => {
-      // Protocolo ws:// o wss:// según el host actual
-      const wsUrl = import.meta.env.DEV 
-        ? `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}/api/socket`
-        : 'wss://taxis.estrella-eats.mx/api/socket'; // Directo en Producción
+      // Protocolo ws:// o wss:// según el host actual (Usa el proxy de Vite en DEV y el de Vercel en PROD)
+      const wsUrl = `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}/api/socket`;
       const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
 

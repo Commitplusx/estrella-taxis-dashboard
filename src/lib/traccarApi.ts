@@ -3,7 +3,7 @@
 //  Todas las llamadas pasan por aquí con credentials
 // =====================================================
 
-export const BASE_URL = import.meta.env.DEV ? '/api' : 'https://taxis.estrella-eats.mx/api'; // Producci\u00f3n va directo, Local usa proxy
+export const BASE_URL = '/api'; // Usa el proxy de Vite en Local y el de Vercel en Producción
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const hasBody = options.body !== undefined;
