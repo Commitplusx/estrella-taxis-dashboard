@@ -3,7 +3,7 @@
 //  Todas las llamadas pasan por aquí con credentials
 // =====================================================
 
-const BASE = '/api'; // Vite proxy lo redirige a Traccar
+const BASE = import.meta.env.DEV ? '/api' : 'https://taxis.estrella-eats.mx/api'; // Producci\u00f3n va directo, Local usa proxy
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const hasBody = options.body !== undefined;

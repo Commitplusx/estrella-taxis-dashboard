@@ -19,9 +19,10 @@ export function useTraccarSocket({ onDevices, onPositions }: UseTraccarSocketOpt
   useEffect(() => {
     const connect = () => {
       // Protocolo ws:// o wss:// según el host actual
-      const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
-      const host = window.location.host;
-      const ws = new WebSocket(`${protocol}://${host}/api/socket`);
+      const wsUrl = import.meta.env.DEV 
+        ? `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}/api/socket`
+        : 'wss://taxis.estrella-eats.mx/api/socket'; // Directo en Producción
+      const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
 
       ws.onopen = () => {
