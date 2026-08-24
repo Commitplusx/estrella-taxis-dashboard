@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { api, type TraccarUser } from '../lib/traccarApi';
+import { api, BASE_URL, type TraccarUser } from '../lib/traccarApi';
 
 type AuthContextType = {
   user: TraccarUser | null;
@@ -14,12 +14,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<TraccarUser | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Al arrancar, verificar si ya hay sesión activa en Traccar
+  // Al arrancar, verificar si ya hay sesión activa o si viene un token en la URL
   useEffect(() => {
-    api.getSession()
-      .then(setUser)
-      .catch(() => setUser(null))
-      .finally(() => setLoading(false));
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get('token');
+
+    if (token) {
+      // Intentar iniciar sesión usando el token (para el ShareLink)
+      // fetch directo porque necesitamos pasar el query param ?token=
+      fetch(`${BASE_URL}/session?token=${encodeURIComponent(token)}`, { credentials: 'include' })
+        .then(async (res) => {
+          if (!res.ok) throw new Error('Token inválido o expirado');
+          const userData = await res.json();
+          setUser(userData);
+          // Limpiar la URL para que no quede el token visible
+          window.history.replaceState({}, document.title, window.location.pathname);
+        })
+        .catch(() => setUser(null))
+        .finally(() => setLoading(false));
+    } else {
+      // Flujo normal: verificar sesión existente
+      api.getSession()
+        .then(setUser)
+        .catch(() => setUser(null))
+        .finally(() => setLoading(false));
+    }
   }, []);
 
   const login = async (email: string, password: string) => {
