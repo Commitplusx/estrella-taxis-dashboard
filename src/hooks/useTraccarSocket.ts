@@ -55,7 +55,10 @@ export function useTraccarSocket({ onDevices, onPositions }: UseTraccarSocketOpt
 
     return () => {
       if (reconnectTimer.current) clearTimeout(reconnectTimer.current);
-      wsRef.current?.close();
+      if (wsRef.current) {
+        wsRef.current.onclose = null; // Evitar que se lance el reconnectTimer tras desmontar
+        wsRef.current.close();
+      }
     };
   }, []);
 }

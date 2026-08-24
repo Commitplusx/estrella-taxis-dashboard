@@ -28,6 +28,58 @@ function getStatusColor(device: TraccarDevice) {
   return '#f59e0b';
 }
 
+function generateInfoWindowContent(device: TraccarDevice, pos: TraccarPosition) {
+  const battery = pos.attributes?.batteryLevel;
+  const ignition = pos.attributes?.ignition;
+  const speed = knotsToKmh(pos.speed || 0);
+
+  let engineStatusHtml = '';
+  if (ignition === true) {
+    engineStatusHtml = `<div style="margin-top:8px; display:flex; align-items:center; justify-content:center; gap:6px; font-size:11px; color:#166534; background:#dcfce7; border:1px solid #bbf7d0; padding:6px; border-radius:8px; font-weight:700;"><span style="width:8px;height:8px;background:#22c55e;border-radius:50%;box-shadow:0 0 4px #22c55e"></span> MOTOR ENCENDIDO</div>`;
+  } else if (ignition === false) {
+    engineStatusHtml = `<div style="margin-top:8px; display:flex; align-items:center; justify-content:center; gap:6px; font-size:11px; color:#991b1b; background:#fee2e2; border:1px solid #fecaca; padding:6px; border-radius:8px; font-weight:700;"><span style="width:8px;height:8px;background:#ef4444;border-radius:50%;box-shadow:0 0 4px #ef4444"></span> MOTOR APAGADO</div>`;
+  } else if (Number(speed) > 2) {
+    engineStatusHtml = `<div style="margin-top:8px; display:flex; align-items:center; justify-content:center; gap:6px; font-size:11px; color:#166534; background:#dcfce7; border:1px solid #bbf7d0; padding:6px; border-radius:8px; font-weight:700;"><span style="width:8px;height:8px;background:#22c55e;border-radius:50%;box-shadow:0 0 4px #22c55e"></span> MOTOR EN MOVIMIENTO</div>`;
+  }
+
+  return `
+    <div style="font-family:Inter,sans-serif;min-width:220px;padding:4px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <strong style="font-size:15px;color:#0f172a">${device.name}</strong>
+        <span style="width:8px;height:8px;border-radius:50%;background:${getStatusColor(device)};display:inline-block;box-shadow:0 0 4px ${getStatusColor(device)}"></span>
+      </div>
+      
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div style="background:#f8fafc;border-radius:8px;padding:8px;text-align:center;border:1px solid #f1f5f9">
+          <div style="font-size:20px;font-weight:800;color:#1d4ed8">${speed}</div>
+          <div style="font-size:10px;color:#64748b;font-weight:600;letter-spacing:0.5px">KM/H</div>
+        </div>
+        <div style="background:#f8fafc;border-radius:8px;padding:8px;text-align:center;border:1px solid #f1f5f9">
+          <div style="font-size:20px;font-weight:800;color:${getBatteryColor(battery)}">${battery ?? '--'}${battery != null ? '%' : ''}</div>
+          <div style="font-size:10px;color:#64748b;font-weight:600;letter-spacing:0.5px">BATERÍA</div>
+        </div>
+      </div>
+
+      ${engineStatusHtml}
+
+      ${pos.address ? `<div style="margin-top:10px;font-size:11px;color:#64748b;line-height:1.4"><strong style="color:#475569">📍 Dirección:</strong><br/>${pos.address.split(',')[0]}</div>` : ''}
+      
+      <div style="margin-top:10px;padding-top:8px;border-top:1px solid #f1f5f9;font-size:10px;color:#94a3b8">
+        Última señal: ${new Date(pos.fixTime).toLocaleTimeString()}
+      </div>
+      
+      <div style="display:flex;gap:6px;margin-top:12px">
+        <button onclick="window.dispatchEvent(new CustomEvent('openMapCommands', {detail: ${device.id}}))" style="flex:1; background:#fee2e2; color:#b91c1c; border:none; padding:8px 0; border-radius:8px; font-size:11px; font-weight:bold; cursor:pointer; display:flex; align-items:center; justify-content:center;">
+          ⚡ Comandos
+        </button>
+        <button onclick="window.dispatchEvent(new CustomEvent('viewMapRoute', {detail: ${device.id}}))" style="flex:1; background:#e0e7ff; color:#4338ca; border:none; padding:8px 0; border-radius:8px; font-size:11px; font-weight:bold; cursor:pointer; display:flex; align-items:center; justify-content:center;">
+          🗺️ Ver Ruta
+        </button>
+      </div>
+    </div>
+  `;
+}
+
 export default function MapPage() {
   const navigate = useNavigate();
   const mapRef = useRef<HTMLDivElement>(null);
@@ -160,67 +212,30 @@ export default function MapPage() {
           icon: svgMarker,
           title: device.name,
         });
-          marker.addListener('click', () => {
-            setSelectedDevice(device);
-            const battery = pos.attributes?.batteryLevel;
-            const ignition = pos.attributes?.ignition;
-            const speed = knotsToKmh(pos.speed || 0);
-
-            let engineStatusHtml = '';
-            if (ignition === true) {
-              engineStatusHtml = `<div style="margin-top:8px; display:flex; align-items:center; justify-content:center; gap:6px; font-size:11px; color:#166534; background:#dcfce7; border:1px solid #bbf7d0; padding:6px; border-radius:8px; font-weight:700;"><span style="width:8px;height:8px;background:#22c55e;border-radius:50%;box-shadow:0 0 4px #22c55e"></span> MOTOR ENCENDIDO</div>`;
-            } else if (ignition === false) {
-              engineStatusHtml = `<div style="margin-top:8px; display:flex; align-items:center; justify-content:center; gap:6px; font-size:11px; color:#991b1b; background:#fee2e2; border:1px solid #fecaca; padding:6px; border-radius:8px; font-weight:700;"><span style="width:8px;height:8px;background:#ef4444;border-radius:50%;box-shadow:0 0 4px #ef4444"></span> MOTOR APAGADO</div>`;
-            } else {
-              // Si no hay datos, inferir por velocidad
-              if (Number(speed) > 2) {
-                engineStatusHtml = `<div style="margin-top:8px; display:flex; align-items:center; justify-content:center; gap:6px; font-size:11px; color:#166534; background:#dcfce7; border:1px solid #bbf7d0; padding:6px; border-radius:8px; font-weight:700;"><span style="width:8px;height:8px;background:#22c55e;border-radius:50%;box-shadow:0 0 4px #22c55e"></span> MOTOR EN MOVIMIENTO</div>`;
-              }
-            }
-
-            const content = `
-              <div style="font-family:Inter,sans-serif;min-width:220px;padding:4px">
-                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-                  <strong style="font-size:15px;color:#0f172a">${device.name}</strong>
-                  <span style="width:8px;height:8px;border-radius:50%;background:${getStatusColor(device)};display:inline-block;box-shadow:0 0 4px ${getStatusColor(device)}"></span>
-                </div>
-                
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-                  <div style="background:#f8fafc;border-radius:8px;padding:8px;text-align:center;border:1px solid #f1f5f9">
-                    <div style="font-size:20px;font-weight:800;color:#1d4ed8">${speed}</div>
-                    <div style="font-size:10px;color:#64748b;font-weight:600;letter-spacing:0.5px">KM/H</div>
-                  </div>
-                  <div style="background:#f8fafc;border-radius:8px;padding:8px;text-align:center;border:1px solid #f1f5f9">
-                    <div style="font-size:20px;font-weight:800;color:${getBatteryColor(battery)}">${battery ?? '--'}${battery != null ? '%' : ''}</div>
-                    <div style="font-size:10px;color:#64748b;font-weight:600;letter-spacing:0.5px">BATERÍA</div>
-                  </div>
-                </div>
-
-                ${engineStatusHtml}
-
-                ${pos.address ? `<div style="margin-top:10px;font-size:11px;color:#64748b;line-height:1.4"><strong style="color:#475569">📍 Dirección:</strong><br/>${pos.address.split(',')[0]}</div>` : ''}
-                
-                <div style="margin-top:10px;padding-top:8px;border-top:1px solid #f1f5f9;font-size:10px;color:#94a3b8">
-                  Última señal: ${new Date(pos.fixTime).toLocaleTimeString()}
-                </div>
-                
-                <div style="display:flex;gap:6px;margin-top:12px">
-                  <button onclick="window.dispatchEvent(new CustomEvent('openMapCommands', {detail: ${device.id}}))" style="flex:1; background:#fee2e2; color:#b91c1c; border:none; padding:8px 0; border-radius:8px; font-size:11px; font-weight:bold; cursor:pointer; display:flex; align-items:center; justify-content:center;">
-                    ⚡ Comandos
-                  </button>
-                  <button onclick="window.dispatchEvent(new CustomEvent('viewMapRoute', {detail: ${device.id}}))" style="flex:1; background:#e0e7ff; color:#4338ca; border:none; padding:8px 0; border-radius:8px; font-size:11px; font-weight:bold; cursor:pointer; display:flex; align-items:center; justify-content:center;">
-                    🗺️ Ver Ruta
-                  </button>
-                </div>
-              </div>
-            `;
-          infoWindowRef.current?.setContent(content);
+        marker.addListener('click', () => {
+          setSelectedDevice(device);
+          infoWindowRef.current?.setContent(generateInfoWindowContent(device, pos));
           infoWindowRef.current?.open(googleMapRef.current!, marker);
         });
+        
+        // Limpiar seleccion si cerramos el globo
+        window.google.maps.event.addListener(infoWindowRef.current!, 'closeclick', () => {
+          setSelectedDevice(null);
+        });
+        
         markersRef.current.set(device.id, marker);
       }
     });
   }, [devices, positions, mapsLoaded]);
+
+  // Actualizar la ventana de info en tiempo real si el coche se mueve
+  useEffect(() => {
+    if (!selectedDevice || !infoWindowRef.current) return;
+    const pos = positions.get(selectedDevice.id);
+    if (pos) {
+      infoWindowRef.current.setContent(generateInfoWindowContent(selectedDevice, pos));
+    }
+  }, [positions, selectedDevice]);
 
   // WebSocket — actualizaciones en tiempo real
   const handleWsDevices = useCallback((updated: TraccarDevice[]) => {
