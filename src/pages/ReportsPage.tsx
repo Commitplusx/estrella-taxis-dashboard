@@ -5,8 +5,9 @@ import { exportToExcel } from '../lib/exportExcel';
 import {
   Calendar, Search, Map as MapIcon, Navigation, Clock,
   Play, Download, ChevronDown, Car, Layers, BarChart3,
-  MapPin, Zap, AlertTriangle, RefreshCw, X
+  MapPin, Zap, AlertTriangle, RefreshCw, X, Sparkles
 } from 'lucide-react';
+import { supabase } from '../lib/supabase';
 
 // â”€â”€â”€ Types â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 interface Trip {
@@ -218,6 +219,9 @@ export default function ReportsPage() {
   const [activeTab, setActiveTab] = useState<TabType>('trips');
   const [loading, setLoading] = useState(false);
 
+  const [aiReport, setAiReport] = useState<string | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
+
   const today = getPreset('today');
   const [from, setFrom] = useState(today.from);
   const [to, setTo] = useState(today.to);
@@ -344,13 +348,31 @@ export default function ReportsPage() {
         const devId = selectedDevices[0];
         const r = await fetch(`/api/reports/route?${buildParams(devId)}`, { credentials: 'include', headers: { Accept: 'application/json' } });
         if (r.ok) {
-          const data: RoutePosition[] = await r.json();
+const data: RoutePosition[] = await r.json();
           setRoute(data);
           if (activeTab === 'route' && googleMapRef.current) drawRoute(data);
         }
       }
-    } finally {
+      } finally {
       setLoading(false);
+    }
+  };
+
+  const handleAnalyzeWithAI = async () => {
+    if (summary.length === 0 && events.length === 0) return;
+    setAiLoading(true);
+    setAiReport(null);
+    try {
+      const response = await supabase.functions.invoke('ai-insights', {
+        body: { summary, events }
+      });
+      if (response.error) throw response.error;
+      setAiReport(response.data?.text || 'No se pudo generar el reporte.');
+    } catch (err: any) {
+      console.error(err);
+      setAiReport(`**Error:** ${err.message || 'Error al conectar con la IA.'}`);
+    } finally {
+      setAiLoading(false);
     }
   };
 
@@ -584,13 +606,36 @@ export default function ReportsPage() {
             {summary.length > 0 && (
               <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between shrink-0 bg-gray-50/50">
                 <span className="text-sm font-bold text-gray-700">{summary.length} unidad{summary.length !== 1 ? 'es' : ''}</span>
-                <button onClick={exportSummary}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-green-700 bg-green-50 hover:bg-green-100 rounded-xl transition border border-green-200">
-                  <Download size={13} /> Exportar Excel
-                </button>
+                <div className="flex gap-2">
+                  <button onClick={handleAnalyzeWithAI} disabled={aiLoading}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl transition border border-indigo-700 disabled:opacity-50">
+                    {aiLoading ? <RefreshCw size={13} className="animate-spin" /> : <Sparkles size={13} />} 
+                    {aiLoading ? 'Analizando...' : 'Auditar con IA'}
+                  </button>
+                  <button onClick={exportSummary}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-green-700 bg-green-50 hover:bg-green-100 rounded-xl transition border border-green-200">
+                    <Download size={13} /> Exportar Excel
+                  </button>
+                </div>
               </div>
             )}
             <div className="flex-1 overflow-auto p-4">
+              {aiReport && (
+                <div className="mb-6 bg-gradient-to-br from-indigo-50 to-purple-50 border border-indigo-100 rounded-2xl p-5 shadow-sm relative">
+                  <button onClick={() => setAiReport(null)} className="absolute top-3 right-3 text-indigo-300 hover:text-indigo-600 transition">
+                    <X size={16} />
+                  </button>
+                  <div className="flex items-center gap-2 mb-3">
+                    <Sparkles size={18} className="text-indigo-600" />
+                    <h3 className="font-bold text-indigo-900">Auditoría de IA</h3>
+                  </div>
+                  <div className="text-sm text-indigo-900/80 space-y-3 leading-relaxed">
+                    {aiReport.split('\n').map((para, i) => para.trim() ? (
+                      <p key={i} dangerouslySetInnerHTML={{ __html: para.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') }} />
+                    ) : <div key={i} className="h-1" />)}
+                  </div>
+                </div>
+              )}
               {loading && <div className="flex items-center justify-center h-40 text-gray-400 text-sm"><RefreshCw size={20} className="animate-spin mr-2" />Cargando resumen...</div>}
               {!loading && summary.length === 0 && <div className="flex flex-col items-center justify-center h-40 text-gray-400 gap-2"><BarChart3 size={32} className="opacity-30" /><p className="text-sm">Selecciona un período y genera el reporte</p></div>}
               {!loading && summary.length > 0 && (
