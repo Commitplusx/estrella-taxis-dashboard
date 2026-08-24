@@ -78,7 +78,7 @@ export default function MapPage() {
       fullscreenControl: false,
       streetViewControl: false,
       mapTypeId: savedMapType,
-      gestureHandling: 'cooperative', // en móvil requiere 2 dedos para mover/hacer zoom
+      gestureHandling: 'greedy', // Permite mover el mapa con 1 solo dedo
       styles: [
         { featureType: 'poi', stylers: [{ visibility: 'off' }] },
         { featureType: 'transit', stylers: [{ visibility: 'off' }] },
