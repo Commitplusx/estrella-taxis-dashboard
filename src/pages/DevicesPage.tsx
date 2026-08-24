@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { api, type TraccarDevice } from '../lib/traccarApi';
+import { api, BASE_URL, type TraccarDevice } from '../lib/traccarApi';
 import { X, Save, Car, Phone, User, Hash, Layers, Tag, ShieldAlert, Power, Radio, Zap, Edit2 } from 'lucide-react';
 import { CommandModal } from '../components/CommandModal';
 
@@ -52,7 +52,7 @@ function EditDeviceModal({ device, groups, onClose, onSaved }: EditDeviceModalPr
     setSaving(true);
     setError('');
     try {
-      const res = await fetch(`/api/devices/${device.id}`, {
+      const res = await fetch(`${BASE_URL}/devices/${device.id}`, {
         method: 'PUT',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
@@ -192,7 +192,7 @@ export default function DevicesPage() {
       const entries = await Promise.all(
         d.map(async (device) => {
           try {
-            const res = await fetch(`/api/drivers?deviceId=${device.id}`, { credentials: 'include' });
+            const res = await fetch(`${BASE_URL}/drivers?deviceId=${device.id}`, { credentials: 'include' });
             if (!res.ok) return [device.id, ''] as [number, string];
             const drivers = await res.json();
             const name = drivers?.[0]?.name ?? '';

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useCachedFetch } from '../hooks/useCachedFetch';
 import { dataCache } from '../lib/cache';
+import { BASE_URL } from '../lib/traccarApi';
 import { Map as MapIcon, Plus, Trash2, Edit2, X, Save, Hexagon, Circle as CircleIcon, GitCommit } from 'lucide-react';
 
 const GOOGLE_MAPS_API_KEY = 'AIzaSyAYB_sdCTSE5kLvAz4dDXp3221SdSN91ac';
@@ -191,8 +192,9 @@ export default function GeofencesPage() {
   };
 
   const handleDelete = async (id: number) => {
-    if (!confirm('¿Eliminar esta geocerca?')) return;
-    await fetch(`/api/geofences/${id}`, { method: 'DELETE', credentials: 'include' });
+    if (!confirm('\u00bfEliminar esta geocerca?')) return;
+    const url = `${BASE_URL}/geofences/${id}`;
+    await fetch(url, { method: 'DELETE', credentials: 'include' });
     dataCache.invalidate('/api/geofences');
     refetch();
     if (editingGeofence?.id === id) cancelEdit();
@@ -218,7 +220,7 @@ export default function GeofencesPage() {
         const p = path.getAt(i);
         points.push(`${p.lat()} ${p.lng()}`);
       }
-      // Cerrar polígono
+      // Cerrar pol\u00edgono
       if (points.length > 0) points.push(points[0]);
       return `POLYGON ((${points.join(', ')}))`;
     }
@@ -239,15 +241,15 @@ export default function GeofencesPage() {
     if (!currentOverlayRef.current) return alert('Dibuja la geocerca en el mapa primero');
     
     const wkt = buildWktFromOverlay(currentOverlayRef.current);
-    if (!wkt) return alert('Forma no válida');
+    if (!wkt) return alert('Forma no v\u00e1lida');
     
     setSaving(true);
     try {
       const payload = { ...editingGeofence, area: wkt };
       const method = payload.id ? 'PUT' : 'POST';
-      const url = payload.id ? `/api/geofences/${payload.id}` : '/api/geofences';
+      const path = payload.id ? `/geofences/${payload.id}` : '/geofences';
       
-      const res = await fetch(url, {
+      const res = await fetch(`${BASE_URL}${path}`, {
         method,
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },

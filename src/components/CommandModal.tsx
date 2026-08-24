@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import type { TraccarDevice } from '../lib/traccarApi';
+import { BASE_URL, type TraccarDevice } from '../lib/traccarApi';
 import { X, ShieldAlert, ZapOff, Zap, MapPin, Code } from 'lucide-react';
 
 const COMMANDS = [
@@ -21,7 +21,7 @@ export function CommandModal({ device, onClose }: { device: TraccarDevice; onClo
       const payload: any = { deviceId: device.id, type };
       if (type === 'custom') payload.attributes = { data: customData };
       
-      const res = await fetch('/api/commands/send', {
+      const res = await fetch(`${BASE_URL}/commands/send`, {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },

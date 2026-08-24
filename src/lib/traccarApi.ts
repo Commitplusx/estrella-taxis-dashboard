@@ -3,11 +3,11 @@
 //  Todas las llamadas pasan por aquí con credentials
 // =====================================================
 
-const BASE = import.meta.env.DEV ? '/api' : 'https://taxis.estrella-eats.mx/api'; // Producci\u00f3n va directo, Local usa proxy
+export const BASE_URL = import.meta.env.DEV ? '/api' : 'https://taxis.estrella-eats.mx/api'; // Producci\u00f3n va directo, Local usa proxy
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const hasBody = options.body !== undefined;
-  const response = await fetch(`${BASE}${path}`, {
+  const response = await fetch(`${BASE_URL}${path}`, {
     ...options,
     credentials: 'include',
     headers: {
@@ -35,7 +35,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 // ── Sesión / Auth ──────────────────────────────────
 export const api = {
   login: (email: string, password: string) =>
-    fetch(`${BASE}/session`, {
+    fetch(`${BASE_URL}/session`, {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -48,13 +48,13 @@ export const api = {
   getSession: () => request<TraccarUser>('/session'),
 
   logout: () =>
-    fetch(`${BASE}/session`, {
+    fetch(`${BASE_URL}/session`, {
       method: 'DELETE',
       credentials: 'include',
     }),
 
   resetPassword: (email: string) =>
-    fetch(`${BASE}/password/reset`, {
+    fetch(`${BASE_URL}/password/reset`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({ email }),
