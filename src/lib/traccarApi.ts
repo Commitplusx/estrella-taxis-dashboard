@@ -47,11 +47,14 @@ export const api = {
 
   getSession: () => request<TraccarUser>('/session'),
 
-  logout: () =>
-    fetch(`${BASE_URL}/session`, {
+  logout: async () => {
+    const res = await fetch(`${BASE_URL}/session`, {
       method: 'DELETE',
       credentials: 'include',
-    }),
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+    });
+    if (!res.ok) throw new Error('Logout failed');
+  },
 
   resetPassword: (email: string) =>
     fetch(`${BASE_URL}/password/reset`, {
