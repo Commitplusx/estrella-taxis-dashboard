@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { api, type TraccarDevice } from '../lib/traccarApi';
 import { loadGoogleMaps } from '../lib/mapsLoader';
 import { exportToExcel } from '../lib/exportExcel';
@@ -118,13 +118,13 @@ function FiltersBar({
 
   return (
     <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 flex flex-col gap-4">
-      {/* Presets rÃ¡pidos */}
+      {/* Presets rápidos */}
       <div className="flex items-center gap-2 flex-wrap">
-        <span className="text-xs font-bold text-gray-500 mr-1">PerÃ­odo:</span>
+        <span className="text-xs font-bold text-gray-500 mr-1">Período:</span>
         {[
           { key: 'today', label: 'Hoy' },
           { key: 'yesterday', label: 'Ayer' },
-          { key: 'week', label: '7 dÃ­as' },
+          { key: 'week', label: '7 días' },
           { key: 'month', label: 'Este mes' },
         ].map(p => (
           <button key={p.key} onClick={() => { const r = getPreset(p.key); setFrom(r.from); setTo(r.to); }}
@@ -357,15 +357,15 @@ export default function ReportsPage() {
   // Excel exports
   const exportTrips = () => exportToExcel(trips.map(t => ({
     'Taxi': t.deviceName, 'Inicio': fmtTime(t.startTime), 'Fin': fmtTime(t.endTime),
-    'DirecciÃ³n Inicio': t.startAddress || '', 'DirecciÃ³n Fin': t.endAddress || '',
+    'Dirección Inicio': t.startAddress || '', 'Dirección Fin': t.endAddress || '',
     'Distancia (km)': (t.distance / 1000).toFixed(2),
-    'Vel. Promedio': fmtSpeed(t.averageSpeed), 'Vel. MÃ¡x': fmtSpeed(t.maxSpeed),
-    'DuraciÃ³n': fmtDuration(t.duration),
+    'Vel. Promedio': fmtSpeed(t.averageSpeed), 'Vel. Máx': fmtSpeed(t.maxSpeed),
+    'Duración': fmtDuration(t.duration),
   })), 'reporte_viajes', 'Viajes');
 
   const exportStops = () => exportToExcel(stops.map(s => ({
     'Taxi': s.deviceName, 'Inicio': fmtTime(s.startTime), 'Fin': fmtTime(s.endTime),
-    'DirecciÃ³n': s.address || '', 'DuraciÃ³n': fmtDuration(s.duration),
+    'Dirección': s.address || '', 'Duración': fmtDuration(s.duration),
   })), 'reporte_paradas', 'Paradas');
 
   const exportEvents = () => exportToExcel(events.map(e => ({
@@ -374,7 +374,7 @@ export default function ReportsPage() {
 
   const exportSummary = () => exportToExcel(summary.map(s => ({
     'Taxi': s.deviceName, 'Distancia (km)': (s.distance / 1000).toFixed(2),
-    'Vel. Promedio': fmtSpeed(s.averageSpeed), 'Vel. MÃ¡x': fmtSpeed(s.maxSpeed),
+    'Vel. Promedio': fmtSpeed(s.averageSpeed), 'Vel. Máx': fmtSpeed(s.maxSpeed),
     'Horas Motor': (s.engineHours / 3600000).toFixed(1),
   })), 'reporte_resumen', 'Resumen');
 
@@ -391,7 +391,7 @@ export default function ReportsPage() {
       {/* Header */}
       <div>
         <h1 className="text-lg font-bold text-gray-900">Reportes</h1>
-        <p className="text-sm text-gray-500 mt-0.5">Viajes, paradas, eventos y resÃºmenes de tu flotilla</p>
+        <p className="text-sm text-gray-500 mt-0.5">Viajes, paradas, eventos y resúmenes de tu flotilla</p>
       </div>
 
       {/* Filters */}
@@ -432,7 +432,7 @@ export default function ReportsPage() {
             )}
             <div className="flex-1 overflow-auto">
               {loading && <div className="flex items-center justify-center h-40 text-gray-400 text-sm"><RefreshCw size={20} className="animate-spin mr-2" />Cargando viajes...</div>}
-              {!loading && trips.length === 0 && <div className="flex flex-col items-center justify-center h-40 text-gray-400 gap-2"><Navigation size={32} className="opacity-30" /><p className="text-sm">Selecciona un perÃ­odo y genera el reporte</p></div>}
+              {!loading && trips.length === 0 && <div className="flex flex-col items-center justify-center h-40 text-gray-400 gap-2"><Navigation size={32} className="opacity-30" /><p className="text-sm">Selecciona un período y genera el reporte</p></div>}
               {!loading && trips.length > 0 && (
                 <>
                   {/* Mobile cards */}
@@ -453,11 +453,11 @@ export default function ReportsPage() {
                             <p className="text-sm font-bold text-gray-800">{fmtSpeed(t.averageSpeed)}</p>
                           </div>
                           <div className="text-center bg-gray-50 rounded-xl p-2">
-                            <p className="text-xs text-gray-400">V. MÃ¡x</p>
+                            <p className="text-xs text-gray-400">V. Máx</p>
                             <p className="text-sm font-bold text-red-600">{fmtSpeed(t.maxSpeed)}</p>
                           </div>
                         </div>
-                        <p className="text-[11px] text-gray-400">{fmtTime(t.startTime)} â†’ {fmtTime(t.endTime)}</p>
+                        <p className="text-[11px] text-gray-400">{fmtTime(t.startTime)} → {fmtTime(t.endTime)}</p>
                       </div>
                     ))}
                   </div>
@@ -465,7 +465,7 @@ export default function ReportsPage() {
                   <div className="hidden md:block overflow-x-auto">
                     <table className="w-full text-left">
                       <thead className="bg-gray-50 border-b border-gray-100 sticky top-0">
-                        <tr>{['Taxi','Inicio','Fin','Distancia','V. Prom','V. MÃ¡x','DuraciÃ³n'].map(h => (
+                        <tr>{['Taxi','Inicio','Fin','Distancia','V. Prom','V. Máx','Duración'].map(h => (
                           <th key={h} className="px-4 py-3 text-xs font-bold text-gray-500 uppercase tracking-wider whitespace-nowrap">{h}</th>
                         ))}</tr>
                       </thead>
@@ -504,7 +504,7 @@ export default function ReportsPage() {
             )}
             <div className="flex-1 overflow-auto">
               {loading && <div className="flex items-center justify-center h-40 text-gray-400 text-sm"><RefreshCw size={20} className="animate-spin mr-2" />Cargando paradas...</div>}
-              {!loading && stops.length === 0 && <div className="flex flex-col items-center justify-center h-40 text-gray-400 gap-2"><MapPin size={32} className="opacity-30" /><p className="text-sm">Selecciona un perÃ­odo y genera el reporte</p></div>}
+              {!loading && stops.length === 0 && <div className="flex flex-col items-center justify-center h-40 text-gray-400 gap-2"><MapPin size={32} className="opacity-30" /><p className="text-sm">Selecciona un período y genera el reporte</p></div>}
               {!loading && stops.length > 0 && (
                 <>
                   <div className="md:hidden divide-y divide-gray-100">
@@ -515,14 +515,14 @@ export default function ReportsPage() {
                           <span className="text-sm font-bold text-gray-800">{fmtDuration(s.duration)}</span>
                         </div>
                         {s.address && <p className="text-xs text-gray-600 bg-gray-50 px-3 py-2 rounded-lg">{s.address}</p>}
-                        <p className="text-[11px] text-gray-400">{fmtTime(s.startTime)} â†’ {fmtTime(s.endTime)}</p>
+                        <p className="text-[11px] text-gray-400">{fmtTime(s.startTime)} → {fmtTime(s.endTime)}</p>
                       </div>
                     ))}
                   </div>
                   <div className="hidden md:block overflow-x-auto">
                     <table className="w-full text-left">
                       <thead className="bg-gray-50 border-b border-gray-100 sticky top-0">
-                        <tr>{['Taxi','Inicio','Fin','DuraciÃ³n','DirecciÃ³n'].map(h => (
+                        <tr>{['Taxi','Inicio','Fin','Duración','Dirección'].map(h => (
                           <th key={h} className="px-4 py-3 text-xs font-bold text-gray-500 uppercase tracking-wider whitespace-nowrap">{h}</th>
                         ))}</tr>
                       </thead>
@@ -533,7 +533,7 @@ export default function ReportsPage() {
                             <td className="px-4 py-3 text-xs text-gray-600 whitespace-nowrap">{fmtTime(s.startTime)}</td>
                             <td className="px-4 py-3 text-xs text-gray-600 whitespace-nowrap">{fmtTime(s.endTime)}</td>
                             <td className="px-4 py-3 text-sm font-bold text-orange-600">{fmtDuration(s.duration)}</td>
-                            <td className="px-4 py-3 text-xs text-gray-600 max-w-xs truncate">{s.address || 'â€”'}</td>
+                            <td className="px-4 py-3 text-xs text-gray-600 max-w-xs truncate">{s.address || '—'}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -559,7 +559,7 @@ export default function ReportsPage() {
             )}
             <div className="flex-1 overflow-auto">
               {loading && <div className="flex items-center justify-center h-40 text-gray-400 text-sm"><RefreshCw size={20} className="animate-spin mr-2" />Cargando eventos...</div>}
-              {!loading && events.length === 0 && <div className="flex flex-col items-center justify-center h-40 text-gray-400 gap-2"><Zap size={32} className="opacity-30" /><p className="text-sm">Selecciona un perÃ­odo y genera el reporte</p></div>}
+              {!loading && events.length === 0 && <div className="flex flex-col items-center justify-center h-40 text-gray-400 gap-2"><Zap size={32} className="opacity-30" /><p className="text-sm">Selecciona un período y genera el reporte</p></div>}
               {!loading && events.length > 0 && (
                 <div className="divide-y divide-gray-100">
                   {events.map((ev, i) => {
@@ -592,7 +592,7 @@ export default function ReportsPage() {
             )}
             <div className="flex-1 overflow-auto p-4">
               {loading && <div className="flex items-center justify-center h-40 text-gray-400 text-sm"><RefreshCw size={20} className="animate-spin mr-2" />Cargando resumen...</div>}
-              {!loading && summary.length === 0 && <div className="flex flex-col items-center justify-center h-40 text-gray-400 gap-2"><BarChart3 size={32} className="opacity-30" /><p className="text-sm">Selecciona un perÃ­odo y genera el reporte</p></div>}
+              {!loading && summary.length === 0 && <div className="flex flex-col items-center justify-center h-40 text-gray-400 gap-2"><BarChart3 size={32} className="opacity-30" /><p className="text-sm">Selecciona un período y genera el reporte</p></div>}
               {!loading && summary.length > 0 && (
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                   {summary.map((s, i) => (
@@ -613,7 +613,7 @@ export default function ReportsPage() {
                           <p className="text-xl font-bold text-green-700 mt-1">{fmtSpeed(s.averageSpeed)}</p>
                         </div>
                         <div className="bg-red-50 rounded-xl p-3 text-center">
-                          <p className="text-[10px] font-bold text-red-600 uppercase tracking-wide">V. MÃ¡xima</p>
+                          <p className="text-[10px] font-bold text-red-600 uppercase tracking-wide">V. Máxima</p>
                           <p className="text-xl font-bold text-red-700 mt-1">{fmtSpeed(s.maxSpeed)}</p>
                         </div>
                         <div className="bg-gray-50 rounded-xl p-3 text-center">
@@ -635,7 +635,7 @@ export default function ReportsPage() {
             {route.length > 0 && (
               <div className="px-4 py-2 border-b border-gray-100 shrink-0 bg-gray-50/50">
                 <span className="text-xs text-gray-500 font-medium">
-                  {route.length} puntos GPS Â· Colores: ðŸŸ¢ lento â†’ ðŸ”´ rÃ¡pido
+                  {route.length} puntos GPS · Colores: 🟢 lento → 🔴 rápido
                 </span>
               </div>
             )}
