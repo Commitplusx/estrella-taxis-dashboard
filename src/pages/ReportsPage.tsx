@@ -1,299 +1,624 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { api, type TraccarDevice, type TraccarPosition, type TraccarTrip, type TraccarStop } from '../lib/traccarApi';
-import { Calendar, Search, Map as MapIcon, Navigation, Clock, Play } from 'lucide-react';
-
+﻿import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { api, type TraccarDevice } from '../lib/traccarApi';
 import { loadGoogleMaps } from '../lib/mapsLoader';
+import { exportToExcel } from '../lib/exportExcel';
+import {
+  Calendar, Search, Map as MapIcon, Navigation, Clock,
+  Play, Download, ChevronDown, Car, Layers, BarChart3,
+  MapPin, Zap, AlertTriangle, RefreshCw, X
+} from 'lucide-react';
 
+// â”€â”€â”€ Types â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+interface Trip {
+  deviceId: number; deviceName?: string;
+  startTime: string; endTime: string;
+  startAddress?: string; endAddress?: string;
+  distance: number; averageSpeed: number; maxSpeed: number;
+  duration: number; spentFuel?: number;
+}
+interface Stop {
+  deviceId: number; deviceName?: string;
+  startTime: string; endTime: string;
+  address?: string; lat: number; lon: number;
+  duration: number; engineHours?: number;
+}
+interface ReportEvent {
+  id: number; deviceId: number; deviceName?: string;
+  type: string; serverTime: string; positionId?: number;
+  geofenceId?: number; maintenanceId?: number;
+}
+interface Summary {
+  deviceId: number; deviceName?: string;
+  distance: number; averageSpeed: number; maxSpeed: number;
+  engineHours: number; spentFuel?: number;
+  startOdometer?: number; endOdometer?: number;
+}
+interface RoutePosition {
+  id: number; deviceId: number; latitude: number; longitude: number;
+  speed: number; course: number; fixTime: string; attributes?: any;
+}
+
+type TabType = 'trips' | 'stops' | 'events' | 'summary' | 'route';
+
+// â”€â”€â”€ Date Presets â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+function getPreset(preset: string): { from: string; to: string } {
+  const now = new Date();
+  const pad = (d: Date) => d.toISOString().slice(0, 16);
+  switch (preset) {
+    case 'today': {
+      const s = new Date(now); s.setHours(0, 0, 0, 0);
+      const e = new Date(now); e.setHours(23, 59, 59, 0);
+      return { from: pad(s), to: pad(e) };
+    }
+    case 'yesterday': {
+      const s = new Date(now); s.setDate(s.getDate() - 1); s.setHours(0, 0, 0, 0);
+      const e = new Date(now); e.setDate(e.getDate() - 1); e.setHours(23, 59, 59, 0);
+      return { from: pad(s), to: pad(e) };
+    }
+    case 'week': {
+      const s = new Date(now); s.setDate(s.getDate() - 6); s.setHours(0, 0, 0, 0);
+      const e = new Date(now); e.setHours(23, 59, 59, 0);
+      return { from: pad(s), to: pad(e) };
+    }
+    case 'month': {
+      const s = new Date(now.getFullYear(), now.getMonth(), 1);
+      const e = new Date(now); e.setHours(23, 59, 59, 0);
+      return { from: pad(s), to: pad(e) };
+    }
+    default: return { from: '', to: '' };
+  }
+}
+
+// â”€â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+const fmtDuration = (ms: number) => {
+  const h = Math.floor(ms / 3600000);
+  const m = Math.floor((ms % 3600000) / 60000);
+  return h > 0 ? `${h}h ${m}m` : `${m}m`;
+};
+const fmtDist = (m: number) => `${(m / 1000).toFixed(2)} km`;
+const fmtSpeed = (knots: number) => `${(knots * 1.852).toFixed(0)} km/h`;
+const fmtTime = (iso: string) => new Date(iso).toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short' });
+
+const EVENT_LABELS: Record<string, { label: string; color: string }> = {
+  deviceOnline:    { label: 'GPS Conectado',       color: 'text-green-600 bg-green-50' },
+  deviceOffline:   { label: 'GPS Desconectado',    color: 'text-gray-600 bg-gray-50' },
+  deviceMoving:    { label: 'En movimiento',        color: 'text-blue-600 bg-blue-50' },
+  deviceStopped:   { label: 'Detenido',             color: 'text-orange-600 bg-orange-50' },
+  deviceOverspeed: { label: 'Exceso velocidad',     color: 'text-red-600 bg-red-50' },
+  geofenceEnter:   { label: 'Entrada geocerca',     color: 'text-purple-600 bg-purple-50' },
+  geofenceExit:    { label: 'Salida geocerca',      color: 'text-purple-600 bg-purple-50' },
+  alarm:           { label: 'Alarma',               color: 'text-yellow-600 bg-yellow-50' },
+  ignitionOn:      { label: 'Encendido ON',         color: 'text-emerald-600 bg-emerald-50' },
+  ignitionOff:     { label: 'Encendido OFF',        color: 'text-slate-600 bg-slate-50' },
+};
+
+// â”€â”€â”€ Filters Bar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+function FiltersBar({
+  devices, groups, selectedDevices, setSelectedDevices,
+  selectedGroups, setSelectedGroups, from, setFrom, to, setTo,
+  onSearch, loading, activeTab
+}: any) {
+  const [showDevicePicker, setShowDevicePicker] = useState(false);
+  const [deviceSearch, setDeviceSearch] = useState('');
+
+  const filteredDevices = devices.filter((d: TraccarDevice) =>
+    d.name.toLowerCase().includes(deviceSearch.toLowerCase())
+  );
+  const toggleDevice = (id: number) => {
+    setSelectedDevices((prev: number[]) =>
+      prev.includes(id) ? prev.filter((x: number) => x !== id) : [...prev, id]
+    );
+  };
+  const selectAll = () => setSelectedDevices(devices.map((d: TraccarDevice) => d.id));
+  const clearAll = () => setSelectedDevices([]);
+
+  const selectedNames = selectedDevices
+    .map((id: number) => devices.find((d: TraccarDevice) => d.id === id)?.name)
+    .filter(Boolean);
+
+  return (
+    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 flex flex-col gap-4">
+      {/* Presets rÃ¡pidos */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="text-xs font-bold text-gray-500 mr-1">PerÃ­odo:</span>
+        {[
+          { key: 'today', label: 'Hoy' },
+          { key: 'yesterday', label: 'Ayer' },
+          { key: 'week', label: '7 dÃ­as' },
+          { key: 'month', label: 'Este mes' },
+        ].map(p => (
+          <button key={p.key} onClick={() => { const r = getPreset(p.key); setFrom(r.from); setTo(r.to); }}
+            className="px-3 py-1 text-xs font-bold rounded-lg bg-gray-50 hover:bg-blue-50 hover:text-blue-600 border border-gray-200 transition">
+            {p.label}
+          </button>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 items-end">
+        {/* Selector de dispositivos */}
+        <div className="relative lg:col-span-2">
+          <label className="block text-xs font-bold text-gray-500 mb-1">Taxis</label>
+          <button onClick={() => setShowDevicePicker(!showDevicePicker)}
+            className="w-full flex items-center justify-between gap-2 border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-gray-50 hover:bg-white hover:border-blue-300 transition text-left">
+            <span className="truncate text-gray-700">
+              {selectedDevices.length === 0 ? 'Ninguno seleccionado' :
+               selectedDevices.length === devices.length ? 'Todos los taxis' :
+               `${selectedDevices.length} taxi${selectedDevices.length > 1 ? 's' : ''} seleccionado${selectedDevices.length > 1 ? 's' : ''}`}
+            </span>
+            <ChevronDown size={14} className="text-gray-400 shrink-0" />
+          </button>
+
+          {showDevicePicker && (
+            <div className="absolute top-full left-0 right-0 z-50 mt-1 bg-white border border-gray-200 rounded-2xl shadow-xl overflow-hidden">
+              <div className="p-3 border-b border-gray-100 flex gap-2 items-center">
+                <Search size={14} className="text-gray-400" />
+                <input autoFocus value={deviceSearch} onChange={e => setDeviceSearch(e.target.value)}
+                  placeholder="Buscar taxi..." className="flex-1 text-sm outline-none" />
+                <button onClick={() => setShowDevicePicker(false)} className="p-1 hover:bg-gray-100 rounded-lg">
+                  <X size={14} className="text-gray-400" />
+                </button>
+              </div>
+              <div className="p-2 flex gap-2 border-b border-gray-100">
+                <button onClick={selectAll} className="text-xs font-bold text-blue-600 hover:underline">Todos</button>
+                <span className="text-gray-300">|</span>
+                <button onClick={clearAll} className="text-xs font-bold text-gray-500 hover:underline">Limpiar</button>
+              </div>
+              <div className="max-h-48 overflow-y-auto p-2">
+                {filteredDevices.map((d: TraccarDevice) => (
+                  <label key={d.id} className="flex items-center gap-2 px-2 py-1.5 hover:bg-gray-50 rounded-lg cursor-pointer">
+                    <input type="checkbox" checked={selectedDevices.includes(d.id)}
+                      onChange={() => toggleDevice(d.id)} className="accent-blue-600" />
+                    <Car size={12} className="text-gray-400" />
+                    <span className="text-sm text-gray-700">{d.name}</span>
+                  </label>
+                ))}
+              </div>
+              <div className="p-3 border-t border-gray-100 flex justify-end">
+                <button onClick={() => setShowDevicePicker(false)}
+                  className="px-4 py-1.5 bg-blue-600 text-white text-xs font-bold rounded-xl hover:bg-blue-700 transition">
+                  Listo
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Fecha desde */}
+        <div>
+          <label className="block text-xs font-bold text-gray-500 mb-1">Desde</label>
+          <input type="datetime-local" value={from} onChange={e => setFrom(e.target.value)}
+            className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50" />
+        </div>
+
+        {/* Fecha hasta */}
+        <div>
+          <label className="block text-xs font-bold text-gray-500 mb-1">Hasta</label>
+          <input type="datetime-local" value={to} onChange={e => setTo(e.target.value)}
+            className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50" />
+        </div>
+      </div>
+
+      <div className="flex justify-end">
+        <button onClick={onSearch} disabled={loading || selectedDevices.length === 0}
+          className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-bold transition shadow-sm disabled:opacity-50">
+          {loading ? <RefreshCw size={14} className="animate-spin" /> : <Search size={14} />}
+          Generar Reporte
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// â”€â”€â”€ Main Component â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export default function ReportsPage() {
   const [devices, setDevices] = useState<TraccarDevice[]>([]);
-  const [selectedDeviceId, setSelectedDeviceId] = useState<number | ''>('');
-  
-  // Rango de fechas por defecto: Hoy
-  const [fromDate, setFromDate] = useState(() => {
-    const d = new Date();
-    d.setHours(0, 0, 0, 0);
-    return d.toISOString().slice(0, 16);
-  });
-  const [toDate, setToDate] = useState(() => {
-    const d = new Date();
-    d.setHours(23, 59, 59, 999);
-    return d.toISOString().slice(0, 16);
-  });
-
+  const [groups, setGroups] = useState<any[]>([]);
+  const [selectedDevices, setSelectedDevices] = useState<number[]>([]);
+  const [selectedGroups, setSelectedGroups] = useState<number[]>([]);
+  const [activeTab, setActiveTab] = useState<TabType>('trips');
   const [loading, setLoading] = useState(false);
-  const [route, setRoute] = useState<TraccarPosition[]>([]);
-  const [trips, setTrips] = useState<TraccarTrip[]>([]);
-  const [stops, setStops] = useState<TraccarStop[]>([]);
-  const [events, setEvents] = useState<any[]>([]); // type TraccarEvent
-  const [summary, setSummary] = useState<any[]>([]); // type TraccarSummary
-  
-  const [activeTab, setActiveTab] = useState<'route' | 'events' | 'summary'>('route');
-  const [mapsLoaded, setMapsLoaded] = useState(false);
 
+  const today = getPreset('today');
+  const [from, setFrom] = useState(today.from);
+  const [to, setTo] = useState(today.to);
+
+  // Results
+  const [trips, setTrips] = useState<Trip[]>([]);
+  const [stops, setStops] = useState<Stop[]>([]);
+  const [events, setEvents] = useState<ReportEvent[]>([]);
+  const [summary, setSummary] = useState<Summary[]>([]);
+  const [route, setRoute] = useState<RoutePosition[]>([]);
+
+  // Map for route tab
+  const [mapsLoaded, setMapsLoaded] = useState(false);
   const mapRef = useRef<HTMLDivElement>(null);
   const googleMapRef = useRef<google.maps.Map | null>(null);
-  // Un array de polylines — cada segmento entre dos puntos GPS tiene su propio color por velocidad
-  const segmentsRef = useRef<google.maps.Polyline[]>([]);
-  const startMarkerRef = useRef<google.maps.Marker | null>(null);
-  const endMarkerRef = useRef<google.maps.Marker | null>(null);
+  const polylinesRef = useRef<google.maps.Polyline[]>([]);
 
-  // Cargar lista de taxis
   useEffect(() => {
     api.getDevices().then(devs => {
       setDevices(devs);
-      
-      const queryId = new URLSearchParams(window.location.search).get('deviceId');
-      if (queryId && devs.some(d => d.id === Number(queryId))) {
-        setSelectedDeviceId(Number(queryId));
-      } else if (devs.length > 0) {
-        setSelectedDeviceId(devs[0].id);
-      }
+      if (devs.length > 0) setSelectedDevices([devs[0].id]);
     });
-  }, []);
-
-  // Cargar Google Maps
-  useEffect(() => {
+    fetch('/api/groups', { credentials: 'include' }).then(r => r.json()).then(setGroups).catch(() => {});
     loadGoogleMaps().then(() => setMapsLoaded(true)).catch(console.error);
   }, []);
 
-  // Inicializar mapa
   useEffect(() => {
-    if (!mapsLoaded || !mapRef.current || googleMapRef.current) return;
-    
-    const savedMapType = localStorage.getItem('estrella_map_type') || 'roadmap';
-
+    if (!mapsLoaded || !mapRef.current || activeTab !== 'route') return;
+    if (googleMapRef.current) return;
     googleMapRef.current = new window.google.maps.Map(mapRef.current, {
-      center: { lat: 16.753, lng: -93.115 }, // Tuxtla por defecto
+      center: { lat: 16.2355, lng: -92.1267 },
       zoom: 12,
-      mapTypeControl: false,
-      streetViewControl: false,
-      fullscreenControl: true,
-      mapTypeId: savedMapType,
+      mapTypeControl: false, streetViewControl: false, fullscreenControl: true,
+      gestureHandling: 'greedy',
     });
-  }, [mapsLoaded]);
+  }, [mapsLoaded, activeTab]);
 
-  // Manejar búsqueda
-  const handleSearch = async (e?: React.FormEvent) => {
-    e?.preventDefault();
-    if (!selectedDeviceId) return;
+  const drawRoute = useCallback((positions: RoutePosition[]) => {
+    if (!googleMapRef.current || positions.length < 2) return;
+    polylinesRef.current.forEach(p => p.setMap(null));
+    polylinesRef.current = [];
+    const maxSpeed = Math.max(...positions.map(p => p.speed));
+    for (let i = 0; i < positions.length - 1; i++) {
+      const ratio = maxSpeed > 0 ? positions[i].speed / maxSpeed : 0;
+      const r = Math.round(255 * ratio);
+      const g = Math.round(255 * (1 - ratio));
+      const color = `rgb(${r},${g},50)`;
+      const line = new window.google.maps.Polyline({
+        path: [
+          { lat: positions[i].latitude, lng: positions[i].longitude },
+          { lat: positions[i + 1].latitude, lng: positions[i + 1].longitude },
+        ],
+        strokeColor: color, strokeWeight: 4, strokeOpacity: 0.85,
+        map: googleMapRef.current,
+      });
+      polylinesRef.current.push(line);
+    }
+    const bounds = new window.google.maps.LatLngBounds();
+    positions.forEach(p => bounds.extend({ lat: p.latitude, lng: p.longitude }));
+    googleMapRef.current.fitBounds(bounds);
+  }, []);
 
+  useEffect(() => {
+    if (route.length > 0 && activeTab === 'route' && googleMapRef.current) {
+      drawRoute(route);
+    }
+  }, [route, activeTab, drawRoute]);
+
+  const buildParams = (deviceId: number) => {
+    const p = new URLSearchParams();
+    p.append('deviceId', String(deviceId));
+    p.append('from', new Date(from).toISOString());
+    p.append('to', new Date(to).toISOString());
+    return p.toString();
+  };
+
+  const deviceNameMap = Object.fromEntries(devices.map(d => [d.id, d.name]));
+
+  const handleSearch = async () => {
+    if (selectedDevices.length === 0) return;
     setLoading(true);
     try {
-      const params = {
-        deviceIds: [Number(selectedDeviceId)],
-        from: new Date(fromDate).toISOString(),
-        to: new Date(toDate).toISOString()
-      };
-
-      // Solución: Enviar las peticiones una por una.
-      // Si las enviamos con Promise.all (al mismo tiempo), el VPS de Traccar
-      // puede saturarse tratando de calcular los 3 reportes a la vez y botar la conexión.
-      const routeData = await api.getRoute(params);
-      const tripsData = await api.getTrips(params);
-      const stopsData = await api.getStops(params);
-      const eventsData = await api.getEvents(params).catch(() => []);
-      const summaryData = await api.getSummary(params).catch(() => []);
-
-      setRoute(routeData);
-      setTrips(tripsData);
-      setStops(stopsData);
-      setEvents(eventsData);
-      setSummary(summaryData);
-      
-      drawRoute(routeData);
-    } catch (err) {
-      console.error(err);
-      alert('Error al obtener el reporte');
+      if (activeTab === 'trips') {
+        const results: Trip[] = [];
+        for (const devId of selectedDevices) {
+          const r = await fetch(`/api/reports/trips?${buildParams(devId)}`, { credentials: 'include', headers: { Accept: 'application/json' } });
+          if (r.ok) {
+            const data: Trip[] = await r.json();
+            results.push(...data.map(t => ({ ...t, deviceName: deviceNameMap[t.deviceId] || String(t.deviceId) })));
+          }
+        }
+        setTrips(results);
+      } else if (activeTab === 'stops') {
+        const results: Stop[] = [];
+        for (const devId of selectedDevices) {
+          const r = await fetch(`/api/reports/stops?${buildParams(devId)}`, { credentials: 'include', headers: { Accept: 'application/json' } });
+          if (r.ok) {
+            const data: Stop[] = await r.json();
+            results.push(...data.map(s => ({ ...s, deviceName: deviceNameMap[s.deviceId] || String(s.deviceId) })));
+          }
+        }
+        setStops(results);
+      } else if (activeTab === 'events') {
+        const results: ReportEvent[] = [];
+        for (const devId of selectedDevices) {
+          const r = await fetch(`/api/reports/events?${buildParams(devId)}&type=allEvents`, { credentials: 'include', headers: { Accept: 'application/json' } });
+          if (r.ok) {
+            const data: ReportEvent[] = await r.json();
+            results.push(...data.map(e => ({ ...e, deviceName: deviceNameMap[e.deviceId] || String(e.deviceId) })));
+          }
+        }
+        setEvents(results.sort((a, b) => new Date(b.serverTime).getTime() - new Date(a.serverTime).getTime()));
+      } else if (activeTab === 'summary') {
+        const results: Summary[] = [];
+        for (const devId of selectedDevices) {
+          const r = await fetch(`/api/reports/summary?${buildParams(devId)}`, { credentials: 'include', headers: { Accept: 'application/json' } });
+          if (r.ok) {
+            const data: Summary[] = await r.json();
+            results.push(...data.map(s => ({ ...s, deviceName: deviceNameMap[s.deviceId] || String(s.deviceId) })));
+          }
+        }
+        setSummary(results);
+      } else if (activeTab === 'route') {
+        const devId = selectedDevices[0];
+        const r = await fetch(`/api/reports/route?${buildParams(devId)}`, { credentials: 'include', headers: { Accept: 'application/json' } });
+        if (r.ok) {
+          const data: RoutePosition[] = await r.json();
+          setRoute(data);
+          if (activeTab === 'route' && googleMapRef.current) drawRoute(data);
+        }
+      }
     } finally {
       setLoading(false);
     }
   };
 
-  // ─── Colores por velocidad (Coincide con la leyenda) ───────────
-  const speedToColor = (knots: number): string => {
-    const kmh = knots * 1.852;
-    if (kmh <= 0)  return '#94a3b8'; // gris — parado
-    if (kmh < 20)  return '#22c55e'; // verde
-    if (kmh < 40)  return '#84cc16'; // verde-lima
-    if (kmh < 60)  return '#3b82f6'; // azul
-    if (kmh < 80)  return '#f59e0b'; // ámbar
-    if (kmh < 100) return '#f97316'; // naranja
-    return '#ef4444';                // rojo
-  };
+  // Excel exports
+  const exportTrips = () => exportToExcel(trips.map(t => ({
+    'Taxi': t.deviceName, 'Inicio': fmtTime(t.startTime), 'Fin': fmtTime(t.endTime),
+    'DirecciÃ³n Inicio': t.startAddress || '', 'DirecciÃ³n Fin': t.endAddress || '',
+    'Distancia (km)': (t.distance / 1000).toFixed(2),
+    'Vel. Promedio': fmtSpeed(t.averageSpeed), 'Vel. MÃ¡x': fmtSpeed(t.maxSpeed),
+    'DuraciÃ³n': fmtDuration(t.duration),
+  })), 'reporte_viajes', 'Viajes');
 
-  const drawRoute = (positions: TraccarPosition[]) => {
-    if (!googleMapRef.current) return;
+  const exportStops = () => exportToExcel(stops.map(s => ({
+    'Taxi': s.deviceName, 'Inicio': fmtTime(s.startTime), 'Fin': fmtTime(s.endTime),
+    'DirecciÃ³n': s.address || '', 'DuraciÃ³n': fmtDuration(s.duration),
+  })), 'reporte_paradas', 'Paradas');
 
-    // 1. Limpiar segmentos anteriores
-    segmentsRef.current.forEach(s => s.setMap(null));
-    segmentsRef.current = [];
-    if (startMarkerRef.current) { startMarkerRef.current.setMap(null); startMarkerRef.current = null; }
-    if (endMarkerRef.current) { endMarkerRef.current.setMap(null); endMarkerRef.current = null; }
+  const exportEvents = () => exportToExcel(events.map(e => ({
+    'Taxi': e.deviceName, 'Tipo': EVENT_LABELS[e.type]?.label || e.type, 'Hora': fmtTime(e.serverTime),
+  })), 'reporte_eventos', 'Eventos');
 
-    if (positions.length === 0) return;
+  const exportSummary = () => exportToExcel(summary.map(s => ({
+    'Taxi': s.deviceName, 'Distancia (km)': (s.distance / 1000).toFixed(2),
+    'Vel. Promedio': fmtSpeed(s.averageSpeed), 'Vel. MÃ¡x': fmtSpeed(s.maxSpeed),
+    'Horas Motor': (s.engineHours / 3600000).toFixed(1),
+  })), 'reporte_resumen', 'Resumen');
 
-    // 2. Dibujar la ruta como segmentos de colores continuos
-    for (let i = 0; i < positions.length - 1; i++) {
-      const from = positions[i];
-      const to   = positions[i + 1];
-
-      const segment = new window.google.maps.Polyline({
-        path: [
-          { lat: from.latitude, lng: from.longitude },
-          { lat: to.latitude,   lng: to.longitude   },
-        ],
-        geodesic: true,
-        strokeColor: speedToColor(from.speed ?? 0),
-        strokeOpacity: 1.0,
-        strokeWeight: 5,
-        map: googleMapRef.current,
-      });
-      segmentsRef.current.push(segment);
-    }
-
-    // 4. Marcadores A (inicio) y B (fin)
-    const path = positions.map(p => ({ lat: p.latitude, lng: p.longitude }));
-    startMarkerRef.current = new window.google.maps.Marker({
-      position: path[0],
-      map: googleMapRef.current,
-      label: { text: 'A', color: 'white', fontWeight: 'bold', fontSize: '13px' },
-      title: `Inicio: ${new Date(positions[0].fixTime).toLocaleString()}`,
-    });
-    endMarkerRef.current = new window.google.maps.Marker({
-      position: path[path.length - 1],
-      map: googleMapRef.current,
-      label: { text: 'B', color: 'white', fontWeight: 'bold', fontSize: '13px' },
-      title: `Fin: ${new Date(positions[positions.length - 1].fixTime).toLocaleString()}`,
-    });
-
-    // 5. Ajustar cámara
-    const bounds = new window.google.maps.LatLngBounds();
-    path.forEach(p => bounds.extend(p));
-    googleMapRef.current.fitBounds(bounds);
-  };
+  const TABS = [
+    { id: 'trips' as TabType, label: 'Viajes', icon: <Navigation size={15} /> },
+    { id: 'stops' as TabType, label: 'Paradas', icon: <MapPin size={15} /> },
+    { id: 'events' as TabType, label: 'Eventos', icon: <Zap size={15} /> },
+    { id: 'summary' as TabType, label: 'Resumen', icon: <BarChart3 size={15} /> },
+    { id: 'route' as TabType, label: 'Ruta en Mapa', icon: <MapIcon size={15} /> },
+  ];
 
   return (
-    <div className="flex flex-col h-[calc(100vh-3rem)] gap-4">
-      
-      {/* Controles */}
-      <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm shrink-0">
-        <form onSubmit={handleSearch} className="flex flex-col md:flex-row items-end gap-4">
-          <div className="flex-1 w-full">
-            <label className="block text-xs font-medium text-gray-600 mb-1">Taxi</label>
-            <select
-              value={selectedDeviceId}
-              onChange={e => setSelectedDeviceId(Number(e.target.value))}
-              className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50"
-            >
-              <option value="" disabled>Selecciona un taxi</option>
-              {devices.map(d => (
-                <option key={d.id} value={d.id}>{d.name} ({d.uniqueId})</option>
-              ))}
-            </select>
-          </div>
-          
-          <div className="flex-1 w-full">
-            <label className="block text-xs font-medium text-gray-600 mb-1">Desde</label>
-            <input
-              type="datetime-local"
-              value={fromDate}
-              onChange={e => setFromDate(e.target.value)}
-              className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50"
-            />
-          </div>
-
-          <div className="flex-1 w-full">
-            <label className="block text-xs font-medium text-gray-600 mb-1">Hasta</label>
-            <input
-              type="datetime-local"
-              value={toDate}
-              onChange={e => setToDate(e.target.value)}
-              className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50"
-            />
-          </div>
-
-          <button
-            type="submit"
-            disabled={loading || !selectedDeviceId}
-            className="w-full md:w-auto px-6 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-xl text-sm font-semibold transition flex items-center justify-center gap-2 h-[42px]"
-          >
-            {loading ? <span className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"/> : <Search size={16} />}
-            Buscar Ruta
-          </button>
-        </form>
+    <div className="flex flex-col gap-4 h-full">
+      {/* Header */}
+      <div>
+        <h1 className="text-lg font-bold text-gray-900">Reportes</h1>
+        <p className="text-sm text-gray-500 mt-0.5">Viajes, paradas, eventos y resÃºmenes de tu flotilla</p>
       </div>
+
+      {/* Filters */}
+      <FiltersBar
+        devices={devices} groups={groups}
+        selectedDevices={selectedDevices} setSelectedDevices={setSelectedDevices}
+        selectedGroups={selectedGroups} setSelectedGroups={setSelectedGroups}
+        from={from} setFrom={setFrom} to={to} setTo={setTo}
+        onSearch={handleSearch} loading={loading} activeTab={activeTab}
+      />
 
       {/* Tabs */}
-      <div className="flex gap-4 border-b border-gray-200 shrink-0 px-2">
-        <button onClick={() => setActiveTab('route')} className={`pb-2 px-2 text-sm font-semibold border-b-2 transition ${activeTab === 'route' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>Ruta Histórica</button>
-        <button onClick={() => setActiveTab('events')} className={`pb-2 px-2 text-sm font-semibold border-b-2 transition ${activeTab === 'events' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>Eventos ({events.length})</button>
-        <button onClick={() => setActiveTab('summary')} className={`pb-2 px-2 text-sm font-semibold border-b-2 transition ${activeTab === 'summary' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>Resumen</button>
-      </div>
-
-      <div className="flex flex-col lg:flex-row gap-4 flex-1 min-h-0">
-        
-        {/* Tab: Ruta */}
-        <div className={`w-full flex flex-col lg:flex-row gap-4 h-full ${activeTab !== 'route' ? 'hidden' : ''}`}>
-          <div className="flex-1 bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden flex flex-col min-h-[300px]">
-            <div className="px-4 py-3 border-b border-gray-100 flex items-center gap-2 shrink-0">
-              <MapIcon size={16} className="text-blue-600" />
-              <h2 className="text-sm font-bold text-gray-900">Mapa Histórico</h2>
-            </div>
-            <div className="flex-1 relative">
-              {!mapsLoaded && <div className="absolute inset-0 flex items-center justify-center bg-gray-50 z-10 text-gray-400 text-sm">Cargando mapa...</div>}
-              <div ref={mapRef} className="w-full h-full" />
-            </div>
-          </div>
-          
-          <div className="w-full lg:w-96 bg-white rounded-2xl border border-gray-100 shadow-sm flex flex-col min-h-[300px]">
-            <div className="px-4 py-3 border-b border-gray-100 flex items-center gap-2 shrink-0">
-              <Navigation size={16} className="text-green-600" />
-              <h2 className="text-sm font-bold text-gray-900">Resumen de Viajes</h2>
-            </div>
-            <div className="flex-1 overflow-y-auto p-4 space-y-4">
-              {route.length === 0 && !loading && <div className="text-center text-gray-400 text-sm py-10">Realiza una búsqueda</div>}
-              {trips.map((trip, i) => (
-                <div key={i} className="bg-slate-50 rounded-xl p-3 border border-slate-100">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs font-bold text-gray-700 uppercase">Viaje {i + 1}</span>
-                    <span className="text-xs font-medium text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md">{(trip.distance / 1000).toFixed(1)} km</span>
-                  </div>
-                  <div className="space-y-2">
-                    <div className="flex items-start gap-2">
-                      <Play size={12} className="text-green-500 mt-0.5 shrink-0" />
-                      <div><p className="text-[10px] text-gray-400 font-medium">INICIO</p><p className="text-xs text-gray-700">{new Date(trip.startTime).toLocaleString()}</p></div>
-                    </div>
-                    <div className="flex items-start gap-2">
-                      <Clock size={12} className="text-red-500 mt-0.5 shrink-0" />
-                      <div><p className="text-[10px] text-gray-400 font-medium">FIN</p><p className="text-xs text-gray-700">{new Date(trip.endTime).toLocaleString()}</p></div>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden flex flex-col flex-1 min-h-0">
+        <div className="flex border-b border-gray-100 overflow-x-auto shrink-0">
+          {TABS.map(tab => (
+            <button key={tab.id} onClick={() => setActiveTab(tab.id)}
+              className={`flex items-center gap-2 px-4 py-3.5 text-sm font-bold whitespace-nowrap border-b-2 transition-colors ${
+                activeTab === tab.id
+                  ? 'border-blue-600 text-blue-600 bg-blue-50/50'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+              }`}>
+              {tab.icon}{tab.label}
+            </button>
+          ))}
         </div>
 
-        {/* Tab: Eventos */}
-        {activeTab === 'events' && (
-          <div className="w-full bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden flex flex-col">
-            <div className="px-4 py-3 border-b border-gray-100 bg-gray-50 flex items-center justify-between shrink-0">
-              <h2 className="text-sm font-bold text-gray-900">Historial de Eventos</h2>
-            </div>
-            <div className="flex-1 overflow-y-auto p-4">
-              {events.length === 0 ? (
-                <div className="text-center text-gray-400 text-sm py-10">No hay eventos en este período.</div>
-              ) : (
-                <div className="space-y-2">
-                  {events.map((ev, i) => (
-                    <div key={i} className="flex items-center justify-between p-3 border-b border-gray-100 hover:bg-gray-50 transition">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center font-bold text-xs shrink-0">
-                          !
+        {/* â”€â”€ VIAJES â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+        {activeTab === 'trips' && (
+          <div className="flex flex-col flex-1 min-h-0">
+            {trips.length > 0 && (
+              <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between shrink-0 bg-gray-50/50">
+                <span className="text-sm font-bold text-gray-700">{trips.length} viaje{trips.length !== 1 ? 's' : ''} encontrado{trips.length !== 1 ? 's' : ''}</span>
+                <button onClick={exportTrips}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-green-700 bg-green-50 hover:bg-green-100 rounded-xl transition border border-green-200">
+                  <Download size={13} /> Exportar Excel
+                </button>
+              </div>
+            )}
+            <div className="flex-1 overflow-auto">
+              {loading && <div className="flex items-center justify-center h-40 text-gray-400 text-sm"><RefreshCw size={20} className="animate-spin mr-2" />Cargando viajes...</div>}
+              {!loading && trips.length === 0 && <div className="flex flex-col items-center justify-center h-40 text-gray-400 gap-2"><Navigation size={32} className="opacity-30" /><p className="text-sm">Selecciona un perÃ­odo y genera el reporte</p></div>}
+              {!loading && trips.length > 0 && (
+                <>
+                  {/* Mobile cards */}
+                  <div className="md:hidden divide-y divide-gray-100">
+                    {trips.map((t, i) => (
+                      <div key={i} className="p-4 flex flex-col gap-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-lg">{t.deviceName}</span>
+                          <span className="text-xs font-bold text-gray-500">{fmtDuration(t.duration)}</span>
                         </div>
-                        <div>
-                          <p className="text-sm font-semibold text-gray-800 capitalize">{ev.type.replace(/([A-Z])/g, ' $1').trim()}</p>
-                          <p className="text-xs text-gray-500">{new Date(ev.serverTime).toLocaleString()}</p>
+                        <div className="grid grid-cols-3 gap-2 mt-1">
+                          <div className="text-center bg-gray-50 rounded-xl p-2">
+                            <p className="text-xs text-gray-400">Distancia</p>
+                            <p className="text-sm font-bold text-gray-800">{fmtDist(t.distance)}</p>
+                          </div>
+                          <div className="text-center bg-gray-50 rounded-xl p-2">
+                            <p className="text-xs text-gray-400">V. Prom</p>
+                            <p className="text-sm font-bold text-gray-800">{fmtSpeed(t.averageSpeed)}</p>
+                          </div>
+                          <div className="text-center bg-gray-50 rounded-xl p-2">
+                            <p className="text-xs text-gray-400">V. MÃ¡x</p>
+                            <p className="text-sm font-bold text-red-600">{fmtSpeed(t.maxSpeed)}</p>
+                          </div>
+                        </div>
+                        <p className="text-[11px] text-gray-400">{fmtTime(t.startTime)} â†’ {fmtTime(t.endTime)}</p>
+                      </div>
+                    ))}
+                  </div>
+                  {/* Desktop table */}
+                  <div className="hidden md:block overflow-x-auto">
+                    <table className="w-full text-left">
+                      <thead className="bg-gray-50 border-b border-gray-100 sticky top-0">
+                        <tr>{['Taxi','Inicio','Fin','Distancia','V. Prom','V. MÃ¡x','DuraciÃ³n'].map(h => (
+                          <th key={h} className="px-4 py-3 text-xs font-bold text-gray-500 uppercase tracking-wider whitespace-nowrap">{h}</th>
+                        ))}</tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {trips.map((t, i) => (
+                          <tr key={i} className="hover:bg-gray-50 transition">
+                            <td className="px-4 py-3 text-sm font-semibold text-gray-900">{t.deviceName}</td>
+                            <td className="px-4 py-3 text-xs text-gray-600 whitespace-nowrap">{fmtTime(t.startTime)}</td>
+                            <td className="px-4 py-3 text-xs text-gray-600 whitespace-nowrap">{fmtTime(t.endTime)}</td>
+                            <td className="px-4 py-3 text-sm font-bold text-blue-600">{fmtDist(t.distance)}</td>
+                            <td className="px-4 py-3 text-sm text-gray-700">{fmtSpeed(t.averageSpeed)}</td>
+                            <td className="px-4 py-3 text-sm font-bold text-red-600">{fmtSpeed(t.maxSpeed)}</td>
+                            <td className="px-4 py-3 text-sm text-gray-600">{fmtDuration(t.duration)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* â”€â”€ PARADAS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+        {activeTab === 'stops' && (
+          <div className="flex flex-col flex-1 min-h-0">
+            {stops.length > 0 && (
+              <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between shrink-0 bg-gray-50/50">
+                <span className="text-sm font-bold text-gray-700">{stops.length} parada{stops.length !== 1 ? 's' : ''}</span>
+                <button onClick={exportStops}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-green-700 bg-green-50 hover:bg-green-100 rounded-xl transition border border-green-200">
+                  <Download size={13} /> Exportar Excel
+                </button>
+              </div>
+            )}
+            <div className="flex-1 overflow-auto">
+              {loading && <div className="flex items-center justify-center h-40 text-gray-400 text-sm"><RefreshCw size={20} className="animate-spin mr-2" />Cargando paradas...</div>}
+              {!loading && stops.length === 0 && <div className="flex flex-col items-center justify-center h-40 text-gray-400 gap-2"><MapPin size={32} className="opacity-30" /><p className="text-sm">Selecciona un perÃ­odo y genera el reporte</p></div>}
+              {!loading && stops.length > 0 && (
+                <>
+                  <div className="md:hidden divide-y divide-gray-100">
+                    {stops.map((s, i) => (
+                      <div key={i} className="p-4 flex flex-col gap-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded-lg">{s.deviceName}</span>
+                          <span className="text-sm font-bold text-gray-800">{fmtDuration(s.duration)}</span>
+                        </div>
+                        {s.address && <p className="text-xs text-gray-600 bg-gray-50 px-3 py-2 rounded-lg">{s.address}</p>}
+                        <p className="text-[11px] text-gray-400">{fmtTime(s.startTime)} â†’ {fmtTime(s.endTime)}</p>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="hidden md:block overflow-x-auto">
+                    <table className="w-full text-left">
+                      <thead className="bg-gray-50 border-b border-gray-100 sticky top-0">
+                        <tr>{['Taxi','Inicio','Fin','DuraciÃ³n','DirecciÃ³n'].map(h => (
+                          <th key={h} className="px-4 py-3 text-xs font-bold text-gray-500 uppercase tracking-wider whitespace-nowrap">{h}</th>
+                        ))}</tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {stops.map((s, i) => (
+                          <tr key={i} className="hover:bg-gray-50 transition">
+                            <td className="px-4 py-3 text-sm font-semibold text-gray-900">{s.deviceName}</td>
+                            <td className="px-4 py-3 text-xs text-gray-600 whitespace-nowrap">{fmtTime(s.startTime)}</td>
+                            <td className="px-4 py-3 text-xs text-gray-600 whitespace-nowrap">{fmtTime(s.endTime)}</td>
+                            <td className="px-4 py-3 text-sm font-bold text-orange-600">{fmtDuration(s.duration)}</td>
+                            <td className="px-4 py-3 text-xs text-gray-600 max-w-xs truncate">{s.address || 'â€”'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* â”€â”€ EVENTOS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+        {activeTab === 'events' && (
+          <div className="flex flex-col flex-1 min-h-0">
+            {events.length > 0 && (
+              <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between shrink-0 bg-gray-50/50">
+                <span className="text-sm font-bold text-gray-700">{events.length} evento{events.length !== 1 ? 's' : ''}</span>
+                <button onClick={exportEvents}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-green-700 bg-green-50 hover:bg-green-100 rounded-xl transition border border-green-200">
+                  <Download size={13} /> Exportar Excel
+                </button>
+              </div>
+            )}
+            <div className="flex-1 overflow-auto">
+              {loading && <div className="flex items-center justify-center h-40 text-gray-400 text-sm"><RefreshCw size={20} className="animate-spin mr-2" />Cargando eventos...</div>}
+              {!loading && events.length === 0 && <div className="flex flex-col items-center justify-center h-40 text-gray-400 gap-2"><Zap size={32} className="opacity-30" /><p className="text-sm">Selecciona un perÃ­odo y genera el reporte</p></div>}
+              {!loading && events.length > 0 && (
+                <div className="divide-y divide-gray-100">
+                  {events.map((ev, i) => {
+                    const meta = EVENT_LABELS[ev.type] || { label: ev.type, color: 'text-gray-600 bg-gray-50' };
+                    return (
+                      <div key={i} className="flex items-center gap-4 px-4 py-3 hover:bg-gray-50 transition">
+                        <span className={`text-[11px] font-bold px-2 py-1 rounded-lg whitespace-nowrap ${meta.color}`}>{meta.label}</span>
+                        <span className="text-sm font-semibold text-gray-800 flex-1">{ev.deviceName}</span>
+                        <span className="text-xs text-gray-400 whitespace-nowrap">{fmtTime(ev.serverTime)}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* â”€â”€ RESUMEN â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+        {activeTab === 'summary' && (
+          <div className="flex flex-col flex-1 min-h-0">
+            {summary.length > 0 && (
+              <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between shrink-0 bg-gray-50/50">
+                <span className="text-sm font-bold text-gray-700">{summary.length} unidad{summary.length !== 1 ? 'es' : ''}</span>
+                <button onClick={exportSummary}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-green-700 bg-green-50 hover:bg-green-100 rounded-xl transition border border-green-200">
+                  <Download size={13} /> Exportar Excel
+                </button>
+              </div>
+            )}
+            <div className="flex-1 overflow-auto p-4">
+              {loading && <div className="flex items-center justify-center h-40 text-gray-400 text-sm"><RefreshCw size={20} className="animate-spin mr-2" />Cargando resumen...</div>}
+              {!loading && summary.length === 0 && <div className="flex flex-col items-center justify-center h-40 text-gray-400 gap-2"><BarChart3 size={32} className="opacity-30" /><p className="text-sm">Selecciona un perÃ­odo y genera el reporte</p></div>}
+              {!loading && summary.length > 0 && (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  {summary.map((s, i) => (
+                    <div key={i} className="bg-white border border-gray-100 rounded-2xl shadow-sm p-5">
+                      <div className="flex items-center gap-3 mb-4">
+                        <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center">
+                          <Car size={18} className="text-blue-600" />
+                        </div>
+                        <h3 className="font-bold text-gray-900">{s.deviceName}</h3>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="bg-blue-50 rounded-xl p-3 text-center">
+                          <p className="text-[10px] font-bold text-blue-600 uppercase tracking-wide">Distancia</p>
+                          <p className="text-xl font-bold text-blue-700 mt-1">{fmtDist(s.distance)}</p>
+                        </div>
+                        <div className="bg-green-50 rounded-xl p-3 text-center">
+                          <p className="text-[10px] font-bold text-green-600 uppercase tracking-wide">V. Promedio</p>
+                          <p className="text-xl font-bold text-green-700 mt-1">{fmtSpeed(s.averageSpeed)}</p>
+                        </div>
+                        <div className="bg-red-50 rounded-xl p-3 text-center">
+                          <p className="text-[10px] font-bold text-red-600 uppercase tracking-wide">V. MÃ¡xima</p>
+                          <p className="text-xl font-bold text-red-700 mt-1">{fmtSpeed(s.maxSpeed)}</p>
+                        </div>
+                        <div className="bg-gray-50 rounded-xl p-3 text-center">
+                          <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Horas Motor</p>
+                          <p className="text-xl font-bold text-gray-800 mt-1">{(s.engineHours / 3600000).toFixed(1)}h</p>
                         </div>
                       </div>
                     </div>
@@ -304,33 +629,30 @@ export default function ReportsPage() {
           </div>
         )}
 
-        {/* Tab: Resumen */}
-        {activeTab === 'summary' && summary[0] && (
-          <div className="w-full bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-            <h2 className="text-lg font-bold text-gray-900 mb-6">Resumen General</h2>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <div className="p-4 bg-gray-50 rounded-xl border border-gray-100">
-                <p className="text-xs text-gray-500 font-medium mb-1">Distancia Total</p>
-                <p className="text-2xl font-bold text-blue-600">{(summary[0].distance / 1000).toFixed(2)} km</p>
+        {/* â”€â”€ RUTA EN MAPA â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+        {activeTab === 'route' && (
+          <div className="flex flex-col flex-1 min-h-0">
+            {route.length > 0 && (
+              <div className="px-4 py-2 border-b border-gray-100 shrink-0 bg-gray-50/50">
+                <span className="text-xs text-gray-500 font-medium">
+                  {route.length} puntos GPS Â· Colores: ðŸŸ¢ lento â†’ ðŸ”´ rÃ¡pido
+                </span>
               </div>
-              <div className="p-4 bg-gray-50 rounded-xl border border-gray-100">
-                <p className="text-xs text-gray-500 font-medium mb-1">Velocidad Promedio</p>
-                <p className="text-2xl font-bold text-green-600">{(summary[0].averageSpeed * 1.852).toFixed(0)} km/h</p>
-              </div>
-              <div className="p-4 bg-gray-50 rounded-xl border border-gray-100">
-                <p className="text-xs text-gray-500 font-medium mb-1">Velocidad Máxima</p>
-                <p className="text-2xl font-bold text-red-600">{(summary[0].maxSpeed * 1.852).toFixed(0)} km/h</p>
-              </div>
-              <div className="p-4 bg-gray-50 rounded-xl border border-gray-100">
-                <p className="text-xs text-gray-500 font-medium mb-1">Horas de Motor</p>
-                <p className="text-2xl font-bold text-gray-800">{(summary[0].engineHours / 3600000).toFixed(1)} h</p>
-              </div>
+            )}
+            <div className="flex-1 min-h-[400px] relative">
+              {!mapsLoaded && (
+                <div className="absolute inset-0 flex items-center justify-center bg-gray-50 z-10 text-gray-400 text-sm">
+                  Cargando mapa...
+                </div>
+              )}
+              <div ref={mapRef} className="w-full h-full" />
+              {!loading && route.length === 0 && mapsLoaded && (
+                <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-400 gap-2 pointer-events-none">
+                  <MapIcon size={40} className="opacity-20" />
+                  <p className="text-sm">Genera el reporte para ver la ruta</p>
+                </div>
+              )}
             </div>
-          </div>
-        )}
-        {activeTab === 'summary' && !summary[0] && !loading && (
-          <div className="w-full bg-white rounded-2xl border border-gray-100 shadow-sm p-6 text-center text-gray-400">
-            Realiza una búsqueda para ver el resumen general.
           </div>
         )}
       </div>

@@ -31,16 +31,22 @@ const NOTIFICATORS = [
 ];
 
 // ─── Modal de creación de notificación ───────────────────────────────────────
-function CreateNotificationModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
+function CreateNotificationModal({ devices, onClose, onCreated }: { devices: any[]; onClose: () => void; onCreated: () => void }) {
   const [type, setType] = useState('');
   const [notificators, setNotificators] = useState<string[]>(['web']);
   const [always, setAlways] = useState(true);
   const [description, setDescription] = useState('');
+  const [selectedDevices, setSelectedDevices] = useState<number[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [showDevicePicker, setShowDevicePicker] = useState(false);
 
   const toggleNotificator = (val: string) => {
     setNotificators(prev => prev.includes(val) ? prev.filter(n => n !== val) : [...prev, val]);
+  };
+
+  const toggleDevice = (id: number) => {
+    setSelectedDevices(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
   };
 
   const handleSave = async () => {
@@ -51,16 +57,28 @@ function CreateNotificationModal({ onClose, onCreated }: { onClose: () => void; 
     setSaving(true);
     setError('');
     try {
-      await fetch('/api/notifications', {
+      const res = await fetch('/api/notifications', {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ type, notificators: notificators.join(','), always, description }),
       });
+      const created = await res.json();
+      
+      // Link to selected devices
+      for (const deviceId of selectedDevices) {
+        await fetch('/api/permissions', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ notificationId: created.id, deviceId }),
+        });
+      }
+      
       onCreated();
       onClose();
     } catch (err) {
-      setError('Error al guardar la notificación.');
+      setError('Error al guardar la notificación o vincular taxis.');
     } finally {
       setSaving(false);
     }
@@ -143,6 +161,36 @@ function CreateNotificationModal({ onClose, onCreated }: { onClose: () => void; 
             />
           </div>
 
+          {/* Taxis (Dispositivos) */}
+          <div className="relative">
+            <label className="block text-xs font-medium text-gray-600 mb-2">Aplicar a taxis</label>
+            <button onClick={() => setShowDevicePicker(!showDevicePicker)}
+              className="w-full flex items-center justify-between gap-2 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50 text-left">
+              <span className="truncate text-gray-700">
+                {selectedDevices.length === 0 ? 'Ninguno seleccionado (Aplica a todos)' :
+                 selectedDevices.length === devices.length ? 'Todos los taxis' :
+                 `${selectedDevices.length} taxi(s) seleccionado(s)`}
+              </span>
+              <ChevronDown size={14} className="text-gray-400 shrink-0" />
+            </button>
+            {showDevicePicker && (
+              <div className="absolute top-full left-0 right-0 z-50 mt-1 bg-white border border-gray-200 rounded-2xl shadow-xl overflow-hidden max-h-48 overflow-y-auto p-2">
+                <div className="flex gap-2 mb-2 p-1 border-b border-gray-100">
+                  <button onClick={() => setSelectedDevices(devices.map(d => d.id))} className="text-xs font-bold text-blue-600 hover:underline">Todos</button>
+                  <span className="text-gray-300">|</span>
+                  <button onClick={() => setSelectedDevices([])} className="text-xs font-bold text-gray-500 hover:underline">Limpiar</button>
+                </div>
+                {devices.map((d: any) => (
+                  <label key={d.id} className="flex items-center gap-2 px-2 py-1.5 hover:bg-gray-50 rounded-lg cursor-pointer">
+                    <input type="checkbox" checked={selectedDevices.includes(d.id)}
+                      onChange={() => toggleDevice(d.id)} className="accent-blue-600" />
+                    <span className="text-sm text-gray-700">{d.name}</span>
+                  </label>
+                ))}
+              </div>
+            )}
+          </div>
+
           {error && <p className="text-xs text-red-600 bg-red-50 px-3 py-2 rounded-xl">{error}</p>}
         </div>
 
@@ -166,14 +214,19 @@ function CreateNotificationModal({ onClose, onCreated }: { onClose: () => void; 
 // ─── Página principal ─────────────────────────────────────────────────────────
 export default function NotificationsPage() {
   const [notifications, setNotifications] = useState<TraccarNotification[]>([]);
+  const [devices, setDevices] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
 
   const load = async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/notifications', { credentials: 'include' });
-      if (res.ok) setNotifications(await res.json());
+      const [nRes, dRes] = await Promise.all([
+        fetch('/api/notifications', { credentials: 'include' }),
+        api.getDevices()
+      ]);
+      if (nRes.ok) setNotifications(await nRes.json());
+      setDevices(dRes);
     } finally {
       setLoading(false);
     }

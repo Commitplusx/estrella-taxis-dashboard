@@ -10,9 +10,10 @@ type SocketMessage = {
 type UseTraccarSocketOptions = {
   onDevices?: (devices: TraccarDevice[]) => void;
   onPositions?: (positions: TraccarPosition[]) => void;
+  onEvents?: (events: any[]) => void;
 };
 
-export function useTraccarSocket({ onDevices, onPositions }: UseTraccarSocketOptions) {
+export function useTraccarSocket({ onDevices, onPositions, onEvents }: UseTraccarSocketOptions) {
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -34,6 +35,7 @@ export function useTraccarSocket({ onDevices, onPositions }: UseTraccarSocketOpt
           const data: SocketMessage = JSON.parse(event.data);
           if (data.devices?.length && onDevices) onDevices(data.devices);
           if (data.positions?.length && onPositions) onPositions(data.positions);
+          if (data.events?.length && onEvents) onEvents(data.events);
         } catch (e) {
           console.error('[Traccar WS] Error parsing message:', e);
         }

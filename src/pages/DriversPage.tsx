@@ -281,6 +281,7 @@ export default function DriversPage() {
   const [search, setSearch] = useState('');
   const [modal, setModal] = useState<{ open: boolean; driver?: TraccarDriver }>({ open: false });
   const [assigningDriver, setAssigningDriver] = useState<TraccarDriver | null>(null);
+  const [expandedDriver, setExpandedDriver] = useState<number | null>(null);
 
   const handleDelete = async (id: number) => {
     if (!confirm('¿Eliminar este conductor?')) return;
@@ -358,51 +359,110 @@ export default function DriversPage() {
           )}
         </div>
       ) : (
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-gray-100 bg-gray-50">
-                <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Conductor</th>
-                <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Identificador</th>
-                <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Teléfono</th>
-                <th className="px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide w-32" />
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map(driver => (
-                <tr key={driver.id} className="border-b border-gray-50 hover:bg-gray-50/50 transition">
-                  <td className="px-5 py-3">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 bg-emerald-100 rounded-xl flex items-center justify-center text-emerald-700 font-bold text-xs">
-                        {driver.name.charAt(0).toUpperCase()}
+        <div className="bg-white md:bg-transparent md:border-none md:shadow-none rounded-2xl border border-gray-100 shadow-sm overflow-hidden md:overflow-visible">
+          
+          {/* Vista Móvil (Tarjetas) */}
+          <div className="md:hidden flex flex-col divide-y divide-gray-100">
+            {filtered.map(driver => (
+              <div 
+                key={driver.id} 
+                className="p-4 flex flex-col gap-3 hover:bg-gray-50 transition-colors cursor-pointer"
+                onClick={() => setExpandedDriver(expandedDriver === driver.id ? null : driver.id!)}
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-emerald-100 rounded-xl flex items-center justify-center text-emerald-700 font-bold text-sm shrink-0">
+                    {driver.name.charAt(0).toUpperCase()}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h3 className="text-sm font-bold text-gray-900 truncate">{driver.name}</h3>
+                    <p className="text-xs text-gray-500 font-medium">ID: {driver.uniqueId}</p>
+                  </div>
+                </div>
+
+                {expandedDriver === driver.id && (
+                  <div className="flex flex-col gap-3 pt-3 border-t border-gray-100 mt-1 animate-fade-in" onClick={(e) => e.stopPropagation()}>
+                    {driver.attributes?.phone && (
+                      <div className="text-xs font-medium text-gray-600 bg-gray-50 px-3 py-2 rounded-lg inline-block self-start">
+                        Tel: {driver.attributes.phone}
                       </div>
-                      <span className="text-sm font-semibold text-gray-900">{driver.name}</span>
-                    </div>
-                  </td>
-                  <td className="px-5 py-3">
-                    <span className="font-mono text-xs bg-gray-100 px-2 py-1 rounded-lg text-gray-600">{driver.uniqueId}</span>
-                  </td>
-                  <td className="px-5 py-3 text-sm text-gray-500">{driver.attributes?.phone || '—'}</td>
-                  <td className="px-5 py-3">
-                    <div className="flex gap-1 justify-end">
-                      <button onClick={() => setAssigningDriver(driver)}
-                        className="p-1.5 hover:bg-emerald-50 hover:text-emerald-600 text-gray-400 rounded-lg transition" title="Asignar a Taxis">
-                        <Link size={14} />
+                    )}
+                    <div className="flex items-center gap-2 mt-1">
+                      <button onClick={(e) => { e.stopPropagation(); setAssigningDriver(driver); }}
+                        className="flex-1 px-3 py-2 text-xs font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-xl transition flex items-center justify-center gap-1.5">
+                        <Link size={14} /> Asignar Taxis
                       </button>
-                      <button onClick={() => setModal({ open: true, driver })}
-                        className="p-1.5 hover:bg-blue-50 hover:text-blue-500 text-gray-400 rounded-lg transition" title="Editar">
-                        <Edit2 size={14} />
+                      <button onClick={(e) => { e.stopPropagation(); setModal({ open: true, driver }); }}
+                        className="p-2 hover:bg-blue-100 text-blue-600 rounded-xl transition bg-gray-50 border border-gray-100">
+                        <Edit2 size={16} />
                       </button>
-                      <button onClick={() => driver.id && handleDelete(driver.id)}
-                        className="p-1.5 hover:bg-red-50 hover:text-red-500 text-gray-400 rounded-lg transition" title="Eliminar">
-                        <Trash2 size={14} />
+                      <button onClick={(e) => { e.stopPropagation(); driver.id && handleDelete(driver.id); }}
+                        className="p-2 hover:bg-red-100 text-red-600 rounded-xl transition bg-gray-50 border border-gray-100">
+                        <Trash2 size={16} />
                       </button>
                     </div>
-                  </td>
+                  </div>
+                )}
+                
+                {expandedDriver !== driver.id && (
+                  <div className="text-center w-full flex items-center justify-center pt-2">
+                    <span className="text-[10px] font-bold text-gray-400 flex items-center gap-1">
+                      Toca para ver acciones y más
+                    </span>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+
+          {/* Vista Desktop (Tabla) */}
+          <div className="hidden md:block bg-white rounded-2xl border border-gray-100 shadow-sm overflow-x-auto">
+            <table className="w-full min-w-[600px] text-left">
+              <thead>
+                <tr className="border-b border-gray-100 bg-gray-50">
+                  <th className="px-5 py-3 text-xs font-bold text-gray-500 uppercase tracking-wider">Conductor</th>
+                  <th className="px-5 py-3 text-xs font-bold text-gray-500 uppercase tracking-wider">Identificador</th>
+                  <th className="px-5 py-3 text-xs font-bold text-gray-500 uppercase tracking-wider">Teléfono</th>
+                  <th className="px-5 py-3 text-xs font-bold text-gray-500 uppercase tracking-wider text-right">Acciones</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {filtered.map(driver => (
+                  <tr key={driver.id} className="border-b border-gray-50 hover:bg-gray-50/50 transition">
+                    <td className="px-5 py-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 bg-emerald-100 rounded-xl flex items-center justify-center text-emerald-700 font-bold text-xs">
+                          {driver.name.charAt(0).toUpperCase()}
+                        </div>
+                        <span className="text-sm font-semibold text-gray-900">{driver.name}</span>
+                      </div>
+                    </td>
+                    <td className="px-5 py-4 text-sm text-gray-600 font-medium">
+                      {driver.uniqueId}
+                    </td>
+                    <td className="px-5 py-4 text-sm text-gray-600">
+                      {driver.attributes?.phone || <span className="text-gray-400 italic">No registrado</span>}
+                    </td>
+                    <td className="px-5 py-4 text-right">
+                      <div className="flex items-center justify-end gap-2">
+                        <button onClick={() => setAssigningDriver(driver)}
+                          className="px-3 py-1.5 text-xs font-semibold text-blue-600 hover:bg-blue-50 border border-gray-200 hover:border-blue-200 rounded-lg transition shadow-sm flex items-center gap-1.5">
+                          <Link size={14} /> Asignar Taxis
+                        </button>
+                        <button onClick={() => setModal({ open: true, driver })}
+                          className="p-1.5 hover:bg-gray-100 text-gray-400 hover:text-blue-600 rounded-md transition" title="Editar">
+                          <Edit2 size={16} />
+                        </button>
+                        <button onClick={() => driver.id && handleDelete(driver.id)}
+                          className="p-1.5 hover:bg-gray-100 text-gray-400 hover:text-red-600 rounded-md transition" title="Eliminar">
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 

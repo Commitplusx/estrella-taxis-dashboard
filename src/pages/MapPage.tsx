@@ -5,6 +5,7 @@ import { loadGoogleMaps } from '../lib/mapsLoader';
 import { api, type TraccarDevice, type TraccarPosition } from '../lib/traccarApi';
 import { useTraccarSocket } from '../hooks/useTraccarSocket';
 import { CommandModal } from '../components/CommandModal';
+import { EventsDrawer } from '../components/EventsDrawer';
 
 // ─── Google Maps API Key ──────────────────────────────────────────────────────
 // IMPORTANTE: Reemplaza esto con tu API Key real de Google
@@ -93,6 +94,10 @@ export default function MapPage() {
   const [selectedDevice, setSelectedDevice] = useState<TraccarDevice | null>(null);
   const [commandDevice, setCommandDevice] = useState<TraccarDevice | null>(null);
   const [mapsLoaded, setMapsLoaded] = useState(false);
+  
+  // Events Drawer
+  const [eventsDrawerOpen, setEventsDrawerOpen] = useState(false);
+  const [realtimeEvents, setRealtimeEvents] = useState<any[]>([]);
 
   // Escuchar eventos globales desde los botones del InfoWindow HTML
   useEffect(() => {
@@ -101,7 +106,6 @@ export default function MapPage() {
       if (dev) setCommandDevice(dev);
     };
     const handleViewRoute = (e: any) => {
-      // Navegamos a la página de reportes (se puede leer desde el estado o la URL en esa página)
       navigate('/reports?deviceId=' + e.detail);
     };
     window.addEventListener('openMapCommands', handleOpenCommands);
@@ -130,7 +134,7 @@ export default function MapPage() {
       fullscreenControl: false,
       streetViewControl: false,
       mapTypeId: savedMapType,
-      gestureHandling: 'greedy', // Permite mover el mapa con 1 solo dedo
+      gestureHandling: 'greedy',
       styles: [
         { featureType: 'poi', stylers: [{ visibility: 'off' }] },
         { featureType: 'transit', stylers: [{ visibility: 'off' }] },
@@ -167,7 +171,6 @@ export default function MapPage() {
 
     if (hasCoords) {
       googleMapRef.current.fitBounds(bounds);
-      // Evitar que haga demasiado zoom si solo hay 1 taxi
       const listener = window.google.maps.event.addListener(googleMapRef.current, 'idle', () => {
         if (googleMapRef.current!.getZoom()! > 16) {
           googleMapRef.current!.setZoom(16);
@@ -189,7 +192,6 @@ export default function MapPage() {
       const isMoving = (pos.speed || 0) > 0.5;
       const color = device.status === 'online' ? (isMoving ? '#1d4ed8' : '#16a34a') : '#94a3b8';
 
-      // SVG de flecha de navegación GPS (pro)
       const svgMarker = {
         path: 'M 12 2 L 22 22 L 12 17 L 2 22 Z',
         fillColor: color,
@@ -198,7 +200,7 @@ export default function MapPage() {
         strokeWeight: 2.5,
         scale: 1.2,
         anchor: new window.google.maps.Point(12, 12),
-        rotation: pos.course || 0, // Rota apuntando hacia donde se dirige el taxi
+        rotation: pos.course || 0,
       };
 
       if (markersRef.current.has(device.id)) {
@@ -218,7 +220,6 @@ export default function MapPage() {
           infoWindowRef.current?.open(googleMapRef.current!, marker);
         });
         
-        // Limpiar seleccion si cerramos el globo
         window.google.maps.event.addListener(infoWindowRef.current!, 'closeclick', () => {
           setSelectedDevice(null);
         });
@@ -254,12 +255,23 @@ export default function MapPage() {
     });
   }, []);
 
-  useTraccarSocket({ onDevices: handleWsDevices, onPositions: handleWsPositions });
+  const handleWsEvents = useCallback((newEvents: any[]) => {
+    setRealtimeEvents(prev => {
+      const next = [...newEvents, ...prev];
+      return next.slice(0, 50); // Keep last 50 events
+    });
+  }, []);
+
+  useTraccarSocket({ 
+    onDevices: handleWsDevices, 
+    onPositions: handleWsPositions,
+    onEvents: handleWsEvents 
+  });
 
   const onlineCount = devices.filter(d => d.status === 'online').length;
 
   return (
-    <div className="flex flex-col h-full gap-0">
+    <div className="flex flex-col h-full gap-0 relative">
       {/* Header */}
       <div className="px-6 py-4 flex items-center justify-between border-b border-gray-100 bg-white flex-shrink-0">
         <div>
@@ -267,6 +279,17 @@ export default function MapPage() {
           <p className="text-sm text-gray-500">{onlineCount} de {devices.length} taxis en línea</p>
         </div>
         <div className="flex items-center gap-3">
+          <button 
+            onClick={() => setEventsDrawerOpen(o => !o)}
+            className="flex items-center gap-1.5 text-xs text-blue-700 bg-blue-50 px-3 py-1.5 rounded-xl font-bold hover:bg-blue-100 transition-colors border border-blue-100 shadow-sm">
+            <Zap size={14} className={realtimeEvents.length > 0 ? "animate-pulse" : ""} />
+            Eventos
+            {realtimeEvents.length > 0 && (
+              <span className="bg-blue-600 text-white rounded-full px-1.5 py-0.5 text-[10px] ml-1">
+                {realtimeEvents.length > 99 ? '99+' : realtimeEvents.length}
+              </span>
+            )}
+          </button>
           <span className="flex items-center gap-1.5 text-xs text-green-700 bg-green-50 px-2.5 py-1 rounded-full font-medium">
             <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>
             En vivo
@@ -286,6 +309,13 @@ export default function MapPage() {
         )}
         <div ref={mapRef} className="w-full h-full" />
       </div>
+
+      <EventsDrawer
+        open={eventsDrawerOpen}
+        onClose={() => setEventsDrawerOpen(false)}
+        events={realtimeEvents}
+        devices={devices}
+      />
 
       {commandDevice && (
         <CommandModal

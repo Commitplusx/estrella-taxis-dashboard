@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { api, type TraccarUser, type TraccarDevice } from '../lib/traccarApi';
 import { supabase } from '../lib/supabase';
-import { Users, Plus, Trash2, Link, X, Check, Shield, ChevronRight, Eye, EyeOff, Layers, Search, Filter, Camera } from 'lucide-react';
+import { Users, Plus, Trash2, Link, X, Check, Shield, ChevronRight, ChevronDown, Eye, EyeOff, Layers, Search, Filter, Camera } from 'lucide-react';
 
 // ─── Modal: Crear Usuario ──────────────────────────────────────────────────────
 function CreateUserModal({ onClose, onCreated }: { onClose: () => void; onCreated: (u: TraccarUser) => void }) {
@@ -285,6 +285,7 @@ export default function UsersPage() {
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
   const [assigningUser, setAssigningUser] = useState<TraccarUser | null>(null);
+  const [expandedUser, setExpandedUser] = useState<number | null>(null);
   const [deviceCounts, setDeviceCounts] = useState<Record<number, number>>({});
 
   // Filtros
@@ -469,125 +470,245 @@ export default function UsersPage() {
             <p className="text-sm text-gray-500">Prueba cambiando los filtros de búsqueda.</p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="bg-slate-50/50 border-b border-gray-200">
-                  <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Usuario</th>
-                  <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Rol y Estado</th>
-                  <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Unidades</th>
-                  <th className="px-6 py-4 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Acciones</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {filteredUsers.map(user => (
-                  <tr 
-                    key={user.id} 
-                    className="hover:bg-slate-50/50 transition-colors group"
-                    onMouseEnter={() => loadDeviceCount(user.id)}
-                  >
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center gap-4">
-                        <label className="relative w-10 h-10 flex-shrink-0 cursor-pointer group/avatar">
-                          {user.attributes?.avatar ? (
-                            <img 
-                              src={user.attributes.avatar as string} 
-                              alt={user.name} 
-                              className="w-full h-full object-cover rounded-full shadow-sm ring-1 ring-inset ring-gray-200"
-                            />
-                          ) : (
-                            <div className={`w-full h-full rounded-full flex items-center justify-center font-bold text-sm shadow-sm ring-1 ring-inset ${
-                              user.administrator 
-                                ? 'bg-amber-50 text-amber-600 ring-amber-600/20' 
-                                : 'bg-blue-50 text-blue-600 ring-blue-600/20'
-                            }`}>
-                              {user.name?.charAt(0)?.toUpperCase() || 'U'}
-                            </div>
-                          )}
-                          <div className="absolute inset-0 bg-black/50 rounded-full opacity-0 group-hover/avatar:opacity-100 flex items-center justify-center transition-opacity">
-                            <Camera size={14} className="text-white" />
-                          </div>
-                          <input 
-                            type="file" 
-                            accept="image/*" 
-                            className="hidden" 
-                            onChange={(e) => {
-                              if (e.target.files && e.target.files[0]) {
-                                handleAvatarUpload(user, e.target.files[0]);
-                              }
-                              e.target.value = ''; // Reset para poder subir la misma foto de nuevo si se borra
-                            }}
-                          />
-                        </label>
-                        <div>
-                          <div className="font-semibold text-gray-900">{user.name}</div>
-                          <div className="text-xs text-gray-500 mt-0.5">{user.email}</div>
+          <div className="bg-white md:bg-transparent md:border-none md:shadow-none rounded-2xl border border-gray-100 shadow-sm overflow-hidden md:overflow-visible">
+            {/* Vista Móvil (Tarjetas) */}
+            <div className="md:hidden flex flex-col divide-y divide-gray-100">
+              {filteredUsers.map(user => (
+                <div 
+                  key={user.id} 
+                  className="p-4 flex flex-col gap-4 hover:bg-gray-50 transition-colors cursor-pointer"
+                  onClick={() => setAssigningUser(user)}
+                >
+                  <div className="flex items-start gap-4">
+                    <label 
+                      className="relative w-12 h-12 flex-shrink-0 cursor-pointer group/avatar"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      {user.attributes?.avatar ? (
+                        <img 
+                          src={user.attributes.avatar as string} 
+                          alt={user.name} 
+                          className="w-full h-full object-cover rounded-full shadow-sm ring-1 ring-inset ring-gray-200"
+                        />
+                      ) : (
+                        <div className={`w-full h-full rounded-full flex items-center justify-center font-bold text-lg shadow-sm ring-1 ring-inset ${
+                          user.administrator 
+                            ? 'bg-amber-50 text-amber-600 ring-amber-600/20' 
+                            : 'bg-blue-50 text-blue-600 ring-blue-600/20'
+                        }`}>
+                          {user.name?.charAt(0)?.toUpperCase() || 'U'}
                         </div>
+                      )}
+                      <div className="absolute inset-0 bg-black/50 rounded-full opacity-0 flex items-center justify-center transition-opacity">
+                        <Camera size={14} className="text-white" />
                       </div>
-                    </td>
-                    
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex flex-col items-start gap-1.5">
+                      <input 
+                        type="file" 
+                        accept="image/*" 
+                        className="hidden" 
+                        onChange={(e) => {
+                          if (e.target.files && e.target.files[0]) {
+                            handleAvatarUpload(user, e.target.files[0]);
+                          }
+                          e.target.value = ''; 
+                        }}
+                      />
+                    </label>
+                    <div className="flex-1 min-w-0 pt-0.5">
+                      <div className="font-bold text-gray-900 truncate">{user.name}</div>
+                      <div className="text-xs text-gray-500 truncate mb-2">{user.email}</div>
+                      
+                      <div className="flex flex-wrap items-center gap-2">
                         {user.administrator ? (
-                          <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-600/20">
-                            <Shield size={12} /> Administrador
+                          <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] font-bold bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-600/20">
+                            <Shield size={10} /> Admin
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium bg-slate-100 text-slate-700 ring-1 ring-inset ring-slate-500/10">
-                            <Users size={12} /> Operativo
+                          <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] font-bold bg-slate-100 text-slate-700 ring-1 ring-inset ring-slate-500/10">
+                            <Users size={10} /> Operativo
                           </span>
                         )}
                         
                         {user.disabled ? (
-                          <span className="inline-flex items-center gap-1.5 text-xs font-medium text-red-600">
-                            <span className="w-1.5 h-1.5 rounded-full bg-red-500"></span> Inactivo
+                          <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-red-600 bg-red-50 px-2 py-1 rounded-md">
+                            Inactivo
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-600">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Activo
+                          <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-emerald-600 bg-emerald-50 px-2 py-1 rounded-md">
+                            Activo
                           </span>
                         )}
                       </div>
-                    </td>
+                    </div>
+                  </div>
 
-                    <td className="px-6 py-4 whitespace-nowrap">
+                  {expandedUser === user.id && (
+                    <div className="flex items-center justify-between pt-3 border-t border-gray-100 mt-1 animate-fade-in" onClick={(e) => e.stopPropagation()}>
                       <div className="flex items-center gap-2">
                         <div className="w-8 h-8 rounded-lg bg-gray-50 flex items-center justify-center text-gray-500 border border-gray-100">
                           <Layers size={14} />
                         </div>
-                        <div>
+                        <div onMouseEnter={() => loadDeviceCount(user.id)} onClick={() => loadDeviceCount(user.id)}>
                           <p className="text-sm font-bold text-gray-700">
                             {deviceCounts[user.id] !== undefined ? deviceCounts[user.id] : '—'}
                           </p>
-                          <p className="text-[10px] uppercase tracking-wider text-gray-400 font-medium">Asignados</p>
+                          <p className="text-[10px] uppercase tracking-wider text-gray-400 font-bold">Unidades</p>
                         </div>
                       </div>
-                    </td>
-
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <div className="flex items-center justify-end gap-2">
+                      
+                      <div className="flex items-center gap-2">
                         <button
-                          onClick={() => setAssigningUser(user)}
-                          className="inline-flex items-center gap-2 px-3 py-2 text-sm font-semibold text-blue-600 bg-white border border-gray-200 hover:border-blue-200 hover:bg-blue-50 rounded-lg transition-all shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1"
+                          onClick={(e) => { e.stopPropagation(); setAssigningUser(user); }}
+                          className="p-2 text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors font-semibold"
+                          title="Configurar Permisos"
                         >
-                          <Layers size={14} /> Configurar Permisos
+                          <Layers size={16} />
                         </button>
-                        
                         {!user.administrator && (
                           <button
-                            onClick={() => handleDelete(user.id)}
-                            className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 border border-transparent hover:border-red-100 transition-all rounded-lg opacity-0 group-hover:opacity-100"
+                            onClick={(e) => { e.stopPropagation(); handleDelete(user.id); }}
+                            className="p-2 text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition-colors"
                             title="Eliminar usuario"
                           >
                             <Trash2 size={16} />
                           </button>
                         )}
                       </div>
-                    </td>
+                    </div>
+                  )}
+                  
+                  {expandedUser !== user.id && (
+                     <div className="text-center w-full flex items-center justify-center pt-2">
+                       <span className="text-[10px] font-bold text-gray-400 flex items-center gap-1">
+                          Toca para ver taxis asignados <ChevronDown size={12}/>
+                       </span>
+                     </div>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {/* Vista Desktop (Tabla) */}
+            <div className="hidden md:block overflow-x-auto bg-white rounded-2xl border border-gray-200 shadow-sm">
+              <table className="w-full min-w-[800px] text-left border-collapse">
+                <thead>
+                  <tr className="bg-slate-50/50 border-b border-gray-200">
+                    <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Usuario</th>
+                    <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Rol y Estado</th>
+                    <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Unidades</th>
+                    <th className="px-6 py-4 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Acciones</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {filteredUsers.map(user => (
+                    <tr 
+                      key={user.id} 
+                      className="hover:bg-slate-50/50 transition-colors group"
+                      onMouseEnter={() => loadDeviceCount(user.id)}
+                    >
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center gap-4">
+                          <label className="relative w-10 h-10 flex-shrink-0 cursor-pointer group/avatar">
+                            {user.attributes?.avatar ? (
+                              <img 
+                                src={user.attributes.avatar as string} 
+                                alt={user.name} 
+                                className="w-full h-full object-cover rounded-full shadow-sm ring-1 ring-inset ring-gray-200"
+                              />
+                            ) : (
+                              <div className={`w-full h-full rounded-full flex items-center justify-center font-bold text-sm shadow-sm ring-1 ring-inset ${
+                                user.administrator 
+                                  ? 'bg-amber-50 text-amber-600 ring-amber-600/20' 
+                                  : 'bg-blue-50 text-blue-600 ring-blue-600/20'
+                              }`}>
+                                {user.name?.charAt(0)?.toUpperCase() || 'U'}
+                              </div>
+                            )}
+                            <div className="absolute inset-0 bg-black/50 rounded-full opacity-0 group-hover/avatar:opacity-100 flex items-center justify-center transition-opacity">
+                              <Camera size={14} className="text-white" />
+                            </div>
+                            <input 
+                              type="file" 
+                              accept="image/*" 
+                              className="hidden" 
+                              onChange={(e) => {
+                                if (e.target.files && e.target.files[0]) {
+                                  handleAvatarUpload(user, e.target.files[0]);
+                                }
+                                e.target.value = ''; // Reset para poder subir la misma foto de nuevo si se borra
+                              }}
+                            />
+                          </label>
+                          <div>
+                            <div className="font-semibold text-gray-900">{user.name}</div>
+                            <div className="text-xs text-gray-500 mt-0.5">{user.email}</div>
+                          </div>
+                        </div>
+                      </td>
+                      
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex flex-col items-start gap-1.5">
+                          {user.administrator ? (
+                            <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-600/20">
+                              <Shield size={12} /> Administrador
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium bg-slate-100 text-slate-700 ring-1 ring-inset ring-slate-500/10">
+                              <Users size={12} /> Operativo
+                            </span>
+                          )}
+                          
+                          {user.disabled ? (
+                            <span className="inline-flex items-center gap-1.5 text-xs font-medium text-red-600">
+                              <span className="w-1.5 h-1.5 rounded-full bg-red-500"></span> Inactivo
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-600">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Activo
+                            </span>
+                          )}
+                        </div>
+                      </td>
+
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center gap-2">
+                          <div className="w-8 h-8 rounded-lg bg-gray-50 flex items-center justify-center text-gray-500 border border-gray-100">
+                            <Layers size={14} />
+                          </div>
+                          <div>
+                            <p className="text-sm font-bold text-gray-700">
+                              {deviceCounts[user.id] !== undefined ? deviceCounts[user.id] : '—'}
+                            </p>
+                            <p className="text-[10px] uppercase tracking-wider text-gray-400 font-medium">Asignados</p>
+                          </div>
+                        </div>
+                      </td>
+
+                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                        <div className="flex items-center justify-end gap-2">
+                          <button
+                            onClick={() => setAssigningUser(user)}
+                            className="inline-flex items-center gap-2 px-3 py-2 text-sm font-semibold text-blue-600 bg-white border border-gray-200 hover:border-blue-200 hover:bg-blue-50 rounded-lg transition-all shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1"
+                          >
+                            <Layers size={14} /> Configurar Permisos
+                          </button>
+                          
+                          {!user.administrator && (
+                            <button
+                              onClick={() => handleDelete(user.id)}
+                              className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 border border-transparent hover:border-red-100 transition-all rounded-lg opacity-0 group-hover:opacity-100"
+                              title="Eliminar usuario"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
       </div>

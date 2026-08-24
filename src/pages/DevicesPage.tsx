@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { api, BASE_URL, type TraccarDevice } from '../lib/traccarApi';
 import { X, Save, Car, Phone, User, Hash, Layers, Tag, ShieldAlert, Power, Radio, Zap, Edit2 } from 'lucide-react';
 import { CommandModal } from '../components/CommandModal';
+import { ShareModal } from '../components/ShareModal';
 
 // Categorías idénticas a las de Traccar
 const DEVICE_CATEGORIES = [
@@ -153,7 +154,7 @@ function EditDeviceModal({ device, groups, onClose, onSaved }: EditDeviceModalPr
 
         {error && <p className="mx-5 -mt-2 text-xs text-red-600 bg-red-50 px-3 py-2 rounded-xl">{error}</p>}
 
-        <div className="flex gap-2 p-5 pt-3">
+        <div className="flex gap-2 p-5 pt-0">
           <button onClick={onClose} className="flex-1 px-4 py-2 border border-gray-200 text-gray-700 rounded-xl text-sm font-medium hover:bg-gray-50 transition">
             Cancelar
           </button>
@@ -168,6 +169,69 @@ function EditDeviceModal({ device, groups, onClose, onSaved }: EditDeviceModalPr
   );
 }
 
+// ─── Accumulators Modal ───────────────────────────────────────────────────────
+function AccumulatorsModal({ device, onClose, onSaved }: { device: TraccarDevice, onClose: () => void, onSaved: () => void }) {
+  // Traccar usa 'totalDistance' en metros, 'hours' en milisegundos en el endpoint /accumulators (a veces en body.totalDistance, body.hours).
+  const [distanceKm, setDistanceKm] = useState('');
+  const [engineHours, setEngineHours] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const body: any = {};
+      if (distanceKm) body.totalDistance = Number(distanceKm) * 1000;
+      if (engineHours) body.hours = Number(engineHours) * 3600000;
+      
+      const res = await fetch(`${BASE_URL}/devices/${device.id}/accumulators`, {
+        method: 'PUT',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      onSaved();
+      onClose();
+    } catch (err) {
+      alert('Error al actualizar acumuladores');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm">
+        <div className="flex items-center justify-between p-5 border-b border-gray-100">
+          <h2 className="font-bold text-gray-900 text-base">Acumuladores</h2>
+          <button onClick={onClose} className="p-1.5 hover:bg-gray-100 rounded-lg transition"><X size={18} className="text-gray-500" /></button>
+        </div>
+        <div className="p-5 space-y-4">
+          <p className="text-xs text-gray-500">
+            Ajusta los valores actuales del odómetro y horómetro del vehículo <span className="font-bold text-gray-800">{device.name}</span>.
+          </p>
+          <div>
+            <label className="block text-xs font-bold text-gray-600 mb-1">Odómetro (Kilómetros)</label>
+            <input type="number" placeholder="Ej: 15000" value={distanceKm} onChange={e => setDistanceKm(e.target.value)}
+              className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+          <div>
+            <label className="block text-xs font-bold text-gray-600 mb-1">Horómetro (Horas)</label>
+            <input type="number" placeholder="Ej: 350" value={engineHours} onChange={e => setEngineHours(e.target.value)}
+              className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+        </div>
+        <div className="p-5 pt-0 flex gap-2">
+          <button onClick={onClose} className="flex-1 px-4 py-2 border border-gray-200 text-gray-700 rounded-xl text-sm font-medium hover:bg-gray-50 transition">Cancelar</button>
+          <button onClick={handleSave} disabled={saving} className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-xl text-sm font-semibold transition">
+            {saving ? 'Guardando...' : 'Guardar'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Página principal de dispositivos ─────────────────────────────────────────
 export default function DevicesPage() {
   const [devices, setDevices] = useState<TraccarDevice[]>([]);
@@ -175,6 +239,8 @@ export default function DevicesPage() {
   const [driverMap, setDriverMap] = useState<Record<number, string>>({}); // deviceId → driver name
   const [editingDevice, setEditingDevice] = useState<TraccarDevice | null>(null);
   const [commandDevice, setCommandDevice] = useState<TraccarDevice | null>(null);
+  const [accumulatorsDevice, setAccumulatorsDevice] = useState<TraccarDevice | null>(null);
+  const [shareDevice, setShareDevice] = useState<TraccarDevice | null>(null);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
 
@@ -345,6 +411,14 @@ export default function DevicesPage() {
                       </td>
                       <td className="px-5 py-3">
                         <div className="flex gap-1 justify-end">
+                          <button onClick={() => setShareDevice(device)}
+                            className="p-1.5 hover:bg-orange-50 hover:text-orange-600 text-gray-400 rounded-lg transition" title="Compartir enlace">
+                            <Tag size={14} />
+                          </button>
+                          <button onClick={() => setAccumulatorsDevice(device)}
+                            className="p-1.5 hover:bg-emerald-50 hover:text-emerald-600 text-gray-400 rounded-lg transition" title="Acumuladores (Odómetro/Horómetro)">
+                            <Radio size={14} />
+                          </button>
                           <button onClick={() => setEditingDevice(device)}
                             className="p-1.5 hover:bg-blue-50 hover:text-blue-600 text-gray-400 rounded-lg transition" title="Editar">
                             <Edit2 size={14} />
@@ -381,6 +455,14 @@ export default function DevicesPage() {
                       </div>
                     </div>
                     <div className="flex gap-1 flex-shrink-0">
+                      <button onClick={() => setShareDevice(device)}
+                        className="p-2 hover:bg-orange-50 hover:text-orange-600 text-gray-400 rounded-xl transition" title="Compartir enlace">
+                        <Tag size={15} />
+                      </button>
+                      <button onClick={() => setAccumulatorsDevice(device)}
+                        className="p-2 hover:bg-emerald-50 hover:text-emerald-600 text-gray-400 rounded-xl transition" title="Acumuladores (Odómetro/Horómetro)">
+                        <Radio size={15} />
+                      </button>
                       <button onClick={() => setEditingDevice(device)}
                         className="p-2 hover:bg-blue-50 hover:text-blue-600 text-gray-400 rounded-xl transition" title="Editar">
                         <Edit2 size={15} />
@@ -411,6 +493,24 @@ export default function DevicesPage() {
         <CommandModal
           device={commandDevice}
           onClose={() => setCommandDevice(null)}
+        />
+      )}
+      
+      {accumulatorsDevice && (
+        <AccumulatorsModal
+          device={accumulatorsDevice}
+          onClose={() => setAccumulatorsDevice(null)}
+          onSaved={() => {
+            // Optional: Reload devices or just show success msg
+            alert('Acumuladores actualizados con éxito');
+          }}
+        />
+      )}
+
+      {shareDevice && (
+        <ShareModal
+          device={shareDevice}
+          onClose={() => setShareDevice(null)}
         />
       )}
     </div>

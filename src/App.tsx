@@ -15,6 +15,7 @@ import DriversPage from './pages/DriversPage';
 import GeofencesPage from './pages/GeofencesPage';
 import MaintenancePage from './pages/MaintenancePage';
 import SettingsPage from './pages/SettingsPage';
+import DeviceConnectionsPage from './pages/DeviceConnectionsPage';
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
@@ -22,7 +23,7 @@ function PrivateRoute({ children }: { children: React.ReactNode }) {
 }
 
 function AppRoutes() {
-  const { user, loading } = useAuth();
+  const { loading } = useAuth();
 
   if (loading) {
     return (
@@ -43,6 +44,7 @@ function AppRoutes() {
         <Route path="dashboard" element={<Dashboard />} />
         <Route path="map" element={<MapPage />} />
         <Route path="devices" element={<DevicesPage />} />
+        <Route path="connections" element={<DeviceConnectionsPage />} />
         <Route path="reports" element={<ReportsPage />} />
         <Route path="replay" element={<ReplayPage />} />
         <Route path="notifications" element={<NotificationsPage />} />

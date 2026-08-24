@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
-import { Map, Users, BarChart3, Settings, Car, LogOut, Shield, Bell, Play, Layers, UserCheck, Hexagon, ChevronRight, Wrench, X } from 'lucide-react';
+import { Map, Users, BarChart3, Settings, Car, LogOut, Shield, Bell, Play, Layers, UserCheck, Hexagon, ChevronRight, Wrench, X, Activity } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 interface SidebarProps {
@@ -69,6 +69,7 @@ export default function Sidebar({ onClose }: SidebarProps) {
   ];
 
   const toolsItems = [
+    { to: '/connections', icon: <Activity size={16} />, label: 'Conexiones' },
     { to: '/reports', icon: <BarChart3 size={16} />, label: 'Reportes' },
     { to: '/replay', icon: <Play size={16} />, label: 'Repetición Ruta' },
     { to: '/geofences', icon: <Hexagon size={16} />, label: 'Geocercas' },

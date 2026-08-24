@@ -286,9 +286,9 @@ export default function GeofencesPage() {
       <div className="flex flex-col lg:flex-row gap-4 flex-1 min-h-0">
         
         {/* Panel lateral: Lista o Formulario */}
-        <div className="w-full lg:w-80 bg-white rounded-2xl border border-gray-100 shadow-sm flex flex-col h-full shrink-0 overflow-hidden">
+        <div className="w-full lg:w-80 bg-white rounded-2xl border border-gray-100 shadow-sm flex flex-col h-auto max-h-[50vh] lg:max-h-none lg:h-full shrink-0 overflow-hidden">
           {editingGeofence ? (
-            <div className="p-5 flex flex-col gap-4 h-full">
+            <div className="p-4 lg:p-5 flex flex-col gap-3 lg:gap-4 h-full overflow-y-auto">
               <div className="flex items-center justify-between mb-2">
                 <h2 className="text-sm font-bold text-gray-900">{editingGeofence.id ? 'Editar' : 'Nueva'} Geocerca</h2>
                 <button onClick={cancelEdit} className="p-1 hover:bg-gray-100 rounded text-gray-400">
@@ -369,7 +369,7 @@ export default function GeofencesPage() {
         </div>
 
         {/* Mapa */}
-        <div className="flex-1 bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden relative">
+        <div className="flex-1 bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden relative min-h-[350px] lg:min-h-0">
           {!mapsLoaded && (
             <div className="absolute inset-0 flex items-center justify-center bg-gray-50 z-10 text-gray-400 text-sm">
               Cargando editor de mapas...
