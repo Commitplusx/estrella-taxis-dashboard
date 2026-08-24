@@ -22,15 +22,18 @@ export function ShareModal({ device, onClose }: ShareModalProps) {
       expDate.setDate(expDate.getDate() + expirationDays);
       const expirationIso = expDate.toISOString();
 
-      // 1. Crear un usuario temporal
+      // 1. Crear usuario temporal de sólo lectura con fecha de expiración
       const randomStr = Math.random().toString(36).substring(2, 10);
+      const tempPassword = Math.random().toString(36).substring(2, 14);
       const tempUser = {
         name: `Share: ${device.name}`,
-        email: `share_${randomStr}@tmp.com`,
-        password: randomStr,
+        email: `share_${randomStr}@tmp.local`,
+        password: tempPassword,
         readonly: true,
         disabled: false,
         expirationTime: expirationIso,
+        deviceLimit: 0,
+        userLimit: 0,
       };
 
       const userRes = await fetch(`${BASE_URL}/users`, {
@@ -39,38 +42,54 @@ export function ShareModal({ device, onClose }: ShareModalProps) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(tempUser),
       });
-
       if (!userRes.ok) throw new Error('Error al crear usuario temporal');
       const createdUser = await userRes.json();
 
-      // 2. Vincular dispositivo al usuario temporal
+      // 2. Vincular el dispositivo al usuario temporal
       const permRes = await fetch(`${BASE_URL}/permissions`, {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId: createdUser.id, deviceId: device.id }),
       });
-      if (!permRes.ok) throw new Error('Error al asignar dispositivo');
+      if (!permRes.ok) throw new Error('Error al vincular dispositivo');
 
-      // 3. Generar token para este usuario (Traccar permite userId en la form)
+      // 3. CRÍTICO: Iniciar sesión COMO ese usuario temporal para obtener SU cookie
+      const loginBody = new URLSearchParams();
+      loginBody.append('email', tempUser.email);
+      loginBody.append('password', tempPassword);
+
+      const loginRes = await fetch(`${BASE_URL}/session`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: loginBody.toString(),
+        // No "credentials: include" aquí, queremos una sesión separada
+      });
+      if (!loginRes.ok) throw new Error('Error al autenticar usuario temporal');
+      // Extraer la cookie de sesión del usuario temporal
+      const sessionCookie = loginRes.headers.get('Set-Cookie') || '';
+
+      // 4. Generar token PARA la sesión del usuario temporal (usando su cookie)
       const tokenBody = new URLSearchParams();
-      tokenBody.append('userId', createdUser.id.toString());
       tokenBody.append('expiration', expirationIso);
 
       const tokenRes = await fetch(`${BASE_URL}/session/token`, {
         method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          ...(sessionCookie ? { 'Cookie': sessionCookie } : {}),
+        },
         body: tokenBody.toString(),
       });
+      if (!tokenRes.ok) throw new Error('Error al generar token de sesión');
 
-      if (!tokenRes.ok) throw new Error('Error al generar token');
-      
       const token = await tokenRes.text();
-      setShareLink(`${window.location.origin}/?token=${token}`);
+      if (!token || token.startsWith('HTTP')) throw new Error('Token inválido del servidor');
+
+      setShareLink(`${window.location.origin}/?token=${encodeURIComponent(token)}`);
       setCopied(false);
     } catch (err: any) {
-      setError(err.message);
+      setError(err.message || 'Error desconocido');
     } finally {
       setGenerating(false);
     }
