@@ -1,0 +1,16 @@
+{
+  "rewrites": [
+    {
+      "source": "/api/socket",
+      "destination": "wss://taxis.estrella-eats.mx/api/socket"
+    },
+    {
+      "source": "/api/:path*",
+      "destination": "https://taxis.estrella-eats.mx/api/:path*"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}
