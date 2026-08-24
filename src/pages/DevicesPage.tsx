@@ -3,6 +3,7 @@ import { api, BASE_URL, type TraccarDevice } from '../lib/traccarApi';
 import { X, Save, Car, Phone, User, Hash, Layers, Tag, ShieldAlert, Power, Radio, Zap, Edit2 } from 'lucide-react';
 import { CommandModal } from '../components/CommandModal';
 import { ShareModal } from '../components/ShareModal';
+import { useAuth } from '../context/AuthContext';
 
 // Categorías idénticas a las de Traccar
 const DEVICE_CATEGORIES = [
@@ -234,6 +235,9 @@ function AccumulatorsModal({ device, onClose, onSaved }: { device: TraccarDevice
 
 // ─── Página principal de dispositivos ─────────────────────────────────────────
 export default function DevicesPage() {
+  const { user } = useAuth();
+  const isReadonly = user?.readonly ?? false;
+
   const [devices, setDevices] = useState<TraccarDevice[]>([]);
   const [groups, setGroups] = useState<{ id: number; name: string }[]>([]);
   const [driverMap, setDriverMap] = useState<Record<number, string>>({}); // deviceId → driver name
@@ -415,18 +419,22 @@ export default function DevicesPage() {
                             className="p-1.5 hover:bg-orange-50 hover:text-orange-600 text-gray-400 rounded-lg transition" title="Compartir enlace">
                             <Tag size={14} />
                           </button>
-                          <button onClick={() => setAccumulatorsDevice(device)}
-                            className="p-1.5 hover:bg-emerald-50 hover:text-emerald-600 text-gray-400 rounded-lg transition" title="Acumuladores (Odómetro/Horómetro)">
-                            <Radio size={14} />
-                          </button>
-                          <button onClick={() => setEditingDevice(device)}
-                            className="p-1.5 hover:bg-blue-50 hover:text-blue-600 text-gray-400 rounded-lg transition" title="Editar">
-                            <Edit2 size={14} />
-                          </button>
-                          <button onClick={() => setCommandDevice(device)}
-                            className="p-1.5 hover:bg-red-50 hover:text-red-600 text-gray-400 rounded-lg transition" title="Comandos">
-                            <ShieldAlert size={14} />
-                          </button>
+                          {!isReadonly && (
+                            <>
+                              <button onClick={() => setAccumulatorsDevice(device)}
+                                className="p-1.5 hover:bg-emerald-50 hover:text-emerald-600 text-gray-400 rounded-lg transition" title="Acumuladores (Odómetro/Horómetro)">
+                                <Radio size={14} />
+                              </button>
+                              <button onClick={() => setEditingDevice(device)}
+                                className="p-1.5 hover:bg-blue-50 hover:text-blue-600 text-gray-400 rounded-lg transition" title="Editar">
+                                <Edit2 size={14} />
+                              </button>
+                              <button onClick={() => setCommandDevice(device)}
+                                className="p-1.5 hover:bg-red-50 hover:text-red-600 text-gray-400 rounded-lg transition" title="Comandos">
+                                <ShieldAlert size={14} />
+                              </button>
+                            </>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -459,18 +467,22 @@ export default function DevicesPage() {
                         className="p-2 hover:bg-orange-50 hover:text-orange-600 text-gray-400 rounded-xl transition" title="Compartir enlace">
                         <Tag size={15} />
                       </button>
-                      <button onClick={() => setAccumulatorsDevice(device)}
-                        className="p-2 hover:bg-emerald-50 hover:text-emerald-600 text-gray-400 rounded-xl transition" title="Acumuladores (Odómetro/Horómetro)">
-                        <Radio size={15} />
-                      </button>
-                      <button onClick={() => setEditingDevice(device)}
-                        className="p-2 hover:bg-blue-50 hover:text-blue-600 text-gray-400 rounded-xl transition" title="Editar">
-                        <Edit2 size={15} />
-                      </button>
-                      <button onClick={() => setCommandDevice(device)}
-                        className="p-2 hover:bg-red-50 hover:text-red-600 text-gray-400 rounded-xl transition" title="Comandos">
-                        <ShieldAlert size={15} />
-                      </button>
+                      {!isReadonly && (
+                        <>
+                          <button onClick={() => setAccumulatorsDevice(device)}
+                            className="p-2 hover:bg-emerald-50 hover:text-emerald-600 text-gray-400 rounded-xl transition" title="Acumuladores (Odómetro/Horómetro)">
+                            <Radio size={15} />
+                          </button>
+                          <button onClick={() => setEditingDevice(device)}
+                            className="p-2 hover:bg-blue-50 hover:text-blue-600 text-gray-400 rounded-xl transition" title="Editar">
+                            <Edit2 size={15} />
+                          </button>
+                          <button onClick={() => setCommandDevice(device)}
+                            className="p-2 hover:bg-red-50 hover:text-red-600 text-gray-400 rounded-xl transition" title="Comandos">
+                            <ShieldAlert size={15} />
+                          </button>
+                        </>
+                      )}
                     </div>
                   </div>
                 ))}

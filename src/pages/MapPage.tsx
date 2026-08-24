@@ -6,6 +6,7 @@ import { api, type TraccarDevice, type TraccarPosition } from '../lib/traccarApi
 import { useTraccarSocket } from '../hooks/useTraccarSocket';
 import { CommandModal } from '../components/CommandModal';
 import { EventsDrawer } from '../components/EventsDrawer';
+import { useAuth } from '../context/AuthContext';
 
 // ─── Google Maps API Key ──────────────────────────────────────────────────────
 // IMPORTANTE: Reemplaza esto con tu API Key real de Google
@@ -29,7 +30,7 @@ function getStatusColor(device: TraccarDevice) {
   return '#f59e0b';
 }
 
-function generateInfoWindowContent(device: TraccarDevice, pos: TraccarPosition) {
+function generateInfoWindowContent(device: TraccarDevice, pos: TraccarPosition, isReadonly: boolean = false) {
   const battery = pos.attributes?.batteryLevel;
   const ignition = pos.attributes?.ignition;
   const speed = knotsToKmh(pos.speed || 0);
@@ -70,9 +71,11 @@ function generateInfoWindowContent(device: TraccarDevice, pos: TraccarPosition) 
       </div>
       
       <div style="display:flex;gap:6px;margin-top:12px">
+        ${!isReadonly ? `
         <button onclick="window.dispatchEvent(new CustomEvent('openMapCommands', {detail: ${device.id}}))" style="flex:1; background:#fee2e2; color:#b91c1c; border:none; padding:8px 0; border-radius:8px; font-size:11px; font-weight:bold; cursor:pointer; display:flex; align-items:center; justify-content:center;">
           ⚡ Comandos
         </button>
+        ` : ''}
         <button onclick="window.dispatchEvent(new CustomEvent('viewMapRoute', {detail: ${device.id}}))" style="flex:1; background:#e0e7ff; color:#4338ca; border:none; padding:8px 0; border-radius:8px; font-size:11px; font-weight:bold; cursor:pointer; display:flex; align-items:center; justify-content:center;">
           🗺️ Ver Ruta
         </button>
@@ -82,6 +85,9 @@ function generateInfoWindowContent(device: TraccarDevice, pos: TraccarPosition) 
 }
 
 export default function MapPage() {
+  const { user } = useAuth();
+  const isReadonly = user?.readonly ?? false;
+
   const navigate = useNavigate();
   const mapRef = useRef<HTMLDivElement>(null);
   const googleMapRef = useRef<google.maps.Map | null>(null);
@@ -216,7 +222,7 @@ export default function MapPage() {
         });
         marker.addListener('click', () => {
           setSelectedDevice(device);
-          infoWindowRef.current?.setContent(generateInfoWindowContent(device, pos));
+          infoWindowRef.current?.setContent(generateInfoWindowContent(device, pos, isReadonly));
           infoWindowRef.current?.open(googleMapRef.current!, marker);
         });
         
@@ -234,7 +240,7 @@ export default function MapPage() {
     if (!selectedDevice || !infoWindowRef.current) return;
     const pos = positions.get(selectedDevice.id);
     if (pos) {
-      infoWindowRef.current.setContent(generateInfoWindowContent(selectedDevice, pos));
+      infoWindowRef.current.setContent(generateInfoWindowContent(selectedDevice, pos, isReadonly));
     }
   }, [positions, selectedDevice]);
 

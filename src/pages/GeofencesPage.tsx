@@ -275,7 +275,7 @@ export default function GeofencesPage() {
           <h1 className="text-lg font-bold text-gray-900">Geocercas</h1>
           <p className="text-sm text-gray-500 mt-0.5">Delimita zonas de operación y recibe alertas</p>
         </div>
-        {!editingGeofence && (
+        {!editingGeofence && !isReadonly && (
           <button onClick={() => setEditingGeofence({ name: '', description: '' })}
             className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-semibold transition shadow-sm">
             <Plus size={16} /> Nueva Geocerca
@@ -357,8 +357,12 @@ export default function GeofencesPage() {
                         <p className="text-xs text-gray-400">{gf.area.split(' ')[0]}</p>
                       </div>
                       <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition">
-                        <button onClick={() => handleEditGeofence(gf)} className="p-1.5 hover:bg-blue-100 text-blue-600 rounded-md"><Edit2 size={14} /></button>
-                        <button onClick={() => gf.id && handleDelete(gf.id)} className="p-1.5 hover:bg-red-100 text-red-600 rounded-md"><Trash2 size={14} /></button>
+                        {!isReadonly && (
+                          <>
+                            <button onClick={() => handleEditGeofence(gf)} className="p-1.5 hover:bg-blue-100 text-blue-600 rounded-md"><Edit2 size={14} /></button>
+                            <button onClick={() => gf.id && handleDelete(gf.id)} className="p-1.5 hover:bg-red-100 text-red-600 rounded-md"><Trash2 size={14} /></button>
+                          </>
+                        )}
                       </div>
                     </div>
                   ))
