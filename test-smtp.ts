@@ -1,0 +1,1 @@
+import nodemailer from "npm:nodemailer"; const transporter = nodemailer.createTransport({ host: "mail.spacemail.com", port: 465, secure: true, auth: { user: "soporte@estrella-eats.mx", pass: "Deiff2412" } }); transporter.verify().then(console.log).catch(console.error);
