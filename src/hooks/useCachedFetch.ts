@@ -5,14 +5,14 @@ import { BASE_URL } from '../lib/traccarApi';
 interface UseCachedFetchOptions {
   /** Tiempo de vida del cache en ms. Por defecto 30s */
   ttlMs?: number;
-  /** Si es true, re-fetches autom\u00e1ticamente cada `ttlMs` */
+  /** Si es true, re-fetches automáticamente cada `ttlMs` */
   autoRefresh?: boolean;
 }
 
 /**
- * Hook que hace fetch con cach\u00e9 en memoria.
- * Si los datos ya est\u00e1n en cache y no expiraron, los devuelve inmediatamente
- * sin hacer una nueva petici\u00f3n al servidor.
+ * Hook que hace fetch con caché en memoria.
+ * Si los datos ya están en cache y no expiraron, los devuelve inmediatamente
+ * sin hacer una nueva petición al servidor.
  */
 export function useCachedFetch<T>(
   path: string,
@@ -26,7 +26,7 @@ export function useCachedFetch<T>(
   const [error, setError] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
-    // Revisar cach\u00e9 primero
+    // Revisar caché primero
     const cached = dataCache.get<T>(fullUrl, ttlMs);
     if (cached !== null) {
       setData(cached);
@@ -44,14 +44,14 @@ export function useCachedFetch<T>(
       }
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json: T = await res.json();
-      dataCache.set(url, json);
+      dataCache.set(fullUrl, json);
       setData(json);
     } catch (e: any) {
       setError(e.message || 'Error de red');
     } finally {
       setLoading(false);
     }
-  }, [url, ttlMs]);
+  }, [fullUrl, ttlMs]);
 
   useEffect(() => {
     fetchData();

@@ -80,6 +80,7 @@ export default function GeofencesPage() {
       streetViewControl: false,
       fullscreenControl: true,
       mapTypeId: savedMapType,
+      gestureHandling: 'greedy',
     });
 
     // Lógica manual de dibujo (reemplazo de DrawingManager obsoleto)
@@ -192,10 +193,10 @@ export default function GeofencesPage() {
   };
 
   const handleDelete = async (id: number) => {
-    if (!confirm('\u00bfEliminar esta geocerca?')) return;
+    if (!confirm('¿Eliminar esta geocerca?')) return;
     const url = `${BASE_URL}/geofences/${id}`;
     await fetch(url, { method: 'DELETE', credentials: 'include' });
-    dataCache.invalidate('/api/geofences');
+    dataCache.invalidate('/geofences');
     refetch();
     if (editingGeofence?.id === id) cancelEdit();
   };
@@ -220,7 +221,7 @@ export default function GeofencesPage() {
         const p = path.getAt(i);
         points.push(`${p.lat()} ${p.lng()}`);
       }
-      // Cerrar pol\u00edgono
+      // Cerrar polígono
       if (points.length > 0) points.push(points[0]);
       return `POLYGON ((${points.join(', ')}))`;
     }
@@ -241,7 +242,7 @@ export default function GeofencesPage() {
     if (!currentOverlayRef.current) return alert('Dibuja la geocerca en el mapa primero');
     
     const wkt = buildWktFromOverlay(currentOverlayRef.current);
-    if (!wkt) return alert('Forma no v\u00e1lida');
+    if (!wkt) return alert('Forma no válida');
     
     setSaving(true);
     try {
@@ -257,7 +258,7 @@ export default function GeofencesPage() {
       });
       if (!res.ok) throw new Error(await res.text());
       
-      dataCache.invalidate('/api/geofences');
+      dataCache.invalidate('/geofences');
       refetch();
       cancelEdit();
     } catch (e: any) {

@@ -83,6 +83,14 @@ export default function Sidebar({ onClose }: SidebarProps) {
     { to: '/settings', icon: <Settings size={16} />, label: 'Configuración', always: false, adminOnly: true },
   ].filter(item => item.always || (item.adminOnly && user?.administrator));
 
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+
+  const handleLogout = async () => {
+    setIsLoggingOut(true);
+    await new Promise(r => setTimeout(r, 400)); // Pequeña pausa para mostrar el spinner
+    await logout();
+  };
+
   return (
     <div className="h-screen w-64 bg-white border-r border-gray-100 flex flex-col shadow-sm">
 
@@ -157,8 +165,20 @@ export default function Sidebar({ onClose }: SidebarProps) {
                 <p className="text-xs text-gray-400 truncate">{user?.email}</p>
               </div>
             </div>
-            <button onClick={logout} title="Cerrar sesión" className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-colors flex-shrink-0">
-              <LogOut size={16} />
+            <button 
+              onClick={handleLogout} 
+              disabled={isLoggingOut}
+              title="Cerrar sesión" 
+              className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-colors flex-shrink-0 disabled:opacity-50"
+            >
+              {isLoggingOut ? (
+                <svg className="animate-spin h-4 w-4 text-red-500" viewBox="0 0 24 24" fill="none">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+              ) : (
+                <LogOut size={16} />
+              )}
             </button>
           </div>
         </div>

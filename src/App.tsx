@@ -17,25 +17,27 @@ import MaintenancePage from './pages/MaintenancePage';
 import SettingsPage from './pages/SettingsPage';
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth();
+  return user ? <>{children}</> : <Navigate to="/login" replace />;
+}
+
+function AppRoutes() {
   const { user, loading } = useAuth();
+
   if (loading) {
     return (
       <div className="h-screen flex items-center justify-center bg-slate-50">
         <div className="text-center">
           <div className="animate-spin w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full mx-auto mb-3" />
-          <p className="text-sm text-gray-400">Cargando...</p>
+          <p className="text-sm font-medium text-slate-400">Restaurando sesión...</p>
         </div>
       </div>
     );
   }
-  return user ? <>{children}</> : <Navigate to="/login" replace />;
-}
 
-function AppRoutes() {
-  const { user } = useAuth();
   return (
     <Routes>
-      <Route path="/login" element={user ? <Navigate to="/" replace /> : <Login />} />
+      <Route path="/login" element={<Login />} />
       <Route path="/" element={<PrivateRoute><Layout /></PrivateRoute>}>
         <Route index element={<Navigate to="/map" replace />} />
         <Route path="dashboard" element={<Dashboard />} />
