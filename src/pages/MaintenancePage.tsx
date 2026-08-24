@@ -3,7 +3,7 @@ import type { TraccarMaintenance } from '../lib/traccarApi';
 import { Wrench, Plus, X, Save, Trash2, Edit2, AlertCircle } from 'lucide-react';
 
 // Tipos requeridos (Agregados aquí por simplicidad si no están en traccarApi)
-interface TraccarMaintenanceExtended extends TraccarMaintenance {
+interface TraccarMaintenanceExtended extends Omit<TraccarMaintenance, 'attributes'> {
   id: number;
   name: string;
   type: string;

@@ -184,8 +184,10 @@ export type TraccarUser = {
   id: number;
   name: string;
   email: string;
+  password?: string;
   administrator: boolean;
   readonly: boolean;
+  disabled?: boolean;
   deviceLimit: number;
   attributes: Record<string, unknown>;
 };
@@ -194,6 +196,9 @@ export type TraccarDevice = {
   id: number;
   name: string;
   uniqueId: string;
+  phone?: string;
+  model?: string;
+  category?: string;
   status: 'online' | 'offline' | 'unknown';
   lastUpdate: string;
   positionId: number;
