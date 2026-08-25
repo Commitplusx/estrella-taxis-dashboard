@@ -103,17 +103,25 @@ export default function Login() {
       </div>
 
       {/* ─── Panel Izquierdo (Hero Limpio y Profesional) ──────────────────────── */}
-      <div className={`hidden lg:flex flex-col w-[55%] bg-black items-center justify-center relative transition-transform duration-1000 ${mounted ? 'translate-x-0' : '-translate-x-12'}`}>
-        <img src="/logo-full.png" alt="Stellar Tracking" className="w-[80%] max-w-lg object-contain" />
+      <div className={`hidden lg:flex flex-col w-[55%] bg-black items-center justify-center relative transition-transform duration-1000 z-10 ${mounted ? 'translate-x-0' : '-translate-x-12'}`}>
+        <img src="/logo-full.png" alt="Stellar Tracking" className="w-[80%] max-w-lg object-contain relative z-10" />
+        
+        {/* Footer Text */}
+        <div className="absolute bottom-8 left-0 w-full text-center z-20">
+          <p className="text-gray-400 text-[12px] font-medium tracking-widest uppercase">
+            Impulsado por <span className="text-white font-extrabold">Stellar Tracking</span>
+          </p>
+        </div>
       </div>
 
       {/* ─── Panel Derecho (Formulario Limpio) ────────────────────────────────── */}
       {/* ─── Panel Derecho (Formulario Limpio) ────────────────────────────────── */}
       <div
-        className={`flex-1 flex flex-col justify-center items-center px-6 sm:px-12 py-8 transition-all duration-700 bg-slate-50 overflow-y-auto w-full relative ${mounted ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-8'}`}
+        className={`flex-1 flex flex-col justify-center items-center px-6 sm:px-12 py-8 transition-all duration-700 bg-slate-50 overflow-y-auto w-full relative z-0 ${mounted ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-8'}`}
       >
-        {/* Difuminado de transición (Fade de negro a gris claro) */}
-        <div className="hidden lg:block absolute top-0 left-0 w-64 h-full bg-gradient-to-r from-black to-transparent pointer-events-none z-0"></div>
+        {/* Difuminado MEJORADO: transición mucho más suave y ancha */}
+        <div className="hidden lg:block absolute top-0 left-0 w-[60%] h-full bg-gradient-to-r from-black via-slate-800/80 to-transparent pointer-events-none z-0"></div>
+        <div className="hidden lg:block absolute top-0 left-0 w-[30%] h-full bg-gradient-to-r from-black to-transparent pointer-events-none z-10"></div>
         
         {/* ─── Header Móvil (Ultra Limpio) ─── */}
         <div className="lg:hidden w-full flex flex-col items-center mb-8 mt-4">
@@ -231,10 +239,7 @@ export default function Login() {
 
           {!isForgotPassword && (
             <div className={`mt-10 lg:mt-8 flex flex-col items-center justify-center gap-2 transition-opacity duration-500 ${state === 'success' ? 'opacity-0' : 'opacity-100'}`}>
-              <div className="flex items-center gap-2 text-[12px] lg:text-[13px] font-medium text-slate-400">
-                <Car size={16} />
-                <span>Usa las mismas credenciales de tu cuenta Traccar</span>
-              </div>
+              {/* Optional footer content can go here */}
             </div>
           )}
         </div>
