@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../lib/traccarApi';
 import { Settings, Save, Lock, Map as MapIcon, Globe, CheckCircle2 } from 'lucide-react';
+import toast from 'react-hot-toast';
 
 export default function SettingsPage() {
   const { user } = useAuth();
@@ -42,16 +43,16 @@ export default function SettingsPage() {
       }
       showSuccess('Ajustes guardados correctamente.');
     } catch (e: any) {
-      alert(`Error al guardar: ${e.message}`);
+      toast.error(`Error al guardar: ${e.message}`);
     } finally {
       setSavingSettings(false);
     }
   };
 
   const handleSaveSecurity = async () => {
-    if (!password) return alert('Ingresa una contraseña nueva.');
-    if (password !== confirmPassword) return alert('Las contraseñas no coinciden.');
-    if (password.length < 5) return alert('La contraseña debe tener al menos 5 caracteres.');
+    if (!password) return toast.error('Ingresa una contraseña nueva.');
+    if (password !== confirmPassword) return toast.error('Las contraseñas no coinciden.');
+    if (password.length < 5) return toast.error('La contraseña debe tener al menos 5 caracteres.');
     
     setSavingSecurity(true);
     try {
@@ -62,15 +63,15 @@ export default function SettingsPage() {
         showSuccess('Contraseña actualizada con éxito.');
       }
     } catch (e: any) {
-      alert(`Error de seguridad: ${e.message}`);
+      toast.error(`Error de seguridad: ${e.message}`);
     } finally {
       setSavingSecurity(false);
     }
   };
 
   return (
-    <div className="flex flex-col gap-6 max-w-4xl mx-auto w-full h-full p-4 sm:p-6">
-      
+    <div className="absolute inset-0 p-4 sm:p-6 pb-32 md:pb-10 view-panel fade-in overflow-y-auto">
+      <div className="max-w-4xl mx-auto w-full flex flex-col gap-6">
       {/* Header */}
       <div>
         <h1 className="text-xl sm:text-2xl font-bold text-gray-900 flex items-center gap-2">
@@ -170,6 +171,7 @@ export default function SettingsPage() {
         </div>
 
       </div>
+    </div>
     </div>
   );
 }

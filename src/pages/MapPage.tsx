@@ -1,16 +1,11 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Layers, Crosshair, Filter, Zap, Power, Radio, ShieldAlert } from 'lucide-react';
+import { Layers, Crosshair, Filter, Zap, Power, Radio, ShieldAlert, Car, Bell } from 'lucide-react';
 import { loadGoogleMaps } from '../lib/mapsLoader';
 import { api, type TraccarDevice, type TraccarPosition } from '../lib/traccarApi';
 import { useTraccarSocket } from '../hooks/useTraccarSocket';
 import { CommandModal } from '../components/CommandModal';
-import { EventsDrawer } from '../components/EventsDrawer';
 import { useAuth } from '../context/AuthContext';
-
-// ─── Google Maps API Key ──────────────────────────────────────────────────────
-// IMPORTANTE: Reemplaza esto con tu API Key real de Google
-const GOOGLE_MAPS_API_KEY = 'AIzaSyAYB_sdCTSE5kLvAz4dDXp3221SdSN91ac';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function knotsToKmh(knots: number) {
@@ -100,10 +95,12 @@ export default function MapPage() {
   const [selectedDevice, setSelectedDevice] = useState<TraccarDevice | null>(null);
   const [commandDevice, setCommandDevice] = useState<TraccarDevice | null>(null);
   const [mapsLoaded, setMapsLoaded] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [showMobileEvents, setShowMobileEvents] = useState(false);
   
   // Events Drawer
-  const [eventsDrawerOpen, setEventsDrawerOpen] = useState(false);
   const [realtimeEvents, setRealtimeEvents] = useState<any[]>([]);
+  const [toastEvent, setToastEvent] = useState<{ id: string, title: string, message: string } | null>(null);
 
   // Escuchar eventos globales desde los botones del InfoWindow HTML
   useEffect(() => {
@@ -127,9 +124,14 @@ export default function MapPage() {
     loadGoogleMaps().then(() => setMapsLoaded(true)).catch(console.error);
   }, []);
 
-  // Inicializar mapa
+  // Inicializar mapa: registramos el evento de cierre del popup una sola vez
+  // para que no se acumulen y alenten la página
   useEffect(() => {
     if (!mapsLoaded || !mapRef.current || googleMapRef.current) return;
+    if (!window.google || !window.google.maps) {
+      console.warn("Google Maps no está disponible aún en window.google");
+      return;
+    }
     
     const savedMapType = localStorage.getItem('estrella_map_type') || 'roadmap';
     
@@ -147,35 +149,44 @@ export default function MapPage() {
       ],
     });
     infoWindowRef.current = new window.google.maps.InfoWindow();
+
+    // Cuando se cierre la tarjetita de información, quitamos la selección
+    window.google.maps.event.addListener(infoWindowRef.current, 'closeclick', () => {
+      setSelectedDevice(null);
+    });
   }, [mapsLoaded]);
 
-  // Cargar datos iniciales
+  // Traer los taxis y sus posiciones desde el servidor
   useEffect(() => {
     async function load() {
-      const [devs, pos] = await Promise.all([api.getDevices(), api.getPositions()]);
-      setDevices(devs);
-      const posMap = new Map<number, TraccarPosition>();
-      pos.forEach(p => posMap.set(p.deviceId, p));
-      setPositions(posMap);
+      try {
+        const [devs, pos] = await Promise.all([api.getDevices(), api.getPositions()]);
+        setDevices(devs);
+        const posMap = new Map<number, TraccarPosition>();
+        pos.forEach(p => posMap.set(p.deviceId, p));
+        setPositions(posMap);
+      } catch (e: any) {
+        setLoadError(e.message || 'Error al cargar los datos del mapa.');
+      }
     }
     load();
   }, []);
 
-  // Auto-centrar el mapa en los taxis la primera vez que cargan
+  // Auto-ajustar mapa a los marcadores
   useEffect(() => {
-    if (!googleMapRef.current || !mapsLoaded || positions.size === 0 || initialZoomDone.current) return;
+    if (!googleMapRef.current || !mapsLoaded || !window.google || !window.google.maps) return;
+    if (initialZoomDone.current) return;
     
-    const bounds = new window.google.maps.LatLngBounds();
-    let hasCoords = false;
-    
-    positions.forEach(pos => {
-      if (pos.latitude && pos.longitude) {
-        bounds.extend({ lat: pos.latitude, lng: pos.longitude });
-        hasCoords = true;
-      }
-    });
+    const validPositions = devices
+      .map(d => positions.get(d.id))
+      .filter((p): p is TraccarPosition => p != null && p.latitude !== 0 && p.longitude !== 0);
 
-    if (hasCoords) {
+    if (validPositions.length > 0) {
+      const bounds = new window.google.maps.LatLngBounds();
+      validPositions.forEach(pos => {
+        bounds.extend({ lat: pos.latitude, lng: pos.longitude });
+      });
+
       googleMapRef.current.fitBounds(bounds);
       const listener = window.google.maps.event.addListener(googleMapRef.current, 'idle', () => {
         if (googleMapRef.current!.getZoom()! > 16) {
@@ -189,7 +200,7 @@ export default function MapPage() {
 
   // Actualizar marcadores cuando hay datos
   useEffect(() => {
-    if (!googleMapRef.current || !mapsLoaded) return;
+    if (!googleMapRef.current || !mapsLoaded || !window.google || !window.google.maps) return;
     devices.forEach(device => {
       const pos = positions.get(device.id);
       if (!pos) return;
@@ -225,11 +236,6 @@ export default function MapPage() {
           infoWindowRef.current?.setContent(generateInfoWindowContent(device, pos, isReadonly));
           infoWindowRef.current?.open(googleMapRef.current!, marker);
         });
-        
-        window.google.maps.event.addListener(infoWindowRef.current!, 'closeclick', () => {
-          setSelectedDevice(null);
-        });
-        
         markersRef.current.set(device.id, marker);
       }
     });
@@ -266,7 +272,49 @@ export default function MapPage() {
       const next = [...newEvents, ...prev];
       return next.slice(0, 50); // Keep last 50 events
     });
-  }, []);
+    
+    // Disparar una notificación visual (Toast) si hay un evento importante
+    if (newEvents.length > 0) {
+      const ev = newEvents[0];
+      const device = devices.find(d => d.id === ev.deviceId);
+      const taxiName = device?.name || `Taxi #${ev.deviceId}`;
+      
+      let title = 'Evento';
+      let message = '';
+      
+      if (ev.type === 'deviceStopped') {
+        title = 'Motor Apagado';
+        message = `${taxiName} se ha detenido.`;
+      } else if (ev.type === 'deviceMoving') {
+        title = 'En Movimiento';
+        message = `${taxiName} empezó a moverse.`;
+      } else if (ev.type === 'geofenceEnter') {
+        title = 'Entrada a Zona';
+        message = `${taxiName} entró a una geocerca.`;
+      } else if (ev.type === 'geofenceExit') {
+        title = 'Salida de Zona';
+        message = `${taxiName} salió de una geocerca.`;
+      } else if (ev.type === 'deviceOffline') {
+        title = 'Señal Perdida';
+        message = `${taxiName} se desconectó.`;
+      } else if (ev.type === 'deviceOnline') {
+        title = 'Señal Recuperada';
+        message = `${taxiName} volvió a conectarse.`;
+      } else if (ev.type === 'alarm') {
+        title = '🚨 ALARMA';
+        message = `${taxiName} reportó una alerta (${ev.attributes?.alarm || ''}).`;
+      }
+
+      if (message) {
+        const id = Date.now().toString();
+        setToastEvent({ id, title, message });
+        // Auto-ocultar el aviso después de 4 segundos
+        setTimeout(() => {
+          setToastEvent(prev => prev?.id === id ? null : prev);
+        }, 4000);
+      }
+    }
+  }, [devices]);
 
   useTraccarSocket({ 
     onDevices: handleWsDevices, 
@@ -275,37 +323,43 @@ export default function MapPage() {
   });
 
   const onlineCount = devices.filter(d => d.status === 'online').length;
+  
+  const movingCount = devices.filter(d => {
+    const p = positions.get(d.id);
+    return d.status === 'online' && p && (p.speed || 0) > 0.5;
+  }).length;
+  
+  const stoppedCount = onlineCount - movingCount;
 
   return (
-    <div className="flex flex-col h-full gap-0 relative">
-      {/* Header */}
-      <div className="px-6 py-4 flex items-center justify-between border-b border-gray-100 bg-white flex-shrink-0">
-        <div>
-          <h1 className="text-xl font-bold text-gray-900">Mapa en Vivo</h1>
-          <p className="text-sm text-gray-500">{onlineCount} de {devices.length} taxis en línea</p>
-        </div>
-        <div className="flex items-center gap-3">
-          <button 
-            onClick={() => setEventsDrawerOpen(o => !o)}
-            className="flex items-center gap-1.5 text-xs text-blue-700 bg-blue-50 px-3 py-1.5 rounded-xl font-bold hover:bg-blue-100 transition-colors border border-blue-100 shadow-sm">
-            <Zap size={14} className={realtimeEvents.length > 0 ? "animate-pulse" : ""} />
-            Eventos
-            {realtimeEvents.length > 0 && (
-              <span className="bg-blue-600 text-white rounded-full px-1.5 py-0.5 text-[10px] ml-1">
-                {realtimeEvents.length > 99 ? '99+' : realtimeEvents.length}
-              </span>
-            )}
-          </button>
-          <span className="flex items-center gap-1.5 text-xs text-green-700 bg-green-50 px-2.5 py-1 rounded-full font-medium">
-            <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>
-            En vivo
-          </span>
-        </div>
+    <div className="absolute inset-0 p-2 sm:p-4 view-panel fade-in flex flex-col">
+      {/* Estadísticas Rápidas flotantes */}
+      <div className="hidden sm:grid grid-cols-3 gap-4 mb-4 z-10 relative">
+          <div className="bg-white p-3 rounded-xl shadow-sm border border-gray-100 flex flex-row items-start gap-4 text-left">
+              <div className="w-10 h-10 rounded-full bg-blue-100 text-primary flex items-center justify-center text-lg shrink-0"><Car size={20} /></div>
+              <div><p className="text-xs text-gray-500 font-medium leading-normal">Total Taxis</p><p className="text-xl font-bold text-gray-800">{devices.length}</p></div>
+          </div>
+          <div className="bg-white p-3 rounded-xl shadow-sm border border-gray-100 flex flex-row items-start gap-4 text-left">
+              <div className="w-10 h-10 rounded-full bg-green-100 text-green-600 flex items-center justify-center text-lg shrink-0"><Zap size={20} /></div>
+              <div><p className="text-xs text-gray-500 font-medium leading-normal">En Movimiento</p><p className="text-xl font-bold text-gray-800">{movingCount}</p></div>
+          </div>
+          <div className="bg-white p-3 rounded-xl shadow-sm border border-gray-100 flex flex-row items-start gap-4 text-left">
+              <div className="w-10 h-10 rounded-full bg-red-100 text-red-600 flex items-center justify-center text-lg shrink-0"><Power size={20} /></div>
+              <div><p className="text-xs text-gray-500 font-medium leading-normal">Detenidos</p><p className="text-xl font-bold text-gray-800">{stoppedCount}</p></div>
+          </div>
       </div>
 
-      {/* Map */}
-      <div className="flex-1 relative">
-        {!mapsLoaded && (
+      {/* Contenedor del Mapa */}
+      <div className="flex-1 bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden relative">
+        {loadError && (
+          <div className="absolute inset-0 flex items-center justify-center bg-red-50 z-10">
+            <div className="text-center p-6">
+              <p className="text-red-600 font-bold text-sm mb-1">Error al cargar el mapa</p>
+              <p className="text-red-400 text-xs">{loadError}</p>
+            </div>
+          </div>
+        )}
+        {!mapsLoaded && !loadError && (
           <div className="absolute inset-0 flex items-center justify-center bg-slate-50 z-10">
             <div className="text-center">
               <div className="animate-spin w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full mx-auto mb-3"></div>
@@ -314,20 +368,69 @@ export default function MapPage() {
           </div>
         )}
         <div ref={mapRef} className="w-full h-full" />
-      </div>
 
-      <EventsDrawer
-        open={eventsDrawerOpen}
-        onClose={() => setEventsDrawerOpen(false)}
-        events={realtimeEvents}
-        devices={devices}
-      />
+        {/* Panel lateral flotante de info del mapa */}
+        <div className={`absolute top-2 sm:top-4 right-2 sm:right-4 left-2 sm:left-auto sm:w-72 bg-white/95 backdrop-blur-sm p-4 rounded-xl shadow-lg border border-gray-200 z-[10] max-h-[45%] sm:max-h-[80%] overflow-y-auto transition-all duration-300 ease-out ${showMobileEvents ? 'opacity-100 translate-y-0 pointer-events-auto' : 'opacity-0 -translate-y-4 pointer-events-none sm:opacity-100 sm:translate-y-0 sm:pointer-events-auto'}`}>
+            <h3 className="font-bold text-gray-800 mb-3 text-sm flex justify-between items-center">
+                Actividad Reciente <Radio size={16} className="text-primary animate-pulse" />
+            </h3>
+            <div className="space-y-3">
+              {realtimeEvents.length === 0 ? (
+                <p className="text-xs text-gray-500 text-center py-4">Esperando eventos...</p>
+              ) : (
+                realtimeEvents.slice(0, 10).map((ev, i) => {
+                  const device = devices.find(d => d.id === ev.deviceId);
+                  const isAlarm = ev.type === 'alarm';
+                  return (
+                    <div key={i} className="flex items-start gap-3 border-b border-gray-50 pb-2 last:border-0 last:pb-0">
+                        <div className={`w-7 h-7 rounded-full ${isAlarm ? 'bg-red-50 text-red-500' : 'bg-blue-50 text-blue-500'} flex items-center justify-center shrink-0 mt-0.5`}>
+                          {isAlarm ? <ShieldAlert size={12} /> : <Zap size={12} />}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                            <p className="text-xs font-medium text-gray-800 truncate">
+                              {ev.type === 'deviceOnline' ? 'Señal recuperada' : 
+                               ev.type === 'deviceOffline' ? 'Señal perdida' :
+                               ev.type === 'deviceMoving' ? 'Comenzó a moverse' :
+                               ev.type === 'deviceStopped' ? 'Motor apagado/detenido' : ev.type}
+                            </p>
+                            <p className="text-[10px] text-gray-500">{device?.name || 'ID: ' + ev.deviceId} • {new Date(ev.eventTime || Date.now()).toLocaleTimeString()}</p>
+                        </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+        </div>
+
+        {/* Botón de Campanita (Solo móvil) para abrir el panel */}
+        <button
+          onClick={() => setShowMobileEvents(!showMobileEvents)}
+          className="absolute bottom-6 right-2 sm:hidden w-12 h-12 bg-white rounded-full shadow-xl border border-gray-100 flex items-center justify-center text-gray-700 hover:text-blue-600 z-10"
+        >
+          <div className="relative">
+             <Bell size={22} className={showMobileEvents ? 'text-blue-600' : ''} />
+             {realtimeEvents.length > 0 && !showMobileEvents && (
+               <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full border-2 border-white animate-pulse"></span>
+             )}
+          </div>
+        </button>
+      </div>
 
       {commandDevice && (
         <CommandModal
           device={commandDevice}
           onClose={() => setCommandDevice(null)}
         />
+      )}
+
+      {/* Toast de Eventos Recientes */}
+      {toastEvent && (
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50 animate-fade-in pointer-events-none">
+          <div className="bg-gray-900/90 backdrop-blur-sm text-white px-4 py-3 rounded-2xl shadow-xl border border-gray-700/50 flex flex-col items-center min-w-[200px]">
+            <span className="text-xs font-bold text-gray-400 mb-0.5">{toastEvent.title}</span>
+            <span className="text-sm font-semibold">{toastEvent.message}</span>
+          </div>
+        </div>
       )}
     </div>
   );

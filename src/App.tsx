@@ -1,5 +1,6 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { Toaster } from 'react-hot-toast';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import Layout from './components/Layout';
 import Login from './pages/Login';
@@ -37,26 +38,43 @@ function AppRoutes() {
   }
 
   return (
-    <Routes>
-      <Route path="/login" element={<Login />} />
-      <Route path="/" element={<PrivateRoute><Layout /></PrivateRoute>}>
-        <Route index element={<Navigate to="/map" replace />} />
-        <Route path="dashboard" element={<Dashboard />} />
-        <Route path="map" element={<MapPage />} />
-        <Route path="devices" element={<DevicesPage />} />
-        <Route path="connections" element={<DeviceConnectionsPage />} />
-        <Route path="reports" element={<ReportsPage />} />
-        <Route path="replay" element={<ReplayPage />} />
-        <Route path="notifications" element={<NotificationsPage />} />
-        <Route path="groups" element={<GroupsPage />} />
-        <Route path="drivers" element={<DriversPage />} />
-        <Route path="geofences" element={<GeofencesPage />} />
-        <Route path="maintenance" element={<MaintenancePage />} />
-        <Route path="users" element={<UsersPage />} />
-        <Route path="settings" element={<SettingsPage />} />
-      </Route>
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
+    <>
+      <Toaster 
+        position="bottom-center"
+        toastOptions={{
+          style: {
+            background: '#333',
+            color: '#fff',
+            borderRadius: '16px',
+            fontSize: '14px',
+            fontWeight: '500',
+            marginBottom: '80px', // Above bottom nav
+          },
+          success: { iconTheme: { primary: '#22c55e', secondary: '#fff' } },
+          error: { iconTheme: { primary: '#ef4444', secondary: '#fff' } },
+        }}
+      />
+      <Routes>
+        <Route path="/login" element={<Login />} />
+        <Route path="/" element={<PrivateRoute><Layout /></PrivateRoute>}>
+          <Route index element={<Navigate to="/map" replace />} />
+          <Route path="dashboard" element={<Dashboard />} />
+          <Route path="map" element={<MapPage />} />
+          <Route path="devices" element={<DevicesPage />} />
+          <Route path="connections" element={<DeviceConnectionsPage />} />
+          <Route path="reports" element={<ReportsPage />} />
+          <Route path="replay" element={<ReplayPage />} />
+          <Route path="notifications" element={<NotificationsPage />} />
+          <Route path="groups" element={<GroupsPage />} />
+          <Route path="drivers" element={<DriversPage />} />
+          <Route path="geofences" element={<GeofencesPage />} />
+          <Route path="maintenance" element={<MaintenancePage />} />
+          <Route path="users" element={<UsersPage />} />
+          <Route path="settings" element={<SettingsPage />} />
+        </Route>
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </>
   );
 }
 

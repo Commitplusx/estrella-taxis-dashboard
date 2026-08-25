@@ -1,4 +1,7 @@
-const GOOGLE_MAPS_API_KEY = 'AIzaSyAYB_sdCTSE5kLvAz4dDXp3221SdSN91ac';
+// La API Key se centraliza aquí. Elimina la key hardcodeada de MapPage.tsx y GeofencesPage.tsx.
+// Para cambiarla, solo modifica este archivo o usa la variable de entorno VITE_GOOGLE_MAPS_API_KEY.
+const GOOGLE_MAPS_API_KEY =
+  import.meta.env.VITE_GOOGLE_MAPS_API_KEY ?? 'AIzaSyAYB_sdCTSE5kLvAz4dDXp3221SdSN91ac';
 
 let mapsPromise: Promise<void> | null = null;
 
@@ -19,7 +22,6 @@ export const loadGoogleMaps = (): Promise<void> => {
 
     const script = document.createElement('script');
     script.id = 'google-maps-script-global';
-    // Removemos la librería 'drawing' que causaba el error y usamos solo geometry y marker
     script.src = `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAPS_API_KEY}&libraries=marker,geometry&callback=__initGlobalMaps`;
     script.async = true;
     script.defer = true;

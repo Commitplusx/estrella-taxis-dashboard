@@ -1,75 +1,136 @@
 import React, { useState } from 'react';
-import { NavLink, Outlet, useLocation } from 'react-router-dom';
-import { Menu, Map as MapIcon, Car, BarChart3 } from 'lucide-react';
+import { Outlet, useLocation, NavLink } from 'react-router-dom';
+import { Menu, Map as MapIcon, BarChart3, Car, Settings } from 'lucide-react';
 import Sidebar from './Sidebar';
 
 export default function Layout() {
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  // El mapa necesita llenar todo el espacio sin padding
-  const isMapPage = location.pathname === '/map' || location.pathname === '/';
-  
   const [mounted, setMounted] = useState(false);
   React.useEffect(() => setMounted(true), []);
 
+  const getPageTitle = (path: string) => {
+    if (path === '/map' || path === '/') return 'Mapa en Vivo';
+    if (path === '/dashboard') return 'Dashboard';
+    if (path === '/devices') return 'Mis Taxis';
+    if (path === '/connections') return 'Conexiones';
+    if (path === '/reports') return 'Reportes';
+    if (path === '/replay') return 'Repetición de Ruta';
+    if (path === '/geofences') return 'Geocercas';
+    if (path === '/maintenance') return 'Mantenimientos';
+    if (path === '/notifications') return 'Notificaciones';
+    if (path === '/groups') return 'Grupos';
+    if (path === '/drivers') return 'Conductores';
+    if (path === '/users') return 'Usuarios';
+    if (path === '/settings') return 'Configuración';
+    return 'Panel de Control';
+  };
+
+  const title = getPageTitle(location.pathname);
+
   return (
-    <div className={`flex h-screen bg-slate-50 overflow-hidden transition-opacity duration-700 ${mounted ? 'opacity-100' : 'opacity-0'}`}>
+    <div className={`flex h-[100dvh] bg-slate-50 overflow-hidden transition-opacity duration-700 ${mounted ? 'opacity-100' : 'opacity-0'}`}>
 
       {/* Overlay oscuro en móvil cuando sidebar está abierto */}
-      {sidebarOpen && (
-        <div
-          className="fixed inset-0 bg-black/40 z-40 md:hidden"
-          onClick={() => setSidebarOpen(false)}
-        />
-      )}
+      <div
+        className={`fixed inset-0 bg-gray-900/40 z-30 md:hidden transition-opacity duration-500 ease-out ${
+          sidebarOpen ? 'opacity-100 backdrop-blur-sm' : 'opacity-0 pointer-events-none'
+        }`}
+        onClick={() => setSidebarOpen(false)}
+      />
 
       {/* Sidebar — drawer en móvil, fijo en desktop */}
       <div className={`
-        fixed inset-y-0 left-0 z-50 transition-transform duration-300 ease-in-out
+        fixed inset-y-0 left-0 z-40 transition-all duration-500 ease-[cubic-bezier(0.2,0.8,0.2,1)]
         md:relative md:translate-x-0 md:z-auto
-        ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
+        ${sidebarOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full shadow-none'}
       `}>
         <Sidebar onClose={() => setSidebarOpen(false)} />
       </div>
 
       {/* Contenido principal */}
-      <main className="flex-1 overflow-y-auto min-w-0 flex flex-col relative">
-        {/* Topbar solo en móvil (Centrado, Glassmorphism) */}
-        <div className="sticky top-0 z-10 flex items-center justify-center px-4 py-3 bg-white/80 backdrop-blur-md border-b border-gray-100 shadow-sm md:hidden flex-shrink-0">
-          <span className="text-[15px] font-extrabold text-blue-600 tracking-tight">Estrella Taxis</span>
-        </div>
+      <main className="flex-1 flex flex-col bg-[#F8FAFC] relative overflow-hidden w-full">
+        
+        {/* HEADER TOP GLOBAl */}
+        <header className="h-16 flex-none bg-white border-b border-gray-100 hidden md:flex items-center justify-between px-4 sm:px-8 shrink-0 relative z-10 shadow-sm transition-all duration-300">
+            <div className="flex items-center gap-4">
+                <button 
+                  className="md:hidden w-10 h-10 rounded-xl bg-gray-50 text-gray-600 hover:bg-blue-50 hover:text-primary transition flex items-center justify-center" 
+                  onClick={() => setSidebarOpen(!sidebarOpen)}
+                >
+                    <Menu size={20} />
+                </button>
+                <h2 key={title} className="text-lg sm:text-xl font-bold text-gray-800 slide-in-right truncate">
+                  {title}
+                </h2>
+            </div>
+            <div className="flex items-center gap-2 sm:gap-4">
+                {/* 
+                <button className="w-10 h-10 rounded-full bg-gray-50 text-gray-600 hover:bg-blue-50 hover:text-primary transition-colors relative">
+                    <Bell size={20} />
+                    <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full"></span>
+                </button>
+                <button className="btn-primary py-1.5 px-3 text-sm shadow-none hidden sm:flex">
+                    <Terminal size={18} /> Comando Rápido
+                </button>
+                <button className="btn-primary w-10 h-10 p-0 shadow-none flex sm:hidden justify-center items-center">
+                    <Terminal size={18} />
+                </button>
+                */}
+            </div>
+        </header>
 
-        <div
-          key={location.pathname}
-          className={`flex-1 flex flex-col page-transition ${isMapPage ? '' : 'p-4 md:p-6 pb-28 md:pb-6'}`}
-        >
+        {/* VISTAS DINÁMICAS */}
+        <div key={location.pathname} className="flex-1 overflow-hidden relative page-transition">
           <Outlet />
         </div>
+        
+        {/* BOTTOM NAVIGATION (Mobile Solo) */}
+        <div className="md:hidden absolute bottom-0 left-0 w-full px-2 pb-6 pt-2 bg-transparent z-50 flex justify-center pointer-events-none">
+          <nav className="h-[68px] bg-white rounded-full inline-flex justify-center items-center px-4 gap-2 shadow-[0_12px_40px_rgba(0,0,0,0.12)] border border-gray-100 backdrop-blur-lg pointer-events-auto">
+            
+            <NavLink to="/map" className={({isActive}) => `relative flex flex-col items-center justify-center w-[64px] h-full gap-1 group`}>
+              {({isActive}) => (
+                <>
+                  <div className={`p-2 rounded-xl transition-all duration-300 ${isActive ? 'bg-gray-900 text-white shadow-md shadow-gray-900/30 -translate-y-1' : 'text-gray-800 group-hover:bg-gray-100'}`}>
+                    <MapIcon size={20} />
+                  </div>
+                  <span className={`text-[10px] transition-all duration-300 ${isActive ? 'font-bold text-gray-900 translate-y-0' : 'font-medium text-gray-600'}`}>Mapa</span>
+                </>
+              )}
+            </NavLink>
 
-        {/* ─── Bottom Navigation (Móvil) ─── */}
-        <div className="md:hidden fixed bottom-5 left-4 right-4 bg-white/90 backdrop-blur-lg border border-slate-200/50 shadow-2xl rounded-2xl z-30 flex items-center justify-around py-2 px-2">
-          
-          <NavLink to="/map" className={({isActive}) => `flex flex-col items-center justify-center w-16 h-12 rounded-xl transition-all ${isActive ? 'text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}>
-            <MapIcon size={22} className={location.pathname === '/map' ? 'fill-blue-50 text-blue-600' : ''} />
-            <span className="text-[10px] font-bold mt-1">Mapa</span>
-          </NavLink>
-          
-          <NavLink to="/devices" className={({isActive}) => `flex flex-col items-center justify-center w-16 h-12 rounded-xl transition-all ${isActive ? 'text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}>
-            <Car size={22} className={location.pathname === '/devices' ? 'fill-blue-50 text-blue-600' : ''} />
-            <span className="text-[10px] font-bold mt-1">Taxis</span>
-          </NavLink>
-          
-          <NavLink to="/dashboard" className={({isActive}) => `flex flex-col items-center justify-center w-16 h-12 rounded-xl transition-all ${isActive ? 'text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}>
-            <BarChart3 size={22} className={location.pathname === '/dashboard' ? 'fill-blue-50 text-blue-600' : ''} />
-            <span className="text-[10px] font-bold mt-1">Panel</span>
-          </NavLink>
-          
-          <button onClick={() => setSidebarOpen(true)} className="flex flex-col items-center justify-center w-16 h-12 rounded-xl transition-all text-slate-400 hover:text-slate-600">
-            <Menu size={22} />
-            <span className="text-[10px] font-bold mt-1">Menú</span>
-          </button>
-          
+            <NavLink to="/dashboard" className={({isActive}) => `relative flex flex-col items-center justify-center w-[64px] h-full gap-1 group`}>
+              {({isActive}) => (
+                <>
+                  <div className={`p-2 rounded-xl transition-all duration-300 ${isActive ? 'bg-gray-900 text-white shadow-md shadow-gray-900/30 -translate-y-1' : 'text-gray-800 group-hover:bg-gray-100'}`}>
+                    <BarChart3 size={20} />
+                  </div>
+                  <span className={`text-[10px] transition-all duration-300 ${isActive ? 'font-bold text-gray-900 translate-y-0' : 'font-medium text-gray-600'}`}>Panel</span>
+                </>
+              )}
+            </NavLink>
+
+            <NavLink to="/devices" className={({isActive}) => `relative flex flex-col items-center justify-center w-[64px] h-full gap-1 group`}>
+              {({isActive}) => (
+                <>
+                  <div className={`p-2 rounded-xl transition-all duration-300 ${isActive ? 'bg-gray-900 text-white shadow-md shadow-gray-900/30 -translate-y-1' : 'text-gray-800 group-hover:bg-gray-100'}`}>
+                    <Car size={20} />
+                  </div>
+                  <span className={`text-[10px] transition-all duration-300 ${isActive ? 'font-bold text-gray-900 translate-y-0' : 'font-medium text-gray-600'}`}>Taxis</span>
+                </>
+              )}
+            </NavLink>
+
+            <button onClick={() => setSidebarOpen(true)} className="relative flex flex-col items-center justify-center w-[64px] h-full gap-1 group">
+              <div className="p-2 rounded-xl transition-all duration-300 text-gray-800 group-hover:bg-gray-100">
+                <Settings size={20} />
+              </div>
+              <span className="text-[10px] font-medium text-gray-600 transition-all duration-300">Ajustes</span>
+            </button>
+
+          </nav>
         </div>
       </main>
     </div>

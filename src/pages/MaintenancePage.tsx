@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import type { TraccarMaintenance } from '../lib/traccarApi';
 import { Wrench, Plus, X, Save, Trash2, Edit2, AlertCircle } from 'lucide-react';
+import toast from 'react-hot-toast';
 
 // Tipos requeridos (Agregados aquí por simplicidad si no están en traccarApi)
 interface TraccarMaintenanceExtended extends Omit<TraccarMaintenance, 'attributes'> {
@@ -38,7 +39,7 @@ export default function MaintenancePage() {
 
   const handleSave = async () => {
     if (!editingItem?.name || !editingItem?.type || !editingItem?.period) {
-      return alert('Llenar los campos requeridos (Nombre, Tipo, Período)');
+      return toast.error('Llenar los campos requeridos (Nombre, Tipo, Período)');
     }
 
     setSaving(true);
@@ -63,7 +64,7 @@ export default function MaintenancePage() {
       await load();
       setEditingItem(null);
     } catch (e: any) {
-      alert(`Error al guardar: ${e.message}`);
+      toast.error(`Error al guardar: ${e.message}`);
     } finally {
       setSaving(false);
     }
@@ -76,7 +77,7 @@ export default function MaintenancePage() {
       if (!res.ok) throw new Error(await res.text());
       await load();
     } catch (e: any) {
-      alert(`Error al eliminar: ${e.message}`);
+      toast.error(`Error al eliminar: ${e.message}`);
     }
   };
 

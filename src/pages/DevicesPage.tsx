@@ -3,6 +3,7 @@ import { api, BASE_URL, type TraccarDevice } from '../lib/traccarApi';
 import { X, Save, Car, Phone, User, Hash, Layers, Tag, ShieldAlert, Power, Radio, Zap, Edit2 } from 'lucide-react';
 import { CommandModal } from '../components/CommandModal';
 import { ShareModal } from '../components/ShareModal';
+import toast from 'react-hot-toast';
 import { useAuth } from '../context/AuthContext';
 
 // Categorías idénticas a las de Traccar
@@ -194,7 +195,7 @@ function AccumulatorsModal({ device, onClose, onSaved }: { device: TraccarDevice
       onSaved();
       onClose();
     } catch (err) {
-      alert('Error al actualizar acumuladores');
+      toast.error('Error al actualizar acumuladores');
     } finally {
       setSaving(false);
     }
@@ -258,21 +259,31 @@ export default function DevicesPage() {
       setGroups(g);
       setLoading(false);
 
-      // Cargar conductor asignado a cada dispositivo en paralelo
-      const entries = await Promise.all(
-        d.map(async (device) => {
-          try {
-            const res = await fetch(`${BASE_URL}/drivers?deviceId=${device.id}`, { credentials: 'include' });
-            if (!res.ok) return [device.id, ''] as [number, string];
-            const drivers = await res.json();
-            const name = drivers?.[0]?.name ?? '';
-            return [device.id, name] as [number, string];
-          } catch {
-            return [device.id, ''] as [number, string];
-          }
-        })
-      );
-      setDriverMap(Object.fromEntries(entries));
+      // Para no saturar al servidor haciendo 50 peticiones al mismo tiempo,
+      // las agrupamos en bloques de 5.
+      const entries: [number, string][] = [];
+      const fetchInChunks = async () => {
+        const chunkSize = 5;
+        for (let i = 0; i < d.length; i += chunkSize) {
+          const chunk = d.slice(i, i + chunkSize);
+          await Promise.all(
+            chunk.map(async (device) => {
+              try {
+                const res = await fetch(`${BASE_URL}/drivers?deviceId=${device.id}`, { credentials: 'include' });
+                if (res.ok) {
+                  const drivers = await res.json();
+                  if (drivers?.[0]?.name) entries.push([device.id, drivers[0].name]);
+                }
+              } catch (e) {
+                // Silencioso, simplemente no mostramos el conductor
+              }
+            })
+          );
+        }
+        setDriverMap(Object.fromEntries(entries));
+      };
+      
+      fetchInChunks();
     });
   }, []);
 
@@ -295,35 +306,49 @@ export default function DevicesPage() {
     if (groupedDevices[gid]) {
       groupedDevices[gid].devices.push(d);
     } else {
-      groupedDevices[0].devices.push(d);
+groupedDevices[0].devices.push(d);
     }
   });
 
   const statusColor = (s?: string) => s === 'online' ? 'bg-green-500' : s === 'unknown' ? 'bg-yellow-400' : 'bg-gray-300';
   const statusLabel = (s?: string) => s === 'online' ? 'En línea' : s === 'unknown' ? 'Sin datos' : 'Fuera de línea';
+  const [searchTerm, setSearchTerm] = useState('');
 
   const handleSaved = (updated: TraccarDevice) => {
     setDevices(prev => prev.map(d => d.id === updated.id ? updated : d));
   };
 
   return (
-    <div className="flex flex-col gap-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+    <div className="h-full overflow-y-auto p-4 sm:p-6 fade-in pb-32 md:pb-10">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div>
-          <h1 className="text-lg font-bold text-gray-900">Mis Taxis</h1>
-          <p className="text-sm text-gray-500 mt-0.5">{devices.length} unidades registradas</p>
+          <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Mis Taxis</h1>
+          <p className="text-sm text-gray-500 mt-1">Gestiona la flota de vehículos y sus comandos.</p>
         </div>
-        <div className="relative">
-          <input
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            placeholder="Buscar taxi..."
-            className="border border-gray-200 rounded-xl px-4 py-2 text-sm pl-9 focus:outline-none focus:ring-2 focus:ring-blue-500 w-full sm:w-56 bg-gray-50"
-          />
-          <svg className="absolute left-3 top-2.5 text-gray-400" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" />
-          </svg>
+        
+        <div className="flex flex-col sm:flex-row gap-3">
+          {/* Barra de búsqueda */}
+          <div className="relative">
+            <input 
+              type="text" 
+              placeholder="Buscar vehículo..." 
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              className="pl-10 pr-4 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary w-full sm:w-64 bg-white shadow-sm"
+            />
+            <Car size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+          </div>
+
+          {!isReadonly && (
+            <button
+              onClick={() => {
+                setEditingDevice({ name: '', uniqueId: '', phone: '', model: '', category: 'car', groupId: 0 });
+              }}
+              className="btn-primary"
+            >
+              <Car size={16} /> Registrar Taxi
+            </button>
+          )}
         </div>
       </div>
 
@@ -415,12 +440,12 @@ export default function DevicesPage() {
                       </td>
                       <td className="px-5 py-3">
                         <div className="flex gap-1 justify-end">
-                          <button onClick={() => setShareDevice(device)}
-                            className="p-1.5 hover:bg-orange-50 hover:text-orange-600 text-gray-400 rounded-lg transition" title="Compartir enlace">
-                            <Tag size={14} />
-                          </button>
                           {!isReadonly && (
                             <>
+                              <button onClick={() => setShareDevice(device)}
+                                className="p-1.5 hover:bg-orange-50 hover:text-orange-600 text-gray-400 rounded-lg transition" title="Compartir enlace">
+                                <Tag size={14} />
+                              </button>
                               <button onClick={() => setAccumulatorsDevice(device)}
                                 className="p-1.5 hover:bg-emerald-50 hover:text-emerald-600 text-gray-400 rounded-lg transition" title="Acumuladores (Odómetro/Horómetro)">
                                 <Radio size={14} />
@@ -463,12 +488,12 @@ export default function DevicesPage() {
                       </div>
                     </div>
                     <div className="flex gap-1 flex-shrink-0">
-                      <button onClick={() => setShareDevice(device)}
-                        className="p-2 hover:bg-orange-50 hover:text-orange-600 text-gray-400 rounded-xl transition" title="Compartir enlace">
-                        <Tag size={15} />
-                      </button>
                       {!isReadonly && (
                         <>
+                          <button onClick={() => setShareDevice(device)}
+                            className="p-2 hover:bg-orange-50 hover:text-orange-600 text-gray-400 rounded-xl transition" title="Compartir enlace">
+                            <Tag size={15} />
+                          </button>
                           <button onClick={() => setAccumulatorsDevice(device)}
                             className="p-2 hover:bg-emerald-50 hover:text-emerald-600 text-gray-400 rounded-xl transition" title="Acumuladores (Odómetro/Horómetro)">
                             <Radio size={15} />
@@ -513,8 +538,7 @@ export default function DevicesPage() {
           device={accumulatorsDevice}
           onClose={() => setAccumulatorsDevice(null)}
           onSaved={() => {
-            // Optional: Reload devices or just show success msg
-            alert('Acumuladores actualizados con éxito');
+            toast.success('Acumuladores actualizados con éxito');
           }}
         />
       )}

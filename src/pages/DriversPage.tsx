@@ -297,7 +297,7 @@ export default function DriversPage() {
   );
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-6 h-full overflow-y-auto p-4 sm:p-6 pb-32 md:pb-10">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h1 className="text-lg font-bold text-gray-900">Conductores</h1>

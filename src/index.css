@@ -1,13 +1,70 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-html, body, #root {
-  height: 100%;
-  width: 100%;
-  margin: 0;
-  padding: 0;
-  background-color: #f8fafc; /* Fondo blanco/gris muy claro */
+@layer base {
+  html, body, #root {
+    height: 100%;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    background-color: #F8FAFC;
+    font-family: 'Inter', sans-serif;
+  }
+}
+
+@layer utilities {
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply bg-primary text-white px-4 py-2 rounded-xl font-medium transition-all duration-300 shadow-lg shadow-blue-500/30 hover:bg-blue-800 hover:shadow-blue-600/40 hover:-translate-y-0.5 active:translate-y-0 active:scale-95 flex items-center justify-center gap-2;
+  }
+  
+  .btn-danger {
+    @apply bg-red-500 text-white px-4 py-2 rounded-xl font-medium transition-all duration-300 shadow-lg shadow-red-500/30 hover:bg-red-600 hover:-translate-y-0.5 active:translate-y-0 active:scale-95 flex items-center gap-2;
+  }
+  
+  .sidebar-item {
+    @apply flex items-center gap-3 px-4 py-3 text-gray-600 rounded-xl transition-all duration-300 cursor-pointer relative overflow-hidden;
+  }
+  
+  .sidebar-item:hover {
+    @apply text-primary bg-blue-50/80;
+  }
+  
+  .sidebar-item.active {
+    @apply bg-primary text-white shadow-md shadow-blue-500/30 font-medium;
+  }
+  
+  .view-panel {
+    @apply absolute inset-0 p-4 sm:p-6 flex flex-col;
+  }
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+::-webkit-scrollbar-thumb {
+    background: #BFDBFE;
+    border-radius: 10px;
+}
+::-webkit-scrollbar-thumb:hover {
+    background: #60A5FA;
 }
 
 @keyframes slideUpFade {

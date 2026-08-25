@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { api, type TraccarUser, type TraccarDevice } from '../lib/traccarApi';
 import { supabase } from '../lib/supabase';
 import { Users, Plus, Trash2, Link, X, Check, Shield, ChevronRight, ChevronDown, Eye, EyeOff, Layers, Search, Filter, Camera } from 'lucide-react';
+import toast from 'react-hot-toast';
 
 // ─── Modal: Crear Usuario ──────────────────────────────────────────────────────
 function CreateUserModal({ onClose, onCreated }: { onClose: () => void; onCreated: (u: TraccarUser) => void }) {
@@ -147,7 +148,7 @@ function AssignDevicesModal({ user, onClose }: { user: TraccarUser; onClose: () 
     } catch (e: unknown) {
       console.error(e);
       const msg = e instanceof Error ? e.message : 'Error desconocido';
-      alert('Error: ' + msg);
+      toast.error('Error: ' + msg);
     } finally {
       setSaving(null);
     }
@@ -166,7 +167,7 @@ function AssignDevicesModal({ user, onClose }: { user: TraccarUser; onClose: () 
     } catch (e: unknown) {
       console.error(e);
       const msg = e instanceof Error ? e.message : 'Error desconocido';
-      alert('Error: ' + msg);
+      toast.error('Error: ' + msg);
     } finally {
       setSaving(null);
     }
@@ -360,13 +361,13 @@ export default function UsersPage() {
     } catch (error: unknown) {
       console.error(error);
       const msg = error instanceof Error ? error.message : String(error);
-      alert('Error detallado al subir imagen: ' + msg);
+      toast.error('Error detallado al subir imagen: ' + msg);
     }
   };
 
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-5 h-full overflow-y-auto p-4 sm:p-6 pb-32 md:pb-10">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Usuarios</h1>

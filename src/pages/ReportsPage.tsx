@@ -25,7 +25,7 @@ interface Stop {
 }
 interface ReportEvent {
   id: number; deviceId: number; deviceName?: string;
-  type: string; serverTime: string; positionId?: number;
+  type: string; serverTime?: string; eventTime?: string; positionId?: number;
   geofenceId?: number; maintenanceId?: number;
 }
 interface Summary {
@@ -44,7 +44,16 @@ type TabType = 'trips' | 'stops' | 'events' | 'summary' | 'route';
 // â”€â”€â”€ Date Presets â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function getPreset(preset: string): { from: string; to: string } {
   const now = new Date();
-  const pad = (d: Date) => d.toISOString().slice(0, 16);
+  // Formatea como "YYYY-MM-DDTHH:mm" en hora LOCAL (no UTC) para que el input datetime-local
+  // lo muestre correctamente y el servidor reciba las horas en el timezone del usuario.
+  const pad = (d: Date) => {
+    const yyyy = d.getFullYear();
+    const MM = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    const hh = String(d.getHours()).padStart(2, '0');
+    const mm = String(d.getMinutes()).padStart(2, '0');
+    return `${yyyy}-${MM}-${dd}T${hh}:${mm}`;
+  };
   switch (preset) {
     case 'today': {
       const s = new Date(now); s.setHours(0, 0, 0, 0);
@@ -117,6 +126,8 @@ function FiltersBar({
     .map((id: number) => devices.find((d: TraccarDevice) => d.id === id)?.name)
     .filter(Boolean);
 
+  const [activePreset, setActivePreset] = useState('today');
+
   return (
     <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 flex flex-col gap-4">
       {/* Presets rápidos */}
@@ -127,24 +138,38 @@ function FiltersBar({
           { key: 'yesterday', label: 'Ayer' },
           { key: 'week', label: '7 días' },
           { key: 'month', label: 'Este mes' },
+          { key: 'custom', label: 'Personalizado' },
         ].map(p => (
-          <button key={p.key} onClick={() => { const r = getPreset(p.key); setFrom(r.from); setTo(r.to); }}
-            className="px-3 py-1 text-xs font-bold rounded-lg bg-gray-50 hover:bg-blue-50 hover:text-blue-600 border border-gray-200 transition">
+          <button key={p.key} 
+            onClick={() => {
+              setActivePreset(p.key);
+              if (p.key !== 'custom') {
+                const r = getPreset(p.key);
+                setFrom(r.from);
+                setTo(r.to);
+              }
+            }}
+            className={`px-3 py-1.5 text-xs font-bold rounded-lg transition border ${
+              activePreset === p.key 
+                ? 'bg-blue-600 text-white border-blue-600 shadow-sm' 
+                : 'bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100'
+            }`}>
             {p.label}
           </button>
         ))}
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 items-end">
+      <div className={`grid grid-cols-1 ${activePreset === 'custom' ? 'sm:grid-cols-2 lg:grid-cols-4' : 'lg:grid-cols-2'} gap-3 items-end`}>
         {/* Selector de dispositivos */}
         <div className="relative lg:col-span-2">
           <label className="block text-xs font-bold text-gray-500 mb-1">Taxis</label>
           <button onClick={() => setShowDevicePicker(!showDevicePicker)}
             className="w-full flex items-center justify-between gap-2 border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-gray-50 hover:bg-white hover:border-blue-300 transition text-left">
-            <span className="truncate text-gray-700">
+            <span className="truncate text-gray-700 font-medium">
               {selectedDevices.length === 0 ? 'Ninguno seleccionado' :
                selectedDevices.length === devices.length ? 'Todos los taxis' :
-               `${selectedDevices.length} taxi${selectedDevices.length > 1 ? 's' : ''} seleccionado${selectedDevices.length > 1 ? 's' : ''}`}
+               selectedDevices.length <= 2 ? selectedNames.join(', ') :
+               `${selectedDevices.length} taxis seleccionados`}
             </span>
             <ChevronDown size={14} className="text-gray-400 shrink-0" />
           </button>
@@ -184,22 +209,26 @@ function FiltersBar({
           )}
         </div>
 
-        {/* Fecha desde */}
-        <div>
-          <label className="block text-xs font-bold text-gray-500 mb-1">Desde</label>
-          <input type="datetime-local" value={from} onChange={e => setFrom(e.target.value)}
-            className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50" />
-        </div>
+        {activePreset === 'custom' && (
+          <>
+            {/* Fecha desde */}
+            <div>
+              <label className="block text-xs font-bold text-gray-500 mb-1">Desde</label>
+              <input type="datetime-local" value={from} onChange={e => setFrom(e.target.value)}
+                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50" />
+            </div>
 
-        {/* Fecha hasta */}
-        <div>
-          <label className="block text-xs font-bold text-gray-500 mb-1">Hasta</label>
-          <input type="datetime-local" value={to} onChange={e => setTo(e.target.value)}
-            className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50" />
-        </div>
+            {/* Fecha hasta */}
+            <div>
+              <label className="block text-xs font-bold text-gray-500 mb-1">Hasta</label>
+              <input type="datetime-local" value={to} onChange={e => setTo(e.target.value)}
+                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50" />
+            </div>
+          </>
+        )}
       </div>
 
-      <div className="flex justify-end">
+      <div className="flex justify-end pt-1">
         <button onClick={onSearch} disabled={loading || selectedDevices.length === 0}
           className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-bold transition shadow-sm disabled:opacity-50">
           {loading ? <RefreshCw size={14} className="animate-spin" /> : <Search size={14} />}
@@ -218,6 +247,12 @@ export default function ReportsPage() {
   const [selectedGroups, setSelectedGroups] = useState<number[]>([]);
   const [activeTab, setActiveTab] = useState<TabType>('trips');
   const [loading, setLoading] = useState(false);
+  const [toastMessage, setToastMessage] = useState<{text: string, type: 'success'|'error'} | null>(null);
+
+  const showToast = (text: string, type: 'success'|'error' = 'success') => {
+    setToastMessage({text, type});
+    setTimeout(() => setToastMessage(null), 3000);
+  };
 
   const [aiReport, setAiReport] = useState<string | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
@@ -293,16 +328,28 @@ export default function ReportsPage() {
   const buildParams = (deviceId: number) => {
     const p = new URLSearchParams();
     p.append('deviceId', String(deviceId));
-    p.append('from', new Date(from).toISOString());
-    p.append('to', new Date(to).toISOString());
+    // El valor del input datetime-local ("YYYY-MM-DDTHH:mm") es hora local sin timezone.
+    // new Date() lo interpreta como UTC en algunos navegadores, causando un desfase de horas.
+    // La solución correcta es agregarle el offset del timezone del cliente antes de convertir a ISO.
+    const toLocalIso = (localStr: string) => {
+      const d = new Date(localStr);
+      const offsetMs = d.getTimezoneOffset() * 60_000;
+      return new Date(d.getTime() - offsetMs).toISOString();
+    };
+    p.append('from', toLocalIso(from));
+    p.append('to', toLocalIso(to));
     return p.toString();
   };
 
   const deviceNameMap = Object.fromEntries(devices.map(d => [d.id, d.name]));
 
   const handleSearch = async () => {
-    if (selectedDevices.length === 0) return;
+    if (selectedDevices.length === 0) {
+      showToast('Selecciona al menos un taxi', 'error');
+      return;
+    }
     setLoading(true);
+    let successCount = 0;
     try {
       if (activeTab === 'trips') {
         const results: Trip[] = [];
@@ -311,6 +358,7 @@ export default function ReportsPage() {
           if (r.ok) {
             const data: Trip[] = await r.json();
             results.push(...data.map(t => ({ ...t, deviceName: deviceNameMap[t.deviceId] || String(t.deviceId) })));
+            successCount++;
           }
         }
         setTrips(results);
@@ -321,6 +369,7 @@ export default function ReportsPage() {
           if (r.ok) {
             const data: Stop[] = await r.json();
             results.push(...data.map(s => ({ ...s, deviceName: deviceNameMap[s.deviceId] || String(s.deviceId) })));
+            successCount++;
           }
         }
         setStops(results);
@@ -331,9 +380,10 @@ export default function ReportsPage() {
           if (r.ok) {
             const data: ReportEvent[] = await r.json();
             results.push(...data.map(e => ({ ...e, deviceName: deviceNameMap[e.deviceId] || String(e.deviceId) })));
+            successCount++;
           }
         }
-        setEvents(results.sort((a, b) => new Date(b.serverTime).getTime() - new Date(a.serverTime).getTime()));
+        setEvents(results.sort((a, b) => new Date(b.eventTime || b.serverTime || '').getTime() - new Date(a.eventTime || a.serverTime || '').getTime()));
       } else if (activeTab === 'summary') {
         const results: Summary[] = [];
         for (const devId of selectedDevices) {
@@ -351,9 +401,19 @@ export default function ReportsPage() {
 const data: RoutePosition[] = await r.json();
           setRoute(data);
           if (activeTab === 'route' && googleMapRef.current) drawRoute(data);
+          successCount++;
         }
       }
-      } finally {
+
+      if (successCount > 0) {
+        showToast('Reporte generado exitosamente', 'success');
+      } else {
+        showToast('No se encontraron datos para este período', 'error');
+      }
+    } catch (error) {
+      console.error(error);
+      showToast('Error de conexión al generar reporte', 'error');
+    } finally {
       setLoading(false);
     }
   };
@@ -391,7 +451,7 @@ const data: RoutePosition[] = await r.json();
   })), 'reporte_paradas', 'Paradas');
 
   const exportEvents = () => exportToExcel(events.map(e => ({
-    'Taxi': e.deviceName, 'Tipo': EVENT_LABELS[e.type]?.label || e.type, 'Hora': fmtTime(e.serverTime),
+    'Taxi': e.deviceName, 'Tipo': EVENT_LABELS[e.type]?.label || e.type, 'Hora': fmtTime(e.eventTime || e.serverTime || ''),
   })), 'reporte_eventos', 'Eventos');
 
   const exportSummary = () => exportToExcel(summary.map(s => ({
@@ -409,7 +469,20 @@ const data: RoutePosition[] = await r.json();
   ];
 
   return (
-    <div className="flex flex-col gap-4 h-full">
+    <div className="h-full overflow-y-auto p-4 sm:p-6 fade-in block space-y-4 pb-32 md:pb-10 relative">
+      {/* Toast Notification */}
+      {toastMessage && (
+        <div className={`fixed bottom-24 md:bottom-auto md:top-6 left-1/2 md:left-auto md:right-6 -translate-x-1/2 md:translate-x-0 z-[60] px-4 py-2.5 rounded-full shadow-lg flex items-center gap-2 animate-in fade-in zoom-in-95 duration-300 border ${
+          toastMessage.type === 'success' 
+            ? 'bg-white border-green-100 text-green-700 shadow-green-900/10' 
+            : 'bg-white border-red-100 text-red-700 shadow-red-900/10'
+        }`}>
+          {toastMessage.type === 'success' 
+             ? <div className="w-6 h-6 rounded-full bg-green-100 flex items-center justify-center shrink-0"><RefreshCw size={12} className="text-green-600 animate-spin-once" /></div> 
+             : <div className="w-6 h-6 rounded-full bg-red-100 flex items-center justify-center shrink-0"><AlertTriangle size={12} className="text-red-600" /></div>}
+          <span className="font-bold text-[13px] tracking-tight whitespace-nowrap">{toastMessage.text}</span>
+        </div>
+      )}
       {/* Header */}
       <div>
         <h1 className="text-lg font-bold text-gray-900">Reportes</h1>
@@ -426,7 +499,7 @@ const data: RoutePosition[] = await r.json();
       />
 
       {/* Tabs */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden flex flex-col flex-1 min-h-0">
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden flex flex-col shrink-0 mb-10">
         <div className="flex border-b border-gray-100 overflow-x-auto shrink-0">
           {TABS.map(tab => (
             <button key={tab.id} onClick={() => setActiveTab(tab.id)}
@@ -442,7 +515,7 @@ const data: RoutePosition[] = await r.json();
 
         {/* â”€â”€ VIAJES â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
         {activeTab === 'trips' && (
-          <div className="flex flex-col flex-1 min-h-0">
+          <div className="flex flex-col">
             {trips.length > 0 && (
               <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between shrink-0 bg-gray-50/50">
                 <span className="text-sm font-bold text-gray-700">{trips.length} viaje{trips.length !== 1 ? 's' : ''} encontrado{trips.length !== 1 ? 's' : ''}</span>
@@ -452,7 +525,7 @@ const data: RoutePosition[] = await r.json();
                 </button>
               </div>
             )}
-            <div className="flex-1 overflow-auto">
+            <div className="w-full">
               {loading && <div className="flex items-center justify-center h-40 text-gray-400 text-sm"><RefreshCw size={20} className="animate-spin mr-2" />Cargando viajes...</div>}
               {!loading && trips.length === 0 && <div className="flex flex-col items-center justify-center h-40 text-gray-400 gap-2"><Navigation size={32} className="opacity-30" /><p className="text-sm">Selecciona un período y genera el reporte</p></div>}
               {!loading && trips.length > 0 && (
@@ -514,7 +587,7 @@ const data: RoutePosition[] = await r.json();
 
         {/* â”€â”€ PARADAS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
         {activeTab === 'stops' && (
-          <div className="flex flex-col flex-1 min-h-0">
+          <div className="flex flex-col">
             {stops.length > 0 && (
               <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between shrink-0 bg-gray-50/50">
                 <span className="text-sm font-bold text-gray-700">{stops.length} parada{stops.length !== 1 ? 's' : ''}</span>
@@ -524,7 +597,7 @@ const data: RoutePosition[] = await r.json();
                 </button>
               </div>
             )}
-            <div className="flex-1 overflow-auto">
+            <div className="w-full">
               {loading && <div className="flex items-center justify-center h-40 text-gray-400 text-sm"><RefreshCw size={20} className="animate-spin mr-2" />Cargando paradas...</div>}
               {!loading && stops.length === 0 && <div className="flex flex-col items-center justify-center h-40 text-gray-400 gap-2"><MapPin size={32} className="opacity-30" /><p className="text-sm">Selecciona un período y genera el reporte</p></div>}
               {!loading && stops.length > 0 && (
@@ -569,7 +642,7 @@ const data: RoutePosition[] = await r.json();
 
         {/* â”€â”€ EVENTOS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
         {activeTab === 'events' && (
-          <div className="flex flex-col flex-1 min-h-0">
+          <div className="flex flex-col">
             {events.length > 0 && (
               <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between shrink-0 bg-gray-50/50">
                 <span className="text-sm font-bold text-gray-700">{events.length} evento{events.length !== 1 ? 's' : ''}</span>
@@ -579,7 +652,7 @@ const data: RoutePosition[] = await r.json();
                 </button>
               </div>
             )}
-            <div className="flex-1 overflow-auto">
+            <div className="w-full">
               {loading && <div className="flex items-center justify-center h-40 text-gray-400 text-sm"><RefreshCw size={20} className="animate-spin mr-2" />Cargando eventos...</div>}
               {!loading && events.length === 0 && <div className="flex flex-col items-center justify-center h-40 text-gray-400 gap-2"><Zap size={32} className="opacity-30" /><p className="text-sm">Selecciona un período y genera el reporte</p></div>}
               {!loading && events.length > 0 && (
@@ -590,7 +663,7 @@ const data: RoutePosition[] = await r.json();
                       <div key={i} className="flex items-center gap-4 px-4 py-3 hover:bg-gray-50 transition">
                         <span className={`text-[11px] font-bold px-2 py-1 rounded-lg whitespace-nowrap ${meta.color}`}>{meta.label}</span>
                         <span className="text-sm font-semibold text-gray-800 flex-1">{ev.deviceName}</span>
-                        <span className="text-xs text-gray-400 whitespace-nowrap">{fmtTime(ev.serverTime)}</span>
+                        <span className="text-xs text-gray-400 whitespace-nowrap">{fmtTime(ev.eventTime || ev.serverTime || '')}</span>
                       </div>
                     );
                   })}
@@ -602,7 +675,7 @@ const data: RoutePosition[] = await r.json();
 
         {/* â”€â”€ RESUMEN â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
         {activeTab === 'summary' && (
-          <div className="flex flex-col flex-1 min-h-0">
+          <div className="flex flex-col">
             {summary.length > 0 && (
               <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between shrink-0 bg-gray-50/50">
                 <span className="text-sm font-bold text-gray-700">{summary.length} unidad{summary.length !== 1 ? 'es' : ''}</span>
@@ -619,7 +692,7 @@ const data: RoutePosition[] = await r.json();
                 </div>
               </div>
             )}
-            <div className="flex-1 overflow-auto p-4">
+            <div className="w-full p-4">
               {aiReport && (
                 <div className="mb-6 bg-gradient-to-br from-indigo-50 to-purple-50 border border-indigo-100 rounded-2xl p-5 shadow-sm relative">
                   <button onClick={() => setAiReport(null)} className="absolute top-3 right-3 text-indigo-300 hover:text-indigo-600 transition">
@@ -676,7 +749,7 @@ const data: RoutePosition[] = await r.json();
 
         {/* â”€â”€ RUTA EN MAPA â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
         {activeTab === 'route' && (
-          <div className="flex flex-col flex-1 min-h-0">
+          <div className="flex flex-col">
             {route.length > 0 && (
               <div className="px-4 py-2 border-b border-gray-100 shrink-0 bg-gray-50/50">
                 <span className="text-xs text-gray-500 font-medium">

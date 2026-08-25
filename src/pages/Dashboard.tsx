@@ -4,23 +4,6 @@ import { useAuth } from '../context/AuthContext';
 import { CarFront, RadioTower, WifiOff, MapPin } from 'lucide-react';
 import { useTraccarSocket } from '../hooks/useTraccarSocket';
 
-function StatCard({ title, value, subtitle, icon, color }: {
-  title: string; value: string | number; subtitle?: string; icon: React.ReactNode; color: string;
-}) {
-  return (
-    <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-[0_2px_10px_-4px_rgba(0,0,0,0.05)] hover:shadow-[0_8px_20px_-6px_rgba(0,0,0,0.1)] transition-all flex items-center gap-5">
-      <div className={`w-14 h-14 rounded-2xl flex items-center justify-center flex-shrink-0 ${color}`}>
-        {icon}
-      </div>
-      <div>
-        <p className="text-sm font-semibold text-gray-500">{title}</p>
-        <p className="text-2xl font-bold text-gray-900 leading-tight mt-0.5">{value}</p>
-        {subtitle && <p className="text-xs text-gray-400 mt-1">{subtitle}</p>}
-      </div>
-    </div>
-  );
-}
-
 export default function Dashboard() {
   const { user } = useAuth();
   const [devices, setDevices] = useState<TraccarDevice[]>([]);
@@ -46,7 +29,7 @@ export default function Dashboard() {
   const offline = devices.filter(d => d.status !== 'online').length;
 
   return (
-    <div className="space-y-6">
+    <div className="h-full overflow-y-auto p-4 sm:p-6 fade-in space-y-6 pb-32 md:pb-10">
       {/* Greeting */}
       <div>
         <h1 className="text-2xl font-bold text-gray-900 tracking-tight">
@@ -57,34 +40,72 @@ export default function Dashboard() {
         </p>
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
-        <StatCard
-          title="Total de Taxis"
-          value={loading ? '...' : devices.length}
-          icon={<CarFront size={26} strokeWidth={2.5} className="text-blue-600" />}
-          color="bg-blue-50 border border-blue-100/50"
-        />
-        <StatCard
-          title="En Línea"
-          value={loading ? '...' : online}
-          subtitle="Con señal GPS activa"
-          icon={<RadioTower size={26} strokeWidth={2.5} className="text-green-600" />}
-          color="bg-green-50 border border-green-100/50"
-        />
-        <StatCard
-          title="Sin Señal"
-          value={loading ? '...' : offline}
-          icon={<WifiOff size={26} strokeWidth={2.5} className="text-gray-500" />}
-          color="bg-gray-100 border border-gray-200/50"
-        />
-        <StatCard
-          title="Cobertura"
-          value={loading || !devices.length ? '—' : `${Math.round((online / devices.length) * 100)}%`}
-          subtitle="Taxis activos hoy"
-          icon={<MapPin size={26} strokeWidth={2.5} className="text-amber-600" />}
-          color="bg-amber-50 border border-amber-100/50"
-        />
+      {/* Stats - Rediseño Moderno */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        
+        {/* Hero Card: Total Taxis (Full width en móvil, col-span-2) */}
+        <div className="col-span-2 bg-gradient-to-br from-blue-600 to-blue-800 rounded-[24px] p-5 sm:p-6 text-white shadow-lg shadow-blue-600/30 flex items-center justify-between relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-2xl -mr-10 -mt-10"></div>
+          <div className="absolute bottom-0 left-0 w-24 h-24 bg-blue-400/20 rounded-full blur-xl -ml-5 -mb-5"></div>
+          <div className="relative z-10">
+            <p className="text-blue-100 font-medium text-sm sm:text-base mb-1">Total de Flotilla</p>
+            <div className="flex items-baseline gap-2">
+              <span className="text-4xl sm:text-5xl font-bold tracking-tight">{loading ? '...' : devices.length}</span>
+              <span className="text-blue-200 text-sm">Taxis registrados</span>
+            </div>
+          </div>
+          <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-white/10 border border-white/20 backdrop-blur-sm flex items-center justify-center shrink-0 relative z-10">
+            <CarFront size={28} className="text-white" />
+          </div>
+        </div>
+
+        {/* Card: En Línea */}
+        <div className="bg-white rounded-[20px] p-4 sm:p-5 border border-gray-100 shadow-sm flex flex-col justify-between">
+          <div className="flex items-start justify-between mb-2">
+            <div className="w-10 h-10 rounded-xl bg-green-50 text-green-600 flex items-center justify-center">
+              <RadioTower size={20} />
+            </div>
+            <span className="px-2 py-1 bg-green-50 text-green-600 text-[10px] font-bold uppercase rounded-lg">Online</span>
+          </div>
+          <div>
+            <p className="text-2xl sm:text-3xl font-bold text-gray-900">{loading ? '...' : online}</p>
+            <p className="text-xs text-gray-500 font-medium mt-0.5">Conectados</p>
+          </div>
+        </div>
+
+        {/* Card: Sin Señal */}
+        <div className="bg-white rounded-[20px] p-4 sm:p-5 border border-gray-100 shadow-sm flex flex-col justify-between">
+          <div className="flex items-start justify-between mb-2">
+            <div className="w-10 h-10 rounded-xl bg-gray-50 text-gray-500 flex items-center justify-center">
+              <WifiOff size={20} />
+            </div>
+            <span className="px-2 py-1 bg-gray-100 text-gray-500 text-[10px] font-bold uppercase rounded-lg">Offline</span>
+          </div>
+          <div>
+            <p className="text-2xl sm:text-3xl font-bold text-gray-900">{loading ? '...' : offline}</p>
+            <p className="text-xs text-gray-500 font-medium mt-0.5">Desconectados</p>
+          </div>
+        </div>
+
+        {/* Cobertura (Full width) */}
+        <div className="col-span-2 bg-white rounded-[20px] p-4 sm:p-5 border border-gray-100 shadow-sm flex flex-col justify-center">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-full bg-amber-50 text-amber-500 flex items-center justify-center">
+                <MapPin size={16} />
+              </div>
+              <p className="text-sm font-semibold text-gray-700">Cobertura Activa</p>
+            </div>
+            <p className="text-lg font-bold text-amber-500">{loading || !devices.length ? '0' : Math.round((online / devices.length) * 100)}%</p>
+          </div>
+          <div className="w-full h-2.5 bg-gray-100 rounded-full overflow-hidden">
+            <div 
+              className="h-full bg-amber-500 rounded-full transition-all duration-1000 ease-out" 
+              style={{ width: `${loading || !devices.length ? 0 : Math.round((online / devices.length) * 100)}%` }}
+            ></div>
+          </div>
+        </div>
+
       </div>
 
       {/* Taxis recientes */}
@@ -96,37 +117,60 @@ export default function Dashboard() {
           {loading ? (
             <div className="animate-pulse flex flex-col">
               {[1, 2, 3, 4, 5].map(i => (
-                <div key={i} className="flex items-center justify-between px-6 py-4 border-b border-gray-50">
+                <div key={i} className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-gray-50">
                   <div className="flex items-center gap-4">
-                    <div className="w-2 h-2 rounded-full bg-gray-200"></div>
-                    <div className="space-y-1.5">
+                    <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full sm:rounded-2xl bg-gray-100"></div>
+                    <div className="space-y-2">
                       <div className="h-4 w-32 bg-gray-200 rounded"></div>
                       <div className="h-3 w-20 bg-gray-100 rounded"></div>
                     </div>
                   </div>
-                  <div className="h-6 w-20 bg-gray-100 rounded-full"></div>
+                  <div className="h-8 w-8 bg-gray-100 rounded-full"></div>
                 </div>
               ))}
             </div>
           ) : devices.slice(0, 8).map(device => {
             const isOnline = device.status === 'online';
             return (
-              <div key={device.id} className="flex items-center justify-between px-6 py-4 hover:bg-slate-50 transition-colors">
-                <div className="flex items-center gap-4">
-                  <div className="relative flex items-center justify-center w-3 h-3">
-                    {isOnline && <span className="absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-30 animate-ping"></span>}
-                    <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${isOnline ? 'bg-green-500' : 'bg-gray-300'}`}></span>
+              <div key={device.id} className="flex items-center justify-between px-4 sm:px-6 py-4 hover:bg-slate-50 transition-colors group cursor-pointer">
+                <div className="flex items-center gap-3 sm:gap-4">
+                  
+                  {/* Car Avatar + Status Dot */}
+                  <div className="relative">
+                    <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full sm:rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+                      <CarFront size={20} className="sm:w-6 sm:h-6" />
+                    </div>
+                    <div className="absolute -bottom-1 -right-1 sm:-bottom-1 sm:-right-1">
+                      <div className="relative flex items-center justify-center w-3.5 h-3.5">
+                        {isOnline && <span className="absolute inline-flex h-full w-full rounded-full bg-green-500 opacity-40 animate-ping"></span>}
+                        <span className={`relative inline-flex rounded-full h-3 w-3 border-2 border-white ${isOnline ? 'bg-green-500' : 'bg-gray-400'}`}></span>
+                      </div>
+                    </div>
                   </div>
+                  
+                  {/* Text Data */}
                   <div>
-                    <p className="text-sm font-semibold text-gray-800">{device.name}</p>
-                    <p className="text-xs text-gray-400">ID: {device.uniqueId}</p>
+                    <p className="text-sm sm:text-base font-bold text-gray-900 group-hover:text-blue-600 transition-colors">{device.name}</p>
+                    <div className="flex items-center gap-1.5 sm:gap-2 mt-0.5">
+                      <span className="text-[9px] sm:text-[10px] font-bold text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded tracking-wide uppercase">
+                        ID: {device.uniqueId}
+                      </span>
+                      <span className="text-[10px] sm:text-xs text-gray-400 font-medium hidden sm:inline-block">
+                        &bull; {isOnline ? 'Señal Activa' : 'Desconectado'}
+                      </span>
+                    </div>
                   </div>
                 </div>
-                <span className={`text-xs font-semibold px-3 py-1.5 rounded-full ${
-                  isOnline ? 'bg-green-50 text-green-700 border border-green-100' : 'bg-gray-50 text-gray-500 border border-gray-100'
-                }`}>
-                  {isOnline ? 'En línea' : 'Sin señal'}
-                </span>
+                
+                {/* Status Indicator Right */}
+                <div className="flex items-center gap-3">
+                  <div className="hidden sm:flex flex-col items-end">
+                     <span className={`text-[10px] font-bold uppercase tracking-wider ${isOnline ? 'text-green-600' : 'text-gray-400'}`}>{isOnline ? 'Online' : 'Offline'}</span>
+                  </div>
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors ${isOnline ? 'bg-green-50 text-green-600 shadow-sm shadow-green-100' : 'bg-gray-50 text-gray-400'}`}>
+                    {isOnline ? <RadioTower size={14} /> : <WifiOff size={14} />}
+                  </div>
+                </div>
               </div>
             );
           })}

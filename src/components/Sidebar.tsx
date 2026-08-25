@@ -7,57 +7,7 @@ interface SidebarProps {
   onClose?: () => void;
 }
 
-function SidebarGroup({ icon, label, items, onNavClick }: {
-  icon: React.ReactNode; label: string; items: any[]; onNavClick?: () => void;
-}) {
-  const location = useLocation();
-  const isActive = items.some(item => location.pathname === item.to || (item.to === '/' && location.pathname === '/'));
-  const [open, setOpen] = useState(isActive);
 
-  return (
-    <div className="mb-1">
-      <button
-        onClick={() => setOpen(!open)}
-        className={`w-full flex items-center justify-between px-4 py-3 rounded-xl text-sm transition-all duration-200 ${
-          isActive
-            ? 'text-blue-700 font-bold bg-blue-50/50'
-            : 'text-gray-500 hover:bg-gray-50 hover:text-blue-600 hover:translate-x-1'
-        }`}
-      >
-        <div className="flex items-center gap-3">
-          {icon}
-          <span>{label}</span>
-        </div>
-        <ChevronRight size={14} className={`opacity-50 transition-transform duration-300 ${open ? 'rotate-90' : 'rotate-0'}`} />
-      </button>
-
-      <div className={`grid transition-all duration-300 ease-in-out ${open ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'}`}>
-        <div className="overflow-hidden">
-          <div className="mt-1 space-y-1">
-            {items.map(item => (
-              <NavLink
-                key={item.to}
-                to={item.to}
-                end={item.to === '/'}
-                onClick={onNavClick}
-                className={({ isActive }) =>
-                  `flex items-center gap-3 pl-[46px] pr-4 py-2.5 rounded-xl text-sm transition-all duration-200 ${
-                    isActive
-                      ? 'bg-blue-600 text-white shadow-md shadow-blue-600/20 font-semibold'
-                      : 'text-gray-500 hover:bg-gray-50 hover:text-blue-600 hover:translate-x-1'
-                  }`
-                }
-              >
-                {item.icon}
-                <span>{item.label}</span>
-              </NavLink>
-            ))}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 export default function Sidebar({ onClose }: SidebarProps) {
   const { user, logout } = useAuth();
@@ -85,6 +35,14 @@ export default function Sidebar({ onClose }: SidebarProps) {
   ].filter(item => item.always || (item.adminOnly && user?.administrator));
 
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [openSections, setOpenSections] = useState<Record<string, boolean>>({
+    tools: true,
+    admin: true,
+  });
+
+  const toggleSection = (key: string) => {
+    setOpenSections(prev => ({ ...prev, [key]: !prev[key] }));
+  };
 
   const handleLogout = async () => {
     setIsLoggingOut(true);
@@ -93,97 +51,134 @@ export default function Sidebar({ onClose }: SidebarProps) {
   };
 
   return (
-    <div className="h-screen w-64 bg-white border-r border-gray-100 flex flex-col shadow-sm">
-
-      {/* Logo + botón cerrar en móvil */}
-      <div className="p-5 border-b border-gray-100 flex items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <div className="bg-blue-600 p-2.5 rounded-xl shadow-md shadow-blue-600/20">
-            <Car className="text-white" size={20} />
-          </div>
-          <div>
-            <h1 className="text-lg font-extrabold text-gray-900 leading-none tracking-tight">Estrella Taxis</h1>
-            <p className="text-xs text-gray-400 mt-1 font-medium">Panel de Control</p>
-          </div>
+    <aside className="h-screen w-72 bg-white border-r border-gray-100 flex flex-col shadow-sm flex-shrink-0">
+      
+      {/* Header del Sidebar */}
+      <div className="p-6 flex items-center gap-3 border-b border-gray-50 relative">
+        <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center text-white shadow-md shadow-blue-500/30">
+          <Car size={20} />
         </div>
-        {/* Solo visible en móvil */}
+        <div>
+          <h2 className="text-xl font-bold text-gray-900 tracking-tight">Estrella Taxi</h2>
+          <p className="text-xs text-green-500 font-medium flex items-center gap-1">
+            <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span> Sistema Online
+          </p>
+        </div>
         {onClose && (
-          <button
-            onClick={onClose}
-            className="md:hidden p-1.5 rounded-xl hover:bg-gray-100 transition text-gray-400"
-          >
-            <X size={18} />
+          <button onClick={onClose} className="md:hidden absolute right-4 top-6 text-gray-400 hover:text-gray-600">
+            <X size={20} />
           </button>
         )}
       </div>
 
-      {/* Nav */}
-      <nav className="flex-1 p-4 overflow-y-auto">
-        <div className="space-y-1 mb-6">
-          <div className="px-3 mb-3 text-[10px] font-bold tracking-[0.15em] text-gray-400/80 uppercase">Principal</div>
-          {mainItems.map(item => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              onClick={onClose}
-              className={({ isActive }) =>
-                `flex items-center gap-3 px-4 py-3 rounded-xl text-sm transition-all duration-200 ${
-                  isActive
-                    ? 'bg-blue-600 text-white shadow-md shadow-blue-600/20 font-semibold'
-                    : 'text-gray-500 hover:bg-gray-50 hover:text-blue-600 hover:translate-x-1'
-                }`
-              }
-            >
-              {item.icon}
-              <span>{item.label}</span>
-            </NavLink>
-          ))}
+      {/* Navegación */}
+      <nav className="flex-1 overflow-y-auto scrollbar-hide py-4 px-3 space-y-1">
+        <div className="px-2 mb-2 mt-2">
+          <span className="px-3 py-1 bg-blue-600 text-white text-[10px] font-bold uppercase tracking-widest rounded-lg shadow-sm">Rastreo</span>
         </div>
+        
+        {mainItems.map(item => (
+          <NavLink
+            key={item.to}
+            to={item.to}
+            onClick={onClose}
+            className={({ isActive }) => `sidebar-item ${isActive ? 'active' : ''}`}
+          >
+            <div className="w-5 text-center flex justify-center">{item.icon}</div>
+            <span className="font-medium">{item.label}</span>
+          </NavLink>
+        ))}
 
-        <div className="space-y-1">
-          <div className="px-3 mt-6 mb-3 text-[10px] font-bold tracking-[0.15em] text-gray-400/80 uppercase">Ajustes y Más</div>
-          <SidebarGroup icon={<Wrench size={18} />} label="Herramientas" items={toolsItems} onNavClick={onClose} />
-          <SidebarGroup icon={<Settings size={18} />} label="Administración" items={adminItems} onNavClick={onClose} />
-        </div>
-      </nav>
-
-      {/* User info + logout */}
-      <div className="p-4 border-t border-gray-100 bg-gray-50/30">
-        <div className="bg-white border border-gray-100 rounded-2xl p-3 shadow-sm hover:shadow-md hover:border-gray-200 transition-all">
-          {user?.administrator && (
-            <div className="flex items-center gap-1.5 px-1 mb-2">
-              <Shield size={12} className="text-blue-500" />
-              <span className="text-[10px] uppercase tracking-wider text-blue-600 font-bold">Administrador</span>
-            </div>
-          )}
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3 min-w-0">
-              <div className="w-9 h-9 rounded-full bg-blue-50 flex items-center justify-center text-blue-600 font-bold text-sm flex-shrink-0 border border-blue-100">
-                {user?.name?.charAt(0)?.toUpperCase() || 'U'}
-              </div>
-              <div className="min-w-0">
-                <p className="text-sm font-bold text-gray-800 truncate">{user?.name}</p>
-                <p className="text-xs text-gray-400 truncate">{user?.email}</p>
-              </div>
-            </div>
-            <button 
-              onClick={handleLogout} 
-              disabled={isLoggingOut}
-              title="Cerrar sesión" 
-              className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-colors flex-shrink-0 disabled:opacity-50"
-            >
-              {isLoggingOut ? (
-                <svg className="animate-spin h-4 w-4 text-red-500" viewBox="0 0 24 24" fill="none">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                </svg>
-              ) : (
-                <LogOut size={16} />
-              )}
-            </button>
+        <button 
+          onClick={() => toggleSection('tools')}
+          className="w-full flex items-center justify-between px-2 mb-2 mt-6 cursor-pointer group"
+        >
+          <span className="px-3 py-1 bg-gray-900 text-white text-[10px] font-bold uppercase tracking-widest rounded-lg shadow-sm transition-transform group-hover:scale-105">Análisis y Herr.</span>
+          <div className={`transform transition-transform duration-500 ease-out text-gray-400 group-hover:text-gray-900 ${openSections.tools ? 'rotate-90' : 'rotate-0'}`}>
+            <ChevronRight size={14} />
+          </div>
+        </button>
+        
+        <div className={`overflow-hidden transition-all duration-500 ease-in-out ${openSections.tools ? 'max-h-[400px]' : 'max-h-0'}`}>
+          <div className="space-y-1 pt-1 pb-2">
+            {toolsItems.map((item, index) => {
+              const isOpen = openSections.tools;
+              const delay = isOpen ? index * 60 : (toolsItems.length - 1 - index) * 30;
+              return (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  onClick={onClose}
+                  className={({ isActive }) => `sidebar-item transform transition-all duration-300 ${isActive ? 'active' : ''} ${isOpen ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-4'}`}
+                  style={{ transitionDelay: `${delay}ms` }}
+                >
+                  <div className="w-5 text-center flex justify-center">{item.icon}</div>
+                  <span className="font-medium">{item.label}</span>
+                </NavLink>
+              );
+            })}
           </div>
         </div>
+
+        {adminItems.length > 0 && (
+          <>
+            <button 
+              onClick={() => toggleSection('admin')}
+              className="w-full flex items-center justify-between px-2 mb-2 mt-6 cursor-pointer group"
+            >
+              <span className="px-3 py-1 bg-red-600 text-white text-[10px] font-bold uppercase tracking-widest rounded-lg shadow-sm transition-transform group-hover:scale-105">Administración</span>
+              <div className={`transform transition-transform duration-500 ease-out text-gray-400 group-hover:text-red-600 ${openSections.admin ? 'rotate-90' : 'rotate-0'}`}>
+                <ChevronRight size={14} />
+              </div>
+            </button>
+            
+            <div className={`overflow-hidden transition-all duration-500 ease-in-out ${openSections.admin ? 'max-h-[400px]' : 'max-h-0'}`}>
+              <div className="space-y-1 pt-1 pb-2">
+                {adminItems.map((item, index) => {
+                  const isOpen = openSections.admin;
+                  const delay = isOpen ? index * 60 : (adminItems.length - 1 - index) * 30;
+                  return (
+                    <NavLink
+                      key={item.to}
+                      to={item.to}
+                      onClick={onClose}
+                      className={({ isActive }) => `sidebar-item transform transition-all duration-300 ${isActive ? 'active' : ''} ${isOpen ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-4'}`}
+                      style={{ transitionDelay: `${delay}ms` }}
+                    >
+                      <div className="w-5 text-center flex justify-center">{item.icon}</div>
+                      <span className="font-medium">{item.label}</span>
+                    </NavLink>
+                  );
+                })}
+              </div>
+            </div>
+          </>
+        )}
+      </nav>
+
+      {/* Footer Usuario */}
+      <div className="p-4 border-t border-gray-100">
+        <div 
+          onClick={handleLogout}
+          className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl cursor-pointer hover:bg-red-50 hover:text-red-600 transition group"
+        >
+          <div className="w-10 h-10 rounded-full bg-primary text-white flex items-center justify-center font-bold shadow-sm group-hover:bg-red-500 transition-colors">
+            {user?.name?.charAt(0)?.toUpperCase() || 'A'}
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-gray-800 truncate group-hover:text-red-600">{user?.name || 'Usuario'}</p>
+            <p className="text-xs text-gray-500 truncate group-hover:text-red-400">{user?.administrator ? 'Super Administrador' : 'Operador'}</p>
+          </div>
+          {isLoggingOut ? (
+            <svg className="animate-spin h-4 w-4 text-red-500" viewBox="0 0 24 24" fill="none">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+            </svg>
+          ) : (
+            <LogOut size={18} className="text-gray-400 group-hover:text-red-500 transition" />
+          )}
+        </div>
       </div>
-    </div>
+    </aside>
   );
 }

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { api, BASE_URL, type TraccarDevice } from '../lib/traccarApi';
 import { Wifi, WifiOff, Activity, Search, Download, Calendar } from 'lucide-react';
 import { exportToExcel } from '../lib/exportExcel';
+import toast from 'react-hot-toast';
 
 interface ConnectionEvent {
   id: number;
@@ -26,7 +27,7 @@ export default function DeviceConnectionsPage() {
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedDeviceId) return alert('Selecciona un taxi');
+    if (!selectedDeviceId) return toast.error('Selecciona un taxi');
 
     setLoading(true);
     try {
@@ -48,7 +49,7 @@ export default function DeviceConnectionsPage() {
       const data = await res.json();
       setEvents(data.sort((a: any, b: any) => new Date(b.serverTime).getTime() - new Date(a.serverTime).getTime()));
     } catch (err) {
-      alert('Error al consultar historial de conexiones');
+      toast.error('Error al consultar historial de conexiones');
     } finally {
       setLoading(false);
     }
@@ -66,7 +67,7 @@ export default function DeviceConnectionsPage() {
   const device = devices.find(d => d.id === selectedDeviceId);
 
   return (
-    <div className="flex flex-col gap-6 h-full">
+    <div className="flex flex-col gap-6 h-full p-4 sm:p-6 pb-32 md:pb-10">
       <div>
         <h1 className="text-xl font-bold text-gray-900 flex items-center gap-2">
           <Activity size={24} className="text-blue-600" />

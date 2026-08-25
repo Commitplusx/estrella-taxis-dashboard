@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import toast from 'react-hot-toast';
 import { useCachedFetch } from '../hooks/useCachedFetch';
 import { dataCache } from '../lib/cache';
 import { BASE_URL } from '../lib/traccarApi';
+import { useAuth } from '../context/AuthContext';
+import { ConfirmDialog } from '../components/ConfirmDialog';
 import { Map as MapIcon, Plus, Trash2, Edit2, X, Save, Hexagon, Circle as CircleIcon, GitCommit } from 'lucide-react';
-
-const GOOGLE_MAPS_API_KEY = 'AIzaSyAYB_sdCTSE5kLvAz4dDXp3221SdSN91ac';
 
 export interface TraccarGeofence {
   id?: number;
@@ -45,6 +46,9 @@ const parseWkt = (wkt: string) => {
 
 // ─── Página Principal ───────────────────────────────────────────────────────
 export default function GeofencesPage() {
+  const { user } = useAuth();
+  const isReadonly = user?.readonly ?? false;
+
   const { data, loading, refetch } = useCachedFetch<TraccarGeofence[]>('/api/geofences', { ttlMs: 60_000 });
   const geofences = data ?? [];
   
@@ -56,9 +60,11 @@ export default function GeofencesPage() {
   
   const [mapsLoaded, setMapsLoaded] = useState(false);
   const [editingGeofence, setEditingGeofence] = useState<Partial<TraccarGeofence> | null>(null);
-  const [drawnShapes, setDrawnShapes] = useState<any[]>([]); // Para mostrar las demás geocercas en el mapa
+  const [drawnShapes, setDrawnShapes] = useState<any[]>([]);
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [activeMode, setActiveMode] = useState<string | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
   
   // Cargar Google Maps
   useEffect(() => {
@@ -70,6 +76,10 @@ export default function GeofencesPage() {
   // Inicializar Mapa
   useEffect(() => {
     if (!mapsLoaded || !mapRef.current || googleMapRef.current) return;
+    if (!window.google || !window.google.maps) {
+      console.warn("Google Maps no está disponible aún en window.google");
+      return;
+    }
     
     const savedMapType = localStorage.getItem('estrella_map_type') || 'roadmap';
 
@@ -169,36 +179,47 @@ export default function GeofencesPage() {
     drawingModeRef.current = null;
     setActiveMode(null);
     
-    const parsed = parseWkt(gf.area);
-    if (!parsed || !googleMapRef.current) return;
-    
-    const commonOpts = { map: googleMapRef.current, editable: true, draggable: true, fillColor: '#3b82f6', fillOpacity: 0.3, strokeColor: '#2563eb', strokeWeight: 2 };
-    
-    let shape;
-    let bounds = new window.google.maps.LatLngBounds();
-    
-    if (parsed.type === 'circle') {
-      shape = new window.google.maps.Circle({ ...commonOpts, center: { lat: parsed.lat, lng: parsed.lng }, radius: parsed.radius });
-      bounds = shape.getBounds();
-    } else if (parsed.type === 'polygon') {
-      shape = new window.google.maps.Polygon({ ...commonOpts, paths: parsed.path });
-      parsed.path.forEach(p => bounds.extend(p));
-    } else if (parsed.type === 'polyline') {
-      shape = new window.google.maps.Polyline({ ...commonOpts, path: parsed.path, fillOpacity: 0 });
-      parsed.path.forEach(p => bounds.extend(p));
-    }
-    
-    currentOverlayRef.current = shape;
-    if (bounds) googleMapRef.current.fitBounds(bounds);
+    // Le damos un respiro al navegador para que alcance a pintar el cambio de estado (abrir el panel de edición)
+    // antes de atorarse parseando un polígono gigante
+    setTimeout(() => {
+      const parsed = parseWkt(gf.area);
+      if (!parsed || !googleMapRef.current) return;
+      
+      const commonOpts = { map: googleMapRef.current, editable: true, draggable: true, fillColor: '#3b82f6', fillOpacity: 0.3, strokeColor: '#2563eb', strokeWeight: 2 };
+      
+      let shape;
+      let bounds = new window.google.maps.LatLngBounds();
+      
+      if (parsed.type === 'circle') {
+        shape = new window.google.maps.Circle({ ...commonOpts, center: { lat: parsed.lat, lng: parsed.lng }, radius: parsed.radius });
+        bounds = shape.getBounds();
+      } else if (parsed.type === 'polygon') {
+        shape = new window.google.maps.Polygon({ ...commonOpts, paths: parsed.path });
+        parsed.path.forEach(p => bounds.extend(p));
+      } else if (parsed.type === 'polyline') {
+        shape = new window.google.maps.Polyline({ ...commonOpts, path: parsed.path, fillOpacity: 0 });
+        parsed.path.forEach(p => bounds.extend(p));
+      }
+      
+      currentOverlayRef.current = shape;
+      if (bounds && !bounds.isEmpty()) googleMapRef.current.fitBounds(bounds);
+    }, 10);
   };
 
   const handleDelete = async (id: number) => {
-    if (!confirm('¿Eliminar esta geocerca?')) return;
-    const url = `${BASE_URL}/geofences/${id}`;
-    await fetch(url, { method: 'DELETE', credentials: 'include' });
-    dataCache.invalidate('/geofences');
-    refetch();
-    if (editingGeofence?.id === id) cancelEdit();
+    setConfirmDeleteId(id);
+  };
+
+  const executeDelete = async (id: number) => {
+    try {
+      const res = await fetch(`${BASE_URL}/geofences/${id}`, { method: 'DELETE', credentials: 'include' });
+      if (!res.ok) throw new Error(await res.text());
+      dataCache.invalidatePrefix('/api/geofences');
+      refetch();
+      if (editingGeofence?.id === id) cancelEdit();
+    } catch (e: any) {
+      toast.error(`Error al eliminar: ${e.message}`);
+    }
   };
 
   const cancelEdit = () => {
@@ -238,11 +259,11 @@ export default function GeofencesPage() {
   };
 
   const handleSave = async () => {
-    if (!editingGeofence?.name?.trim()) return alert('Ponle un nombre a la geocerca');
-    if (!currentOverlayRef.current) return alert('Dibuja la geocerca en el mapa primero');
+    if (!editingGeofence?.name?.trim()) return toast.error('Ponle un nombre a la geocerca');
+    if (!currentOverlayRef.current) return toast.error('Dibuja la geocerca en el mapa primero');
     
     const wkt = buildWktFromOverlay(currentOverlayRef.current);
-    if (!wkt) return alert('Forma no válida');
+    if (!wkt) return;
     
     setSaving(true);
     try {
@@ -258,26 +279,26 @@ export default function GeofencesPage() {
       });
       if (!res.ok) throw new Error(await res.text());
       
-      dataCache.invalidate('/geofences');
+      dataCache.invalidatePrefix('/api/geofences');
       refetch();
       cancelEdit();
     } catch (e: any) {
-      alert(`Error: ${e.message}`);
+      setSaveError(e.message || 'Error al guardar');
     } finally {
       setSaving(false);
     }
   };
 
   return (
-    <div className="flex flex-col gap-6 h-full">
+    <div className="h-full overflow-y-auto p-4 sm:p-6 fade-in flex flex-col gap-4 pb-32 md:pb-10">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-lg font-bold text-gray-900">Geocercas</h1>
-          <p className="text-sm text-gray-500 mt-0.5">Delimita zonas de operación y recibe alertas</p>
+          <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Geocercas</h1>
+          <p className="text-sm text-gray-500 mt-1">Delimita zonas de operación y recibe alertas.</p>
         </div>
         {!editingGeofence && !isReadonly && (
           <button onClick={() => setEditingGeofence({ name: '', description: '' })}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-semibold transition shadow-sm">
+            className="btn-primary">
             <Plus size={16} /> Nueva Geocerca
           </button>
         )}
@@ -382,6 +403,32 @@ export default function GeofencesPage() {
           <div ref={mapRef} className="w-full h-full" />
         </div>
       </div>
+
+      {/* Modal para confirmar antes de eliminar */}
+      {confirmDeleteId !== null && (
+        <ConfirmDialog
+          title="Eliminar geocerca"
+          message="¿Estás seguro de que quieres eliminar esta geocerca? Esta acción no se puede deshacer."
+          confirmLabel="Eliminar"
+          onConfirm={() => {
+            executeDelete(confirmDeleteId);
+            setConfirmDeleteId(null);
+          }}
+          onCancel={() => setConfirmDeleteId(null)}
+        />
+      )}
+
+      {/* Aviso si algo falla al guardar */}
+      {saveError && (
+        <ConfirmDialog
+          title="Error al guardar"
+          message={saveError}
+          confirmLabel="Entendido"
+          confirmClass="bg-gray-700 hover:bg-gray-800 text-white"
+          onConfirm={() => setSaveError(null)}
+          onCancel={() => setSaveError(null)}
+        />
+      )}
     </div>
   );
 }

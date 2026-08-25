@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { BASE_URL, type TraccarDevice } from '../lib/traccarApi';
 import { X, ShieldAlert, ZapOff, Zap, MapPin, Code } from 'lucide-react';
+import { ConfirmDialog } from './ConfirmDialog';
 
 const COMMANDS = [
   { value: 'engineStop', label: 'Apagar Motor (Corte de corriente)', icon: <ZapOff size={16} /> },
@@ -13,10 +14,12 @@ export function CommandModal({ device, onClose }: { device: TraccarDevice; onClo
   const [type, setType] = useState('engineStop');
   const [customData, setCustomData] = useState('');
   const [sending, setSending] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [sendError, setSendError] = useState<string | null>(null);
 
-  const handleSend = async () => {
-    if (!confirm('¿Estás seguro de enviar este comando?')) return;
+  const executeSend = async () => {
     setSending(true);
+    setSendError(null);
     try {
       const payload: any = { deviceId: device.id, type };
       if (type === 'custom') payload.attributes = { data: customData };
@@ -28,10 +31,9 @@ export function CommandModal({ device, onClose }: { device: TraccarDevice; onClo
         body: JSON.stringify(payload)
       });
       if (!res.ok) throw new Error(await res.text());
-      alert('Comando enviado correctamente a la cola');
       onClose();
     } catch (e: any) {
-      alert(`Error al enviar: ${e.message}`);
+      setSendError(e.message || 'Error desconocido al enviar el comando.');
     } finally {
       setSending(false);
     }
@@ -77,15 +79,32 @@ export function CommandModal({ device, onClose }: { device: TraccarDevice; onClo
                 className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-500" />
             </div>
           )}
+          {sendError && (
+            <p className="text-xs text-red-600 bg-red-50 px-3 py-2 rounded-xl border border-red-100">{sendError}</p>
+          )}
         </div>
         <div className="p-5 pt-0 flex gap-2">
           <button onClick={onClose} className="flex-1 px-4 py-2 border border-gray-200 rounded-xl text-sm font-medium hover:bg-gray-50">Cancelar</button>
-          <button onClick={handleSend} disabled={sending}
+          <button onClick={() => setConfirmOpen(true)} disabled={sending}
             className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-sm font-bold disabled:opacity-50">
             {sending ? 'Enviando...' : 'Ejecutar'}
           </button>
         </div>
       </div>
+
+      {/* Confirmación antes de mandar el comando */}
+      {confirmOpen && (
+        <ConfirmDialog
+          title="¿Enviar comando remoto?"
+          message={`Vas a enviar "${COMMANDS.find(c => c.value === type)?.label}" al taxi "${device.name}". Esta acción puede afectar la operación del vehículo.`}
+          confirmLabel="Sí, ejecutar"
+          onConfirm={() => {
+            setConfirmOpen(false);
+            executeSend();
+          }}
+          onCancel={() => setConfirmOpen(false)}
+        />
+      )}
     </div>
   );
 }
