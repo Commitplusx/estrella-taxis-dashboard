@@ -103,108 +103,21 @@ export default function Login() {
       </div>
 
       {/* ─── Panel Izquierdo (Hero Limpio y Profesional) ──────────────────────── */}
-      <div className={`hidden lg:flex flex-col w-[55%] bg-gradient-to-br from-blue-600 via-blue-700 to-indigo-900 relative transition-transform duration-1000 ${mounted ? 'translate-x-0' : '-translate-x-12'}`}>
-        {/* Adorno orgánico sutil de fondo (no robótico) */}
-        <div className="absolute top-0 left-0 w-full h-full opacity-10 pointer-events-none">
-          <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="absolute w-[200%] h-[200%] -top-[50%] -left-[50%] animate-spin-slow" style={{ animationDuration: '150s' }}>
-            <path fill="#ffffff" d="M38.1,-49.9C51.5,-42.9,65.8,-35.1,73.8,-22.7C81.8,-10.3,83.5,6.7,78.2,21.1C72.9,35.5,60.6,47.3,47.1,56.1C33.6,64.9,18.8,70.7,3.5,66.1C-11.8,61.5,-27.6,46.5,-40.4,34.4C-53.2,22.3,-62.9,13.1,-65.4,2.5C-67.9,-8.1,-63.1,-20.1,-54.6,-28.9C-46.1,-37.7,-33.9,-43.3,-21.8,-49.6C-9.7,-55.9,2.3,-62.9,14.7,-60.8C27.1,-58.7,39.5,-47.5,38.1,-49.9Z" transform="translate(50 50)" />
-          </svg>
-        </div>
-
-        <div className="relative z-10 flex flex-col h-full p-8 lg:p-12 justify-between text-white">
-          {/* Top Logo */}
-          <div className="flex items-center gap-3">
-            <div className="bg-white/20 backdrop-blur-md p-2.5 rounded-2xl">
-              <Car className="text-white" size={24} />
-            </div>
-            <div>
-              <h1 className="text-xl lg:text-2xl font-bold tracking-tight">Estrella Taxis</h1>
-              <p className="text-blue-200 font-medium tracking-wide text-[10px] lg:text-xs uppercase mt-0.5">Sistema de Gestión de Flotillas</p>
-            </div>
-          </div>
-
-          {/* Main Copy */}
-          <div className="w-full max-w-xl mx-auto flex flex-col justify-center flex-1 py-4">
-            <h2 className="text-3xl lg:text-4xl xl:text-5xl font-extrabold leading-[1.15] tracking-tight mb-4">
-              Controla tu flotilla <br/>
-              <span className="text-blue-200 font-light">desde cualquier lugar.</span>
-            </h2>
-            <p className="text-blue-100 text-sm lg:text-base leading-relaxed mb-8 max-w-md">
-              Monitorea tus taxis en tiempo real, revisa reportes y gestiona a tus choferes desde un solo panel limpio e intuitivo.
-            </p>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 lg:gap-4">
-              {/* Box 1 */}
-              <div className={`flex justify-between items-center p-2.5 lg:p-3 rounded-xl backdrop-blur-sm ${getBoxClass(1)}`}>
-                <div className="flex items-center gap-3">
-                  <div className={`p-2 rounded-lg shrink-0 ${getIconClass(1)}`}><Navigation2 size={16} /></div>
-                  <span className="font-medium text-xs lg:text-sm">Rastreo GPS en tiempo real</span>
-                </div>
-                <div className={`transition-all duration-300 ${loginPhase > 1 ? 'opacity-100 scale-100' : 'opacity-0 scale-50'} ${loginPhase === 5 ? 'text-emerald-200' : 'text-emerald-400'}`}>
-                  <CheckCircle2 size={18} />
-                </div>
-              </div>
-              
-              {/* Box 2 */}
-              <div className={`flex justify-between items-center p-2.5 lg:p-3 rounded-xl backdrop-blur-sm ${getBoxClass(2)}`}>
-                <div className="flex items-center gap-3">
-                  <div className={`p-2 rounded-lg shrink-0 ${getIconClass(2)}`}><Users size={16} /></div>
-                  <span className="font-medium text-xs lg:text-sm">Gestión de choferes</span>
-                </div>
-                <div className={`transition-all duration-300 ${loginPhase > 2 ? 'opacity-100 scale-100' : 'opacity-0 scale-50'} ${loginPhase === 5 ? 'text-emerald-200' : 'text-emerald-400'}`}>
-                  <CheckCircle2 size={18} />
-                </div>
-              </div>
-
-              {/* Box 3 */}
-              <div className={`flex justify-between items-center p-2.5 lg:p-3 rounded-xl backdrop-blur-sm ${getBoxClass(3)}`}>
-                <div className="flex items-center gap-3">
-                  <div className={`p-2 rounded-lg shrink-0 ${getIconClass(3)}`}><MapPin size={16} /></div>
-                  <span className="font-medium text-xs lg:text-sm">Reportes de viajes</span>
-                </div>
-                <div className={`transition-all duration-300 ${loginPhase > 3 ? 'opacity-100 scale-100' : 'opacity-0 scale-50'} ${loginPhase === 5 ? 'text-emerald-200' : 'text-emerald-400'}`}>
-                  <CheckCircle2 size={18} />
-                </div>
-              </div>
-
-              {/* Box 4 */}
-              <div className={`flex justify-between items-center p-2.5 lg:p-3 rounded-xl backdrop-blur-sm ${getBoxClass(4)}`}>
-                <div className="flex items-center gap-3">
-                  <div className={`p-2 rounded-lg shrink-0 ${getIconClass(4)}`}><Activity size={16} /></div>
-                  <span className="font-medium text-xs lg:text-sm">Batería y velocidad</span>
-                </div>
-                <div className={`transition-all duration-300 ${loginPhase > 4 ? 'opacity-100 scale-100' : 'opacity-0 scale-50'} ${loginPhase === 5 ? 'text-emerald-200' : 'text-emerald-400'}`}>
-                  <CheckCircle2 size={18} />
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Footer Copy */}
-          <div>
-            <p className="text-blue-200 text-[13px] font-medium mb-0.5">
-              Impulsado por <span className="text-white font-bold">Estrella Eats</span>
-            </p>
-            <p className="text-blue-300/60 text-[10px] font-medium uppercase tracking-wider">
-              Comitán, Chiapas
-            </p>
-          </div>
-        </div>
+      <div className={`hidden lg:flex flex-col w-[55%] bg-black items-center justify-center relative transition-transform duration-1000 ${mounted ? 'translate-x-0' : '-translate-x-12'}`}>
+        <img src="/logo-full.png" alt="Stellar Tracking" className="w-[80%] max-w-lg object-contain" />
       </div>
 
       {/* ─── Panel Derecho (Formulario Limpio) ────────────────────────────────── */}
       {/* ─── Panel Derecho (Formulario Limpio) ────────────────────────────────── */}
       <div
-        className={`flex-1 flex flex-col justify-center items-center px-6 sm:px-12 py-8 transition-all duration-700 bg-white lg:bg-slate-50 overflow-y-auto w-full relative ${mounted ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-8'}`}
+        className={`flex-1 flex flex-col justify-center items-center px-6 sm:px-12 py-8 transition-all duration-700 bg-slate-50 overflow-y-auto w-full relative ${mounted ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-8'}`}
       >
+        {/* Difuminado de transición (Fade de negro a gris claro) */}
+        <div className="hidden lg:block absolute top-0 left-0 w-64 h-full bg-gradient-to-r from-black to-transparent pointer-events-none z-0"></div>
         
         {/* ─── Header Móvil (Ultra Limpio) ─── */}
-        <div className="lg:hidden w-full flex flex-col items-center mb-10 mt-4">
-          <div className="inline-flex items-center gap-2.5 bg-blue-600 px-6 py-2.5 rounded-full mb-3 shadow-md shadow-blue-600/20">
-            <Car className="text-white" size={20} />
-            <span className="text-white font-bold text-[15px]">Estrella Taxis</span>
-          </div>
-          <p className="text-slate-500 text-[13px] font-medium">Panel de Administración</p>
+        <div className="lg:hidden w-full flex flex-col items-center mb-8 mt-4">
+          <img src="/logo.png" alt="Stellar Tracking" className="h-24 filter invert mix-blend-multiply" />
         </div>
 
         {/* ─── Contenedor del Formulario ─── */}

@@ -54,16 +54,12 @@ export default function Sidebar({ onClose }: SidebarProps) {
     <aside className="h-screen w-72 bg-white border-r border-gray-100 flex flex-col shadow-sm flex-shrink-0">
       
       {/* Header del Sidebar */}
-      <div className="p-6 flex items-center gap-3 border-b border-gray-50 relative">
-        <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center text-white shadow-md shadow-blue-500/30">
-          <Car size={20} />
-        </div>
-        <div>
-          <h2 className="text-xl font-bold text-gray-900 tracking-tight">Estrella Taxi</h2>
-          <p className="text-xs text-green-500 font-medium flex items-center gap-1">
-            <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span> Sistema Online
-          </p>
-        </div>
+      <div className="p-6 flex items-center justify-center border-b border-gray-50 relative bg-white">
+        <img 
+          src="/logo.png" 
+          alt="Stellar Tracking" 
+          className="h-24 object-contain filter invert mix-blend-multiply opacity-90 transition-transform hover:scale-105" 
+        />
         {onClose && (
           <button onClick={onClose} className="md:hidden absolute right-4 top-6 text-gray-400 hover:text-gray-600">
             <X size={20} />
