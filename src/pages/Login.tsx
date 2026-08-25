@@ -117,20 +117,20 @@ export default function Login() {
       {/* ─── Panel Derecho (Formulario Limpio) ────────────────────────────────── */}
       {/* ─── Panel Derecho (Formulario Limpio) ────────────────────────────────── */}
       <div
-        className={`flex-1 flex flex-col justify-center items-center px-6 sm:px-12 py-8 transition-all duration-700 bg-slate-50 overflow-y-auto w-full relative z-0 ${mounted ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-8'}`}
+        className={`flex-1 flex flex-col justify-center items-center px-4 sm:px-12 py-8 transition-all duration-700 bg-slate-50 overflow-y-auto w-full relative z-0 ${mounted ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-8'}`}
       >
         {/* Difuminado MEJORADO: transición mucho más suave y ancha */}
         <div className="hidden lg:block absolute top-0 left-0 w-[60%] h-full bg-gradient-to-r from-black via-slate-800/80 to-transparent pointer-events-none z-0"></div>
         <div className="hidden lg:block absolute top-0 left-0 w-[30%] h-full bg-gradient-to-r from-black to-transparent pointer-events-none z-10"></div>
         
-        {/* ─── Header Móvil (Ultra Limpio) ─── */}
-        <div className="lg:hidden w-full flex flex-col items-center mb-8 mt-4">
-          <img src="/logo.png" alt="Stellar Tracking" className="h-24 filter invert mix-blend-multiply" />
+        {/* ─── Header Móvil (Ultra Limpio y Premium) ─── */}
+        <div className="lg:hidden w-full flex flex-col items-center mb-8 mt-2">
+          <img src="/logo.png" alt="Stellar Tracking" className="h-24 object-contain filter invert mix-blend-multiply" />
         </div>
 
         {/* ─── Contenedor del Formulario ─── */}
         <div className="w-full max-w-sm flex flex-col relative z-20">
-          <div className="bg-white lg:p-10 lg:rounded-[2rem] lg:shadow-[0_8px_30px_rgb(0,0,0,0.04)] lg:border lg:border-slate-100/60">
+          <div className="bg-white p-8 lg:p-10 rounded-[2rem] shadow-xl shadow-blue-900/5 lg:shadow-[0_8px_30px_rgb(0,0,0,0.04)] lg:border lg:border-slate-100/60">
             
             <div className="mb-8 text-left lg:text-center">
               <h2 className="text-[28px] lg:text-2xl font-extrabold text-slate-900 tracking-tight leading-tight">Bienvenido de vuelta</h2>
