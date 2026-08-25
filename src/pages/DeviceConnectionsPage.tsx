@@ -8,7 +8,8 @@ interface ConnectionEvent {
   id: number;
   deviceId: number;
   type: string;
-  serverTime: string;
+  serverTime?: string;
+  eventTime?: string;
 }
 
 export default function DeviceConnectionsPage() {
@@ -34,20 +35,23 @@ export default function DeviceConnectionsPage() {
       const fromIso = new Date(dateRange.from).toISOString();
       const toIso = new Date(dateRange.to).toISOString();
 
-      const url = new URL(`${BASE_URL}/reports/events`);
-      url.searchParams.append('deviceId', selectedDeviceId.toString());
-      url.searchParams.append('from', fromIso);
-      url.searchParams.append('to', toIso);
-      // Solo pedir eventos de conexión
-      url.searchParams.append('type', 'deviceOnline');
-      url.searchParams.append('type', 'deviceOffline');
-      url.searchParams.append('type', 'deviceUnknown');
+      const params = new URLSearchParams();
+      params.append('deviceId', selectedDeviceId.toString());
+      params.append('from', fromIso);
+      params.append('to', toIso);
+      params.append('type', 'deviceOnline');
+      params.append('type', 'deviceOffline');
+      params.append('type', 'deviceUnknown');
 
-      const res = await fetch(url.toString(), { credentials: 'include' });
+      const res = await fetch(`${BASE_URL}/reports/events?${params.toString()}`, { 
+        credentials: 'include',
+        headers: { Accept: 'application/json' }
+      });
       if (!res.ok) throw new Error('Error al obtener eventos');
       
       const data = await res.json();
-      setEvents(data.sort((a: any, b: any) => new Date(b.serverTime).getTime() - new Date(a.serverTime).getTime()));
+      const getTime = (e: any) => new Date(e.eventTime || e.serverTime || Date.now()).getTime();
+      setEvents(data.sort((a: any, b: any) => getTime(b) - getTime(a)));
     } catch (err) {
       toast.error('Error al consultar historial de conexiones');
     } finally {
@@ -56,11 +60,14 @@ export default function DeviceConnectionsPage() {
   };
 
   const handleExport = () => {
-    const data = events.map(e => ({
-      Fecha: new Date(e.serverTime).toLocaleDateString(),
-      Hora: new Date(e.serverTime).toLocaleTimeString(),
-      Evento: e.type === 'deviceOnline' ? 'Conectado' : e.type === 'deviceOffline' ? 'Desconectado' : 'Desconocido',
-    }));
+    const data = events.map(e => {
+      const time = e.eventTime || e.serverTime || Date.now();
+      return {
+        Fecha: new Date(time).toLocaleDateString(),
+        Hora: new Date(time).toLocaleTimeString(),
+        Evento: e.type === 'deviceOnline' ? 'Conectado' : e.type === 'deviceOffline' ? 'Desconectado' : 'Desconocido',
+      };
+    });
     exportToExcel(data, `Conexiones_${selectedDeviceId}`);
   };
 
@@ -146,8 +153,8 @@ export default function DeviceConnectionsPage() {
                       </div>
                     </div>
                     <div className="text-right">
-                      <p className="text-sm font-bold text-gray-900">{new Date(ev.serverTime).toLocaleTimeString()}</p>
-                      <p className="text-xs text-gray-500">{new Date(ev.serverTime).toLocaleDateString()}</p>
+                      <p className="text-sm font-bold text-gray-900">{new Date(ev.eventTime || ev.serverTime || Date.now()).toLocaleTimeString()}</p>
+                      <p className="text-xs text-gray-500">{new Date(ev.eventTime || ev.serverTime || Date.now()).toLocaleDateString()}</p>
                     </div>
                   </div>
                 );

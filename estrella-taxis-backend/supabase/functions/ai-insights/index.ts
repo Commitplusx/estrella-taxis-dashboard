@@ -1,4 +1,4 @@
-﻿import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
+import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -19,25 +19,21 @@ serve(async (req) => {
     }
 
     // Build the prompt
-    const systemPrompt = 
-      Eres el Auditor Jefe de Flotilla de Taxis Estrella.
-      Analiza el siguiente reporte de la flotilla y genera un resumen directivo de máximo 4 párrafos en Markdown.
-      Destaca 3 puntos:
-      1. Riesgos de seguridad o anomalías (ej: desconexiones de GPS frecuentes, excesos de velocidad severos).
-      2. Eficiencia operativa (ej: vehículos inactivos, exceso de tiempo de motor encendido sin avanzar).
-      3. Conclusión o recomendación operativa.
-      
-      Usa un tono profesional pero directo, en español.
-      Si todo está normal, dilo claramente. Si hay un conductor que requiere atención, menciónalo.
-    ;
+    const systemPrompt = `Eres el Auditor Jefe de Flotilla de Taxis Estrella.
+Analiza el siguiente reporte de la flotilla y genera un resumen directivo de máximo 4 párrafos en Markdown.
+Destaca 3 puntos:
+1. Riesgos de seguridad o anomalías (ej: desconexiones de GPS frecuentes, excesos de velocidad severos).
+2. Eficiencia operativa (ej: vehículos inactivos, exceso de tiempo de motor encendido sin avanzar).
+3. Conclusión o recomendación operativa.
 
-    const userPrompt = 
-      Resumen de los Taxis (Distancia, V. Promedio, V. Máx, Horas Motor):
-      
-      
-      Eventos y Alertas Relevantes:
-      
-    ;
+Usa un tono profesional pero directo, en español.
+Si todo está normal, dilo claramente. Si hay un conductor que requiere atención, menciónalo.`;
+
+    const userPrompt = `Resumen de los Taxis (Distancia, V. Promedio, V. Máx, Horas Motor):
+${JSON.stringify(summary, null, 2)}
+
+Eventos y Alertas Relevantes:
+${JSON.stringify(events, null, 2)}`;
 
     console.log('Sending request to DeepSeek...');
 
@@ -45,7 +41,7 @@ serve(async (req) => {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': Bearer 
+        'Authorization': `Bearer ${apiKey}`
       },
       body: JSON.stringify({
         model: 'deepseek-chat',
