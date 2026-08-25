@@ -36,8 +36,8 @@ export default function Sidebar({ onClose }: SidebarProps) {
 
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({
-    tools: true,
-    admin: true,
+    tools: window.innerWidth > 768,
+    admin: window.innerWidth > 768,
   });
 
   const toggleSection = (key: string) => {

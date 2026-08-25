@@ -87,16 +87,16 @@ export default function Layout() {
         </div>
         
         {/* BOTTOM NAVIGATION (Mobile Solo) */}
-        <div className="md:hidden absolute bottom-0 left-0 w-full px-2 pb-6 pt-2 bg-transparent z-50 flex justify-center pointer-events-none">
+        <div className={`md:hidden absolute bottom-0 left-0 w-full px-2 pb-6 pt-2 bg-transparent z-50 flex justify-center pointer-events-none transition-all duration-300 ${sidebarOpen ? 'translate-y-[150%] opacity-0' : 'translate-y-0 opacity-100'}`}>
           <nav className="h-[68px] bg-white rounded-full inline-flex justify-center items-center px-4 gap-2 shadow-[0_12px_40px_rgba(0,0,0,0.12)] border border-gray-100 backdrop-blur-lg pointer-events-auto">
             
             <NavLink to="/map" className={({isActive}) => `relative flex flex-col items-center justify-center w-[64px] h-full gap-1 group`}>
               {({isActive}) => (
                 <>
-                  <div className={`p-2 rounded-xl transition-all duration-300 ${isActive ? 'bg-gray-900 text-white shadow-md shadow-gray-900/30 -translate-y-1' : 'text-gray-800 group-hover:bg-gray-100'}`}>
+                  <div className={`p-2 rounded-xl transition-all duration-300 ${isActive && !sidebarOpen ? 'bg-gray-900 text-white shadow-md shadow-gray-900/30 -translate-y-1' : 'text-gray-800 group-hover:bg-gray-100'}`}>
                     <MapIcon size={20} />
                   </div>
-                  <span className={`text-[10px] transition-all duration-300 ${isActive ? 'font-bold text-gray-900 translate-y-0' : 'font-medium text-gray-600'}`}>Mapa</span>
+                  <span className={`text-[10px] transition-all duration-300 ${isActive && !sidebarOpen ? 'font-bold text-gray-900 translate-y-0' : 'font-medium text-gray-600'}`}>Mapa</span>
                 </>
               )}
             </NavLink>
@@ -104,10 +104,10 @@ export default function Layout() {
             <NavLink to="/dashboard" className={({isActive}) => `relative flex flex-col items-center justify-center w-[64px] h-full gap-1 group`}>
               {({isActive}) => (
                 <>
-                  <div className={`p-2 rounded-xl transition-all duration-300 ${isActive ? 'bg-gray-900 text-white shadow-md shadow-gray-900/30 -translate-y-1' : 'text-gray-800 group-hover:bg-gray-100'}`}>
+                  <div className={`p-2 rounded-xl transition-all duration-300 ${isActive && !sidebarOpen ? 'bg-gray-900 text-white shadow-md shadow-gray-900/30 -translate-y-1' : 'text-gray-800 group-hover:bg-gray-100'}`}>
                     <BarChart3 size={20} />
                   </div>
-                  <span className={`text-[10px] transition-all duration-300 ${isActive ? 'font-bold text-gray-900 translate-y-0' : 'font-medium text-gray-600'}`}>Panel</span>
+                  <span className={`text-[10px] transition-all duration-300 ${isActive && !sidebarOpen ? 'font-bold text-gray-900 translate-y-0' : 'font-medium text-gray-600'}`}>Panel</span>
                 </>
               )}
             </NavLink>
@@ -115,19 +115,19 @@ export default function Layout() {
             <NavLink to="/devices" className={({isActive}) => `relative flex flex-col items-center justify-center w-[64px] h-full gap-1 group`}>
               {({isActive}) => (
                 <>
-                  <div className={`p-2 rounded-xl transition-all duration-300 ${isActive ? 'bg-gray-900 text-white shadow-md shadow-gray-900/30 -translate-y-1' : 'text-gray-800 group-hover:bg-gray-100'}`}>
+                  <div className={`p-2 rounded-xl transition-all duration-300 ${isActive && !sidebarOpen ? 'bg-gray-900 text-white shadow-md shadow-gray-900/30 -translate-y-1' : 'text-gray-800 group-hover:bg-gray-100'}`}>
                     <Car size={20} />
                   </div>
-                  <span className={`text-[10px] transition-all duration-300 ${isActive ? 'font-bold text-gray-900 translate-y-0' : 'font-medium text-gray-600'}`}>Taxis</span>
+                  <span className={`text-[10px] transition-all duration-300 ${isActive && !sidebarOpen ? 'font-bold text-gray-900 translate-y-0' : 'font-medium text-gray-600'}`}>Taxis</span>
                 </>
               )}
             </NavLink>
 
             <button onClick={() => setSidebarOpen(true)} className="relative flex flex-col items-center justify-center w-[64px] h-full gap-1 group">
-              <div className="p-2 rounded-xl transition-all duration-300 text-gray-800 group-hover:bg-gray-100">
+              <div className={`p-2 rounded-xl transition-all duration-300 ${sidebarOpen ? 'bg-gray-900 text-white shadow-md shadow-gray-900/30 -translate-y-1' : 'text-gray-800 group-hover:bg-gray-100'}`}>
                 <Settings size={20} />
               </div>
-              <span className="text-[10px] font-medium text-gray-600 transition-all duration-300">Ajustes</span>
+              <span className={`text-[10px] transition-all duration-300 ${sidebarOpen ? 'font-bold text-gray-900 translate-y-0' : 'font-medium text-gray-600'}`}>Ajustes</span>
             </button>
 
           </nav>
