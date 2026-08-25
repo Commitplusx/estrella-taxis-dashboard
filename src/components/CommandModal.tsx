@@ -17,9 +17,12 @@ export function CommandModal({ device, onClose }: { device: TraccarDevice; onClo
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
 
+  const [serverResponse, setServerResponse] = useState<string | null>(null);
+
   const executeSend = async () => {
     setSending(true);
     setSendError(null);
+    setServerResponse(null);
     try {
       const payload: any = { deviceId: device.id, type };
       if (type === 'custom') payload.attributes = { data: customData };
@@ -30,8 +33,21 @@ export function CommandModal({ device, onClose }: { device: TraccarDevice; onClo
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
-      if (!res.ok) throw new Error(await res.text());
-      onClose();
+      
+      const textResponse = await res.text();
+      
+      if (!res.ok) {
+        throw new Error(textResponse || `Error HTTP: ${res.status}`);
+      }
+      
+      // Mostrar la respuesta del servidor en lugar de cerrar de golpe
+      try {
+        const json = JSON.parse(textResponse);
+        setServerResponse(JSON.stringify(json, null, 2));
+      } catch (e) {
+        setServerResponse(textResponse || 'Comando enviado sin respuesta de texto (OK).');
+      }
+      
     } catch (e: any) {
       setSendError(e.message || 'Error desconocido al enviar el comando.');
     } finally {
@@ -82,13 +98,25 @@ export function CommandModal({ device, onClose }: { device: TraccarDevice; onClo
           {sendError && (
             <p className="text-xs text-red-600 bg-red-50 px-3 py-2 rounded-xl border border-red-100">{sendError}</p>
           )}
+          {serverResponse && (
+            <div className="bg-emerald-50 border border-emerald-100 p-3 rounded-xl">
+              <p className="text-xs font-bold text-emerald-800 mb-1">Respuesta del servidor:</p>
+              <pre className="text-[10px] text-emerald-700 font-mono bg-emerald-100/50 p-2 rounded-lg overflow-x-auto whitespace-pre-wrap">
+                {serverResponse}
+              </pre>
+            </div>
+          )}
         </div>
         <div className="p-5 pt-0 flex gap-2">
-          <button onClick={onClose} className="flex-1 px-4 py-2 border border-gray-200 rounded-xl text-sm font-medium hover:bg-gray-50">Cancelar</button>
-          <button onClick={() => setConfirmOpen(true)} disabled={sending}
-            className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-sm font-bold disabled:opacity-50">
-            {sending ? 'Enviando...' : 'Ejecutar'}
+          <button onClick={onClose} className="flex-1 px-4 py-2 border border-gray-200 rounded-xl text-sm font-medium hover:bg-gray-50">
+            {serverResponse ? 'Cerrar' : 'Cancelar'}
           </button>
+          {!serverResponse && (
+            <button onClick={() => setConfirmOpen(true)} disabled={sending}
+              className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-sm font-bold disabled:opacity-50">
+              {sending ? 'Enviando...' : 'Ejecutar'}
+            </button>
+          )}
         </div>
       </div>
 
