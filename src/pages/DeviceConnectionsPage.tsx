@@ -74,7 +74,7 @@ export default function DeviceConnectionsPage() {
   const device = devices.find(d => d.id === selectedDeviceId);
 
   return (
-    <div className="flex flex-col gap-6 h-full p-4 sm:p-6 pb-32 md:pb-10">
+    <div className="h-full overflow-y-auto p-4 sm:p-6 fade-in flex flex-col gap-6 pb-32 md:pb-10">
       <div>
         <h1 className="text-xl font-bold text-gray-900 flex items-center gap-2">
           <Activity size={24} className="text-blue-600" />
@@ -116,8 +116,8 @@ export default function DeviceConnectionsPage() {
         </form>
       </div>
 
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm flex-1 overflow-hidden flex flex-col">
-        <div className="p-4 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm flex flex-col mb-4">
+        <div className="p-4 border-b border-gray-100 flex items-center justify-between bg-gray-50/50 rounded-t-2xl">
           <h2 className="font-bold text-gray-900 text-sm">
             Resultados {device ? `para ${device.name}` : ''}
           </h2>
@@ -129,14 +129,14 @@ export default function DeviceConnectionsPage() {
           )}
         </div>
 
-        <div className="flex-1 overflow-auto p-4">
+        <div className="p-4 sm:p-5">
           {events.length === 0 ? (
-            <div className="h-full flex flex-col items-center justify-center text-gray-400 gap-3">
+            <div className="py-12 flex flex-col items-center justify-center text-gray-400 gap-3">
               <Activity size={32} className="opacity-20" />
               <p className="text-sm font-medium">No hay registros de conexión en estas fechas.</p>
             </div>
           ) : (
-            <div className="space-y-3 max-w-2xl mx-auto">
+            <div className="space-y-3">
               {events.map(ev => {
                 const isOnline = ev.type === 'deviceOnline';
                 return (
