@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Layers, Crosshair, Filter, Zap, Power, Radio, ShieldAlert, Car, Bell } from 'lucide-react';
+import { Layers, Crosshair, Filter, Zap, Power, Radio, ShieldAlert, Car, Bell, Battery, Activity, Route, Map as MapIcon } from 'lucide-react';
 import { loadGoogleMaps } from '../lib/mapsLoader';
 import { api, type TraccarDevice, type TraccarPosition } from '../lib/traccarApi';
 import { useTraccarSocket } from '../hooks/useTraccarSocket';
@@ -154,6 +154,18 @@ export default function MapPage() {
     window.google.maps.event.addListener(infoWindowRef.current, 'closeclick', () => {
       setSelectedDevice(null);
     });
+
+    // Clic en el mapa (fondo): cerrar sheet y hacer zoom out en móvil
+    googleMapRef.current.addListener('click', () => {
+      setSelectedDevice(null);
+      infoWindowRef.current?.close();
+      if (window.innerWidth < 640 && googleMapRef.current) {
+        const currentZoom = googleMapRef.current.getZoom();
+        if (currentZoom) {
+          googleMapRef.current.setZoom(Math.max(currentZoom - 1, 12));
+        }
+      }
+    });
   }, [mapsLoaded]);
 
   // Traer los taxis y sus posiciones desde el servidor
@@ -233,8 +245,14 @@ export default function MapPage() {
         });
         marker.addListener('click', () => {
           setSelectedDevice(device);
-          infoWindowRef.current?.setContent(generateInfoWindowContent(device, pos, isReadonly));
-          infoWindowRef.current?.open(googleMapRef.current!, marker);
+          if (window.innerWidth >= 640) {
+            infoWindowRef.current?.setContent(generateInfoWindowContent(device, pos, isReadonly));
+            infoWindowRef.current?.open(googleMapRef.current!, marker);
+          } else {
+            // Ensure any open InfoWindow is closed on mobile when switching markers
+            infoWindowRef.current?.close();
+            // Eliminamos el panTo para evitar que el mapa se mueva bruscamente
+          }
         });
         markersRef.current.set(device.id, marker);
       }
@@ -248,7 +266,19 @@ export default function MapPage() {
     if (pos) {
       infoWindowRef.current.setContent(generateInfoWindowContent(selectedDevice, pos, isReadonly));
     }
-  }, [positions, selectedDevice]);
+  }, [positions, selectedDevice, isReadonly]);
+
+  // Manejar visibilidad del BottomNav en móviles cuando se abre/cierra una tarjeta
+  useEffect(() => {
+    if (selectedDevice && window.innerWidth < 640) {
+      window.dispatchEvent(new CustomEvent('hideBottomNav'));
+    } else {
+      window.dispatchEvent(new CustomEvent('showBottomNav'));
+    }
+    return () => {
+      window.dispatchEvent(new CustomEvent('showBottomNav'));
+    };
+  }, [selectedDevice]);
 
   // WebSocket — actualizaciones en tiempo real
   const handleWsDevices = useCallback((updated: TraccarDevice[]) => {
@@ -432,6 +462,111 @@ export default function MapPage() {
           </div>
         </div>
       )}
+
+      {/* ─── Bottom Sheet for Mobile Info Window ─── */}
+      <div 
+        className={`sm:hidden fixed inset-x-0 bottom-0 z-[40] transform transition-transform duration-300 ease-[cubic-bezier(0.2,0.8,0.2,1)] ${selectedDevice ? 'translate-y-0' : 'translate-y-[150%]'}`}
+      >
+        {selectedDevice && (
+          <div className="bg-white rounded-t-3xl shadow-[0_-8px_30px_rgba(0,0,0,0.12)] border-t border-gray-100 p-5 pb-8 relative">
+            {/* Handle / Drag bar */}
+            <div className="absolute top-2 left-1/2 -translate-x-1/2 w-12 h-1.5 bg-gray-200 rounded-full"></div>
+            
+            {/* Close button */}
+            <button 
+              onClick={() => { 
+                setSelectedDevice(null); 
+                infoWindowRef.current?.close(); 
+                if (window.innerWidth < 640 && googleMapRef.current) {
+                  const currentZoom = googleMapRef.current.getZoom();
+                  if (currentZoom) googleMapRef.current.setZoom(Math.max(currentZoom - 1, 12));
+                }
+              }}
+              className="absolute top-4 right-4 w-8 h-8 bg-gray-50 rounded-full flex items-center justify-center text-gray-500 hover:bg-gray-100"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </button>
+
+            {(() => {
+              const pos = positions.get(selectedDevice.id);
+              if (!pos) return null;
+              const battery = pos.attributes?.batteryLevel;
+              const ignition = pos.attributes?.ignition;
+              const speed = knotsToKmh(pos.speed || 0);
+              const isMoving = Number(speed) > 2;
+              
+              return (
+                <div className="mt-2">
+                  <div className="flex items-start justify-between pr-8 mb-3">
+                    <div>
+                      <h3 className="text-xl font-bold text-slate-900 leading-tight">{selectedDevice.name}</h3>
+                      <p className="text-xs font-medium text-slate-500 mt-1">
+                        Última señal: {new Date(pos.fixTime).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Status Tags Row */}
+                  <div className="flex flex-wrap items-center gap-2 mb-5">
+                    {/* Online Status */}
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-100 border border-slate-200 text-[11px] font-bold text-slate-600 uppercase">
+                      <span className="w-1.5 h-1.5 rounded-full" style={{backgroundColor: getStatusColor(selectedDevice)}}></span>
+                      {selectedDevice.status}
+                    </span>
+                    
+                    {/* Engine/Movement Status */}
+                    {ignition === true ? (
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-emerald-50 border border-emerald-200 text-[11px] font-bold text-emerald-700">
+                        <Power size={12} /> Motor Encendido
+                      </span>
+                    ) : ignition === false ? (
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-red-50 border border-red-200 text-[11px] font-bold text-red-700">
+                        <Power size={12} /> Motor Apagado
+                      </span>
+                    ) : isMoving ? (
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-blue-50 border border-blue-200 text-[11px] font-bold text-blue-700">
+                        <Activity size={12} /> En Movimiento
+                      </span>
+                    ) : null}
+
+                    {/* Battery */}
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-100 border border-slate-200 text-[11px] font-bold text-slate-600">
+                      <Battery size={12} style={{color: getBatteryColor(battery)}} /> 
+                      {battery ?? '--'}%
+                    </span>
+                  </div>
+
+                  {/* Speed Highlight */}
+                  <div className="flex items-center gap-4 p-4 bg-slate-50 rounded-2xl border border-slate-100 mb-5">
+                    <div className="flex items-baseline gap-1">
+                      <span className="text-3xl font-black text-slate-800 tracking-tight">{speed}</span>
+                      <span className="text-xs font-bold text-slate-400">km/h</span>
+                    </div>
+                    {pos.address && (
+                      <div className="flex-1 text-right text-[11px] text-slate-500 leading-tight border-l border-slate-200 pl-4 line-clamp-2">
+                        <strong className="text-slate-700 block mb-0.5">📍 Ubicación</strong>
+                        {pos.address.split(',')[0]}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Action Buttons */}
+                  <div className="flex gap-3">
+                    {!isReadonly && (
+                      <button onClick={() => setCommandDevice(selectedDevice)} className="flex-1 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 font-semibold text-[13px] py-3.5 rounded-xl flex items-center justify-center gap-2 active:scale-95 transition-all shadow-sm">
+                        <Zap size={16} className="text-yellow-500 fill-yellow-500" /> Comandos
+                      </button>
+                    )}
+                    <button onClick={() => window.dispatchEvent(new CustomEvent('viewMapRoute', {detail: selectedDevice.id}))} className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-[13px] py-3.5 rounded-xl flex items-center justify-center gap-2 active:scale-95 transition-all shadow-sm shadow-blue-600/20">
+                      <Route size={16} /> Ver Ruta
+                    </button>
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
