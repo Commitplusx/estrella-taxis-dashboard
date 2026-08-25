@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { BASE_URL, type TraccarDevice } from '../lib/traccarApi';
 import { X, ShieldAlert, ZapOff, Zap, MapPin, Code } from 'lucide-react';
 import { ConfirmDialog } from './ConfirmDialog';
+import toast from 'react-hot-toast';
 
 const COMMANDS = [
   { value: 'engineStop', label: 'Apagar Motor (Corte de corriente)', icon: <ZapOff size={16} /> },
@@ -17,12 +18,9 @@ export function CommandModal({ device, onClose }: { device: TraccarDevice; onClo
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
 
-  const [serverResponse, setServerResponse] = useState<string | null>(null);
-
   const executeSend = async () => {
     setSending(true);
     setSendError(null);
-    setServerResponse(null);
     try {
       const payload: any = { deviceId: device.id, type };
       if (type === 'custom') payload.attributes = { data: customData };
@@ -34,19 +32,12 @@ export function CommandModal({ device, onClose }: { device: TraccarDevice; onClo
         body: JSON.stringify(payload)
       });
       
-      const textResponse = await res.text();
-      
       if (!res.ok) {
-        throw new Error(textResponse || `Error HTTP: ${res.status}`);
+        throw new Error(await res.text() || `Error HTTP: ${res.status}`);
       }
       
-      // Mostrar la respuesta del servidor en lugar de cerrar de golpe
-      try {
-        const json = JSON.parse(textResponse);
-        setServerResponse(JSON.stringify(json, null, 2));
-      } catch (e) {
-        setServerResponse(textResponse || 'Comando enviado sin respuesta de texto (OK).');
-      }
+      toast.success('Comando enviado con éxito');
+      onClose();
       
     } catch (e: any) {
       setSendError(e.message || 'Error desconocido al enviar el comando.');
@@ -57,8 +48,10 @@ export function CommandModal({ device, onClose }: { device: TraccarDevice; onClo
 
   return (
     <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-[9999]">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden animate-fade-in">
-        <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between bg-red-50/50">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm flex flex-col max-h-[90vh] animate-fade-in">
+        
+        {/* Header - Fijo */}
+        <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between bg-red-50/50 shrink-0 rounded-t-2xl">
           <h2 className="text-sm font-bold text-red-900 flex items-center gap-2">
             <ShieldAlert size={16} className="text-red-600" />
             Comandos Remotos
@@ -67,7 +60,9 @@ export function CommandModal({ device, onClose }: { device: TraccarDevice; onClo
             <X size={16} />
           </button>
         </div>
-        <div className="p-5 space-y-5">
+
+        {/* Body - Scrolleable */}
+        <div className="p-5 space-y-5 overflow-y-auto min-h-0 flex-1">
           <div>
             <label className="block text-xs font-bold text-gray-600 mb-1">Taxi seleccionado:</label>
             <div className="text-sm font-semibold text-gray-900 bg-gray-50 px-3 py-2 rounded-lg border border-gray-100">
@@ -98,25 +93,17 @@ export function CommandModal({ device, onClose }: { device: TraccarDevice; onClo
           {sendError && (
             <p className="text-xs text-red-600 bg-red-50 px-3 py-2 rounded-xl border border-red-100">{sendError}</p>
           )}
-          {serverResponse && (
-            <div className="bg-emerald-50 border border-emerald-100 p-3 rounded-xl">
-              <p className="text-xs font-bold text-emerald-800 mb-1">Respuesta del servidor:</p>
-              <pre className="text-[10px] text-emerald-700 font-mono bg-emerald-100/50 p-2 rounded-lg overflow-x-auto whitespace-pre-wrap">
-                {serverResponse}
-              </pre>
-            </div>
-          )}
         </div>
-        <div className="p-5 pt-0 flex gap-2">
+
+        {/* Footer - Fijo */}
+        <div className="p-5 pt-4 border-t border-gray-100 flex gap-2 shrink-0">
           <button onClick={onClose} className="flex-1 px-4 py-2 border border-gray-200 rounded-xl text-sm font-medium hover:bg-gray-50">
-            {serverResponse ? 'Cerrar' : 'Cancelar'}
+            Cancelar
           </button>
-          {!serverResponse && (
-            <button onClick={() => setConfirmOpen(true)} disabled={sending}
-              className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-sm font-bold disabled:opacity-50">
-              {sending ? 'Enviando...' : 'Ejecutar'}
-            </button>
-          )}
+          <button onClick={() => setConfirmOpen(true)} disabled={sending}
+            className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-sm font-bold disabled:opacity-50 shadow-sm shadow-red-600/20">
+            {sending ? 'Enviando...' : 'Ejecutar'}
+          </button>
         </div>
       </div>
 
