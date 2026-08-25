@@ -170,18 +170,54 @@ export default function MapPage() {
 
   // Traer los taxis y sus posiciones desde el servidor
   useEffect(() => {
-    async function load() {
+    let interval: ReturnType<typeof setInterval>;
+    
+    async function fetchPositions() {
+      try {
+        const [devs, pos] = await Promise.all([api.getDevices(), api.getPositions()]);
+        
+        // Actualizar dispositivos (estado online/offline, etc.)
+        setDevices(prev => {
+          const copy = [...prev];
+          devs.forEach(u => {
+            const idx = copy.findIndex(d => d.id === u.id);
+            if (idx !== -1) copy[idx] = { ...copy[idx], ...u };
+            else copy.push(u); // Si hay un dispositivo nuevo
+          });
+          return copy;
+        });
+
+        // Actualizar posiciones
+        setPositions(prev => {
+          const next = new Map(prev);
+          pos.forEach(p => next.set(p.deviceId, p));
+          return next;
+        });
+      } catch (e) {
+        console.error('Error polling positions:', e);
+      }
+    }
+
+    async function loadInitial() {
       try {
         const [devs, pos] = await Promise.all([api.getDevices(), api.getPositions()]);
         setDevices(devs);
         const posMap = new Map<number, TraccarPosition>();
         pos.forEach(p => posMap.set(p.deviceId, p));
         setPositions(posMap);
+        
+        // Empezar a hacer polling cada 5 segundos como respaldo infalible al WebSocket
+        interval = setInterval(fetchPositions, 5000);
       } catch (e: any) {
         setLoadError(e.message || 'Error al cargar los datos del mapa.');
       }
     }
-    load();
+    
+    loadInitial();
+    
+    return () => {
+      if (interval) clearInterval(interval);
+    };
   }, []);
 
   // Auto-ajustar mapa a los marcadores
