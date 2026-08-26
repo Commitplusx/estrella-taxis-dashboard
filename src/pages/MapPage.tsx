@@ -261,18 +261,23 @@ export default function MapPage() {
     });
   }, [devices, positions, mapsLoaded]);
 
-  // Actualizar la ventana de info en tiempo real si el coche se mueve
+  // Derived state: siempre usar la versión más fresca del dispositivo para evitar closures viejos
+  const currentSelectedDevice = selectedDevice 
+    ? (devices.find(d => d.id === selectedDevice.id) || selectedDevice) 
+    : null;
+
+  // Actualizar la ventana de info en tiempo real si el coche se mueve o cambia de estado
   useEffect(() => {
-    if (!selectedDevice || !infoWindowRef.current) return;
-    const pos = positions.get(selectedDevice.id);
-    if (pos) {
-      infoWindowRef.current.setContent(generateInfoWindowContent(selectedDevice, pos, isReadonly));
+    if (!currentSelectedDevice || !infoWindowRef.current) return;
+    const pos = positions.get(currentSelectedDevice.id);
+    if (pos && window.innerWidth >= 640) {
+      infoWindowRef.current.setContent(generateInfoWindowContent(currentSelectedDevice, pos, isReadonly));
     }
-  }, [positions, selectedDevice, isReadonly]);
+  }, [positions, currentSelectedDevice, isReadonly]);
 
   // Manejar visibilidad del BottomNav en móviles cuando se abre/cierra una tarjeta
   useEffect(() => {
-    if (selectedDevice && window.innerWidth < 640) {
+    if (currentSelectedDevice && window.innerWidth < 640) {
       window.dispatchEvent(new CustomEvent('hideBottomNav'));
     } else {
       window.dispatchEvent(new CustomEvent('showBottomNav'));
@@ -468,9 +473,9 @@ export default function MapPage() {
 
       {/* ─── Bottom Sheet for Mobile Info Window ─── */}
       <div 
-        className={`sm:hidden fixed inset-x-0 bottom-0 z-[40] transform transition-transform duration-300 ease-[cubic-bezier(0.2,0.8,0.2,1)] ${selectedDevice ? 'translate-y-0' : 'translate-y-[150%]'}`}
+        className={`sm:hidden fixed inset-x-0 bottom-0 z-[40] transform transition-transform duration-300 ease-[cubic-bezier(0.2,0.8,0.2,1)] ${currentSelectedDevice ? 'translate-y-0' : 'translate-y-[150%]'}`}
       >
-        {selectedDevice && (
+        {currentSelectedDevice && (
           <div className="bg-white rounded-t-3xl shadow-[0_-8px_30px_rgba(0,0,0,0.12)] border-t border-gray-100 p-5 pb-8 relative">
             {/* Handle / Drag bar */}
             <div className="absolute top-2 left-1/2 -translate-x-1/2 w-12 h-1.5 bg-gray-200 rounded-full"></div>
@@ -491,7 +496,7 @@ export default function MapPage() {
             </button>
 
             {(() => {
-              const pos = positions.get(selectedDevice.id);
+              const pos = positions.get(currentSelectedDevice.id);
               if (!pos) return null;
               const battery = pos.attributes?.batteryLevel;
               const ignition = pos.attributes?.ignition;
@@ -502,7 +507,7 @@ export default function MapPage() {
                 <div className="mt-2">
                   <div className="flex items-start justify-between pr-8 mb-3">
                     <div>
-                      <h3 className="text-xl font-bold text-slate-900 leading-tight">{selectedDevice.name}</h3>
+                      <h3 className="text-xl font-bold text-slate-900 leading-tight">{currentSelectedDevice.name}</h3>
                       <p className="text-xs font-medium text-slate-500 mt-1">
                         Última señal: {new Date(pos.fixTime).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
                       </p>
@@ -513,8 +518,8 @@ export default function MapPage() {
                   <div className="flex flex-wrap items-center gap-2 mb-5">
                     {/* Online Status */}
                     <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-100 border border-slate-200 text-[11px] font-bold text-slate-600 uppercase">
-                      <span className="w-1.5 h-1.5 rounded-full" style={{backgroundColor: getStatusColor(selectedDevice)}}></span>
-                      {selectedDevice.status}
+                      <span className="w-1.5 h-1.5 rounded-full" style={{backgroundColor: getStatusColor(currentSelectedDevice)}}></span>
+                      {currentSelectedDevice.status}
                     </span>
                     
                     {/* Engine/Movement Status */}
@@ -556,11 +561,11 @@ export default function MapPage() {
                   {/* Action Buttons */}
                   <div className="flex gap-3">
                     {!isReadonly && (
-                      <button onClick={() => setCommandDevice(selectedDevice)} className="flex-1 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 font-semibold text-[13px] py-3.5 rounded-xl flex items-center justify-center gap-2 active:scale-95 transition-all shadow-sm">
+                      <button onClick={() => setCommandDevice(currentSelectedDevice)} className="flex-1 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 font-semibold text-[13px] py-3.5 rounded-xl flex items-center justify-center gap-2 active:scale-95 transition-all shadow-sm">
                         <Zap size={16} className="text-yellow-500 fill-yellow-500" /> Comandos
                       </button>
                     )}
-                    <button onClick={() => window.dispatchEvent(new CustomEvent('viewMapRoute', {detail: selectedDevice.id}))} className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-[13px] py-3.5 rounded-xl flex items-center justify-center gap-2 active:scale-95 transition-all shadow-sm shadow-blue-600/20">
+                    <button onClick={() => window.dispatchEvent(new CustomEvent('viewMapRoute', {detail: currentSelectedDevice.id}))} className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-[13px] py-3.5 rounded-xl flex items-center justify-center gap-2 active:scale-95 transition-all shadow-sm shadow-blue-600/20">
                       <Route size={16} /> Ver Ruta
                     </button>
                   </div>
