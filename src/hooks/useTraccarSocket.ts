@@ -54,13 +54,11 @@ async function connectGlobalWs() {
   
   const wsUrl = `${wsProtocol}//${wsHost}/api/socket${token ? `?token=${token}` : ''}`;
   
-  console.log(`[Traccar WS Global] Intentando conectar a: ${wsUrl}`);
   const ws = new WebSocket(wsUrl);
   globalWs = ws;
 
   ws.onopen = () => {
     isConnecting = false;
-    console.log('[Traccar WS Global] Conectado');
     globalReconnectDelay = 3_000;
     // Avisar a todos los componentes montados que estamos conectados
     listeners.forEach(l => l.onConnect?.());
@@ -86,15 +84,13 @@ async function connectGlobalWs() {
   ws.onclose = () => {
     isConnecting = false;
     if (forceDestroy) return;
-    console.log(`[Traccar WS Global] Desconectado. Reconectando en ${globalReconnectDelay / 1000}s...`);
     globalReconnectTimer = setTimeout(() => {
       globalReconnectDelay = Math.min(globalReconnectDelay * 2, MAX_RECONNECT_DELAY_MS);
       connectGlobalWs();
     }, globalReconnectDelay);
   };
 
-  ws.onerror = (err) => {
-    console.error('[Traccar WS Global] Error:', err);
+  ws.onerror = () => {
     ws.close();
   };
 }
