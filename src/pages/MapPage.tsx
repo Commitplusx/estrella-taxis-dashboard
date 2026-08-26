@@ -445,6 +445,25 @@ export default function MapPage() {
       return next.slice(0, 50); // Keep last 50 events
     });
     
+    // Si hay eventos de encendido/apagado, parchar la posición en memoria para que la UI se actualice instantáneamente
+    let ignitionChanged = false;
+    newEvents.forEach(ev => {
+      if (ev.type === 'ignitionOn' || ev.type === 'ignitionOff') {
+        setPositions(prev => {
+          const pos = prev.get(ev.deviceId);
+          if (pos) {
+            const nextMap = new Map(prev);
+            nextMap.set(ev.deviceId, {
+              ...pos,
+              attributes: { ...pos.attributes, ignition: ev.type === 'ignitionOn' }
+            });
+            return nextMap;
+          }
+          return prev;
+        });
+      }
+    });
+
     // Disparar una notificación visual (Toast) si hay un evento importante
     if (newEvents.length > 0) {
       const ev = newEvents[0];
