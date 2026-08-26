@@ -92,6 +92,9 @@ export default function MapPage() {
 
   const [devices, setDevices] = useState<TraccarDevice[]>([]);
   const [positions, setPositions] = useState<Map<number, TraccarPosition>>(new Map());
+  // Ref en espejo del state, para leer datos frescos dentro de callbacks imperativos sin stale closure
+  const positionsRef = useRef<Map<number, TraccarPosition>>(new Map());
+  const devicesRef = useRef<TraccarDevice[]>([]);
   const [selectedDevice, setSelectedDevice] = useState<TraccarDevice | null>(null);
   const [commandDevice, setCommandDevice] = useState<TraccarDevice | null>(null);
   const [mapsLoaded, setMapsLoaded] = useState(false);
@@ -175,9 +178,11 @@ export default function MapPage() {
     isFetchingRef.current = true;
     try {
       const [devs, pos] = await Promise.all([api.getDevices(), api.getPositions()]);
-      setDevices(devs);
+      devicesRef.current = devs;
       const posMap = new Map<number, TraccarPosition>();
       pos.forEach(p => posMap.set(p.deviceId, p));
+      positionsRef.current = posMap;
+      setDevices(devs);
       setPositions(posMap);
     } catch (e: any) {
       setLoadError(e.message || 'Error al cargar los datos del mapa.');
@@ -293,21 +298,57 @@ export default function MapPage() {
   }, [selectedDevice]);
 
   // WebSocket — actualizaciones en tiempo real
+  // Función auxiliar: actualiza UN marcador de Google Maps de forma imperativa (sin pasar por React)
+  const updateMarkerImperative = useCallback((device: TraccarDevice, pos: TraccarPosition) => {
+    if (!googleMapRef.current || !window.google?.maps) return;
+    const latLng = { lat: pos.latitude, lng: pos.longitude };
+    const isMoving = (pos.speed || 0) > 0.5;
+    const color = device.status === 'online' ? (isMoving ? '#1d4ed8' : '#16a34a') : '#94a3b8';
+    const svgMarker = {
+      path: 'M 12 2 L 22 22 L 12 17 L 2 22 Z',
+      fillColor: color,
+      fillOpacity: 1,
+      strokeColor: '#ffffff',
+      strokeWeight: 2.5,
+      scale: 1.2,
+      anchor: new window.google.maps.Point(12, 12),
+      rotation: pos.course || 0,
+    };
+    const marker = markersRef.current.get(device.id);
+    if (marker) {
+      marker.setPosition(latLng);
+      marker.setIcon(svgMarker);
+    }
+  }, []);
+
   const handleWsDevices = useCallback((updated: TraccarDevice[]) => {
     setDevices(prev => {
       const map = new Map(prev.map(d => [d.id, d]));
       updated.forEach(d => map.set(d.id, d));
-      return Array.from(map.values());
+      const next = Array.from(map.values());
+      devicesRef.current = next;
+      // Actualizar color de marcadores inmediatamente (estado online/offline cambia color)
+      updated.forEach(d => {
+        const pos = positionsRef.current.get(d.id);
+        if (pos) updateMarkerImperative(d, pos);
+      });
+      return next;
     });
-  }, []);
+  }, [updateMarkerImperative]);
 
   const handleWsPositions = useCallback((updated: TraccarPosition[]) => {
     setPositions(prev => {
-      const map = new Map(prev);
-      updated.forEach(p => map.set(p.deviceId, p));
-      return map;
+      const next = new Map(prev);
+      updated.forEach(p => {
+        next.set(p.deviceId, p);
+        positionsRef.current.set(p.deviceId, p);
+        // Mover el marcador de Google Maps INMEDIATAMENTE, sin esperar a React
+        const device = devicesRef.current.find(d => d.id === p.deviceId);
+        if (device) updateMarkerImperative(device, p);
+      });
+      return next;
     });
-  }, []);
+  }, [updateMarkerImperative]);
 
   const handleWsEvents = useCallback((newEvents: any[]) => {
     setRealtimeEvents(prev => {
