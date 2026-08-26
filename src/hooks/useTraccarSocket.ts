@@ -70,14 +70,6 @@ export function useTraccarSocket({ onDevices, onPositions, onEvents, onConnect }
         console.log('[Traccar WS] Conectado');
         reconnectDelay.current = 3_000;
         if (onConnectRef.current) onConnectRef.current(); // Pedir datos frescos al servidor!
-        
-        // Mantener viva la conexión a través de Nginx enviando ping cada 30 segs
-        if (pingInterval.current) clearInterval(pingInterval.current);
-        pingInterval.current = setInterval(() => {
-          if (ws.readyState === WebSocket.OPEN) {
-            ws.send('{}');
-          }
-        }, 30_000);
       };
 
       ws.onmessage = (event) => {
@@ -100,7 +92,6 @@ export function useTraccarSocket({ onDevices, onPositions, onEvents, onConnect }
 
       ws.onclose = () => {
         if (destroyed) return;
-        if (pingInterval.current) clearInterval(pingInterval.current);
         // Si se cae, esperamos cada vez más tiempo para no saturar a Traccar
         console.log(`[Traccar WS] Desconectado. Reconectando en ${reconnectDelay.current / 1000}s...`);
         reconnectTimer.current = setTimeout(() => {
@@ -121,13 +112,6 @@ export function useTraccarSocket({ onDevices, onPositions, onEvents, onConnect }
         if (reconnectTimer.current) clearTimeout(reconnectTimer.current);
         reconnectDelay.current = 3_000;
         connect();
-      } else if (wsRef.current.readyState === WebSocket.OPEN) {
-        try {
-          wsRef.current.send('{}'); // Traccar WS Ping
-        } catch (e) {
-          console.log('[Traccar WS] Ping falló, forzando reconexión');
-          wsRef.current.close();
-        }
       }
     };
 
@@ -146,7 +130,6 @@ export function useTraccarSocket({ onDevices, onPositions, onEvents, onConnect }
       document.removeEventListener('visibilitychange', onVisibilityChange);
       
       if (reconnectTimer.current) clearTimeout(reconnectTimer.current);
-      if (pingInterval.current) clearInterval(pingInterval.current);
       if (wsRef.current) {
         wsRef.current.onclose = null; // Evitar que se lance el reconnectTimer tras desmontar
         wsRef.current.close();
