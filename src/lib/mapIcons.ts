@@ -20,6 +20,7 @@ export const VEHICLE_CATEGORIES: {
   value: string;
   label: string;
   path: string;
+  image?: string;
   anchor: [number, number];
   scale?: number;
 }[] = [
@@ -27,28 +28,30 @@ export const VEHICLE_CATEGORIES: {
   {
     value: 'default',
     label: 'Taxi / Auto',
-    path: 'M 12 2 L 21 21 L 12 16 L 3 21 Z',
+    path: 'M 6 6 C 6 2 18 2 18 6 L 18 18 C 18 22 6 22 6 18 Z M 8 7 L 8.5 11 L 15.5 11 L 16 7 Z M 8.5 14 L 8 17 L 16 17 L 15.5 14 Z',
+    image: '/taxi.png',
     anchor: [12, 12],
   },
   {
     value: 'car',
     label: 'Automóvil',
-    path: 'M 12 2 L 21 21 L 12 16 L 3 21 Z',
+    path: 'M 6 6 C 6 2 18 2 18 6 L 18 18 C 18 22 6 22 6 18 Z M 8 7 L 8.5 11 L 15.5 11 L 16 7 Z M 8.5 14 L 8 17 L 16 17 L 15.5 14 Z',
+    image: '/taxi.png',
     anchor: [12, 12],
   },
   {
     value: 'pickup',
     label: 'Camioneta',
-    path: 'M 12 2 L 21 21 L 12 16 L 3 21 Z',
-    anchor: [12, 12],
-    scale: 1.2,
+    path: 'M 6 5 C 6 2 18 2 18 5 L 18 21 C 18 22 6 22 6 21 Z M 8 6 L 8.5 10 L 15.5 10 L 16 6 Z M 7 12 L 7 20 L 17 20 L 17 12 Z',
+    anchor: [12, 13],
+    scale: 1.1,
   },
   {
     value: 'offroad',
     label: 'Todoterreno',
-    path: 'M 12 2 L 21 21 L 12 16 L 3 21 Z',
-    anchor: [12, 12],
-    scale: 1.1,
+    path: 'M 5 5 C 5 3 19 3 19 5 L 19 20 C 19 22 5 22 5 20 Z M 7 6 L 7 11 L 17 11 L 17 6 Z M 7 13 L 7 19 L 17 19 L 17 13 Z',
+    anchor: [12, 13],
+    scale: 1.0,
   },
   {
     value: 'van',
@@ -65,18 +68,20 @@ export const VEHICLE_CATEGORIES: {
     scale: 0.9,
   },
 
-  // ── Motos ─────────────────────────────────────────────────
+  // ── Motos / Ligeros ───────────────────────────────────────
   {
     value: 'motorcycle',
     label: 'Motocicleta',
-    path: 'M 12 2 L 16 22 L 12 18 L 8 22 Z',
+    path: 'M 10 4 C 10 2 14 2 14 4 L 14 20 C 14 22 10 22 10 20 Z M 8 7 L 8 9 L 16 9 L 16 7 Z',
     anchor: [12, 12],
+    scale: 0.9,
   },
   {
     value: 'scooter',
     label: 'Scooter',
-    path: 'M 12 2 L 15 22 L 12 18 L 9 22 Z',
+    path: 'M 10 4 C 10 2 14 2 14 4 L 14 20 C 14 22 10 22 10 20 Z M 8 7 L 8 9 L 16 9 L 16 7 Z',
     anchor: [12, 12],
+    scale: 0.8,
   },
   {
     value: 'bicycle',
@@ -222,9 +227,17 @@ export function getMarkerIcon(
   course: number,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   googleMaps: typeof google.maps,
-): google.maps.Symbol {
+): google.maps.Symbol | google.maps.Icon {
   const def = getCategoryDef(category);
   const color = getMarkerColor(status, speed);
+
+  if (def.image) {
+    return {
+      url: def.image,
+      scaledSize: new googleMaps.Size(40, 40),
+      anchor: new googleMaps.Point(20, 20),
+    };
+  }
 
   return {
     path: def.path,

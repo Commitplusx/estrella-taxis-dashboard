@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Layers, Crosshair, Filter, Zap, Power, Radio, ShieldAlert, Car, Bell, Battery, Activity, Route, Map as MapIcon } from 'lucide-react';
+import { Layers, Crosshair, Filter, Zap, Power, Radio, ShieldAlert, Car, Bell, Battery, Activity, Route, Map as MapIcon, MapPin, X, Wifi, WifiOff, Play, Square, Terminal, CheckCircle2, Key } from 'lucide-react';
 import { loadGoogleMaps } from '../lib/mapsLoader';
 import { api, type TraccarDevice, type TraccarPosition } from '../lib/traccarApi';
 import { useTraccarSocket } from '../hooks/useTraccarSocket';
@@ -26,7 +26,19 @@ function getStatusColor(device: TraccarDevice) {
   return '#f59e0b';
 }
 
-function generateInfoWindowContent(device: TraccarDevice, pos: TraccarPosition, isReadonly: boolean = false) {
+function formatRelativeTime(dateStr: string) {
+  const d = new Date(dateStr);
+  const now = new Date();
+  const diffMins = Math.round((now.getTime() - d.getTime()) / 60000);
+  
+  if (diffMins < 1) return 'Hace unos segundos';
+  if (diffMins < 60) return `Hace ${diffMins} min`;
+  const diffHours = Math.floor(diffMins / 60);
+  if (diffHours < 24) return `Hace ${diffHours} h`;
+  return `Hace ${Math.floor(diffHours / 24)} días`;
+}
+
+export function generateInfoWindowContent(device: TraccarDevice, pos: TraccarPosition, isReadonly: boolean = false, isFollowing: boolean = false) {
   const battery = pos.attributes?.batteryLevel;
   const ignition = pos.attributes?.ignition;
   const speed = knotsToKmh(pos.speed || 0);
@@ -62,8 +74,9 @@ function generateInfoWindowContent(device: TraccarDevice, pos: TraccarPosition, 
 
       ${pos.address ? `<div style="margin-top:10px;font-size:11px;color:#64748b;line-height:1.4"><strong style="color:#475569">📍 Dirección:</strong><br/>${pos.address.split(',')[0]}</div>` : ''}
       
-      <div style="margin-top:10px;padding-top:8px;border-top:1px solid #f1f5f9;font-size:10px;color:#94a3b8">
-        Última señal: ${new Date(pos.fixTime).toLocaleTimeString()}
+      <div style="margin-top:10px;padding-top:8px;border-top:1px solid #f1f5f9;font-size:10px;color:#94a3b8;display:flex;justify-content:space-between;">
+        <span>Última señal:</span>
+        <strong style="color:#475569">${formatRelativeTime(pos.serverTime)}</strong>
       </div>
       
       <div style="display:flex;gap:6px;margin-top:12px">
@@ -72,8 +85,8 @@ function generateInfoWindowContent(device: TraccarDevice, pos: TraccarPosition, 
           ⚡ Comandos
         </button>
         ` : ''}
-        <button onclick="window.dispatchEvent(new CustomEvent('viewMapRoute', {detail: ${device.id}}))" style="flex:1; background:#e0e7ff; color:#4338ca; border:none; padding:8px 0; border-radius:8px; font-size:11px; font-weight:bold; cursor:pointer; display:flex; align-items:center; justify-content:center;">
-          🗺️ Ver Ruta
+        <button onclick="window.dispatchEvent(new CustomEvent('followDevice', {detail: ${device.id}}))" style="flex:1; background:${isFollowing ? '#fee2e2' : '#e0e7ff'}; color:${isFollowing ? '#b91c1c' : '#4338ca'}; border:none; padding:8px 0; border-radius:8px; font-size:11px; font-weight:bold; cursor:pointer; display:flex; align-items:center; justify-content:center;">
+          ${isFollowing ? '✋ Dejar de seguir' : '📍 Seguir Taxi'}
         </button>
       </div>
     </div>
@@ -98,13 +111,21 @@ export default function MapPage() {
   const devicesRef = useRef<TraccarDevice[]>([]);
   const [selectedDevice, setSelectedDevice] = useState<TraccarDevice | null>(null);
   const [commandDevice, setCommandDevice] = useState<TraccarDevice | null>(null);
+  const [followingDeviceId, setFollowingDeviceId] = useState<number | null>(null);
+  const followingDeviceIdRef = useRef<number | null>(null);
   const [mapsLoaded, setMapsLoaded] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [nowTick, setNowTick] = useState(Date.now());
   const [showMobileEvents, setShowMobileEvents] = useState(false);
   
   // Events Drawer
   const [realtimeEvents, setRealtimeEvents] = useState<any[]>([]);
   const [toastEvent, setToastEvent] = useState<{ id: string, title: string, message: string } | null>(null);
+
+  // Sincronizar state con ref para usarlo dentro del websocket callback
+  useEffect(() => {
+    followingDeviceIdRef.current = followingDeviceId;
+  }, [followingDeviceId]);
 
   // Escuchar eventos globales desde los botones del InfoWindow HTML
   useEffect(() => {
@@ -112,20 +133,33 @@ export default function MapPage() {
       const dev = devices.find(d => d.id === e.detail);
       if (dev) setCommandDevice(dev);
     };
-    const handleViewRoute = (e: any) => {
-      navigate('/reports?deviceId=' + e.detail);
+    const handleFollowDevice = (e: any) => {
+      setFollowingDeviceId(prev => {
+        if (prev === e.detail) return null; // toggle off
+        const pos = positionsRef.current.get(e.detail);
+        if (pos && googleMapRef.current) {
+          googleMapRef.current.panTo({ lat: pos.latitude, lng: pos.longitude });
+          googleMapRef.current.setZoom(17);
+        }
+        return e.detail;
+      });
+      // Cerrar la ventana de info para dejar la vista limpia
+      infoWindowRef.current?.close();
+      setSelectedDevice(null);
     };
     window.addEventListener('openMapCommands', handleOpenCommands);
-    window.addEventListener('viewMapRoute', handleViewRoute);
+    window.addEventListener('followDevice', handleFollowDevice);
     return () => {
       window.removeEventListener('openMapCommands', handleOpenCommands);
-      window.removeEventListener('viewMapRoute', handleViewRoute);
+      window.removeEventListener('followDevice', handleFollowDevice);
     };
   }, [devices, navigate]);
 
-  // Cargar Google Maps
+  // Cargar Google Maps y Ticker
   useEffect(() => {
     loadGoogleMaps().then(() => setMapsLoaded(true)).catch(console.error);
+    const interval = setInterval(() => setNowTick(Date.now()), 60000);
+    return () => clearInterval(interval);
   }, []);
 
   // Inicializar mapa: registramos el evento de cierre del popup una sola vez
@@ -170,6 +204,31 @@ export default function MapPage() {
         }
       }
     });
+
+    // Ocultar etiquetas si hay mucho zoom out para no amontonar
+    const zoomListener = googleMapRef.current.addListener('zoom_changed', () => {
+      const zoom = googleMapRef.current?.getZoom() || 13;
+      if (mapRef.current) {
+        if (zoom < 14) {
+          mapRef.current.classList.add('hide-marker-labels');
+        } else {
+          mapRef.current.classList.remove('hide-marker-labels');
+        }
+      }
+    });
+
+    // Detectar si el usuario arrastra el mapa manualmente para desactivar el modo seguimiento
+    const handleDragStart = () => {
+      if (followingDeviceIdRef.current !== null) {
+        setFollowingDeviceId(null);
+      }
+    };
+    const dragListener = googleMapRef.current.addListener('dragstart', handleDragStart);
+
+    return () => {
+      window.google.maps.event.removeListener(zoomListener);
+      window.google.maps.event.removeListener(dragListener);
+    };
   }, [mapsLoaded]);
 
   // Traer los taxis y sus posiciones desde el servidor
@@ -185,6 +244,22 @@ export default function MapPage() {
       positionsRef.current = posMap;
       setDevices(devs);
       setPositions(posMap);
+
+      // Precargar los últimos eventos (ej. últimas 12 horas) para que el panel no esté vacío
+      if (devs.length > 0) {
+        const d = new Date();
+        const to = d.toISOString();
+        d.setHours(d.getHours() - 12);
+        const from = d.toISOString();
+        const deviceIds = devs.slice(0, 40).map(d => d.id); // Límite de 40 para no saturar la URL
+        api.getEvents({ from, to, deviceIds, type: 'allEvents' })
+          .then(events => {
+            // Ordenar del más reciente al más antiguo
+            const sorted = events.sort((a, b) => new Date(b.eventTime).getTime() - new Date(a.eventTime).getTime());
+            setRealtimeEvents(sorted.slice(0, 5));
+          })
+          .catch(err => console.error('Error precargando eventos:', err));
+      }
     } catch (e: any) {
       setLoadError(e.message || 'Error al cargar los datos del mapa.');
     } finally {
@@ -214,8 +289,8 @@ export default function MapPage() {
 
       googleMapRef.current.fitBounds(bounds);
       const listener = window.google.maps.event.addListener(googleMapRef.current, 'idle', () => {
-        if (googleMapRef.current!.getZoom()! > 16) {
-          googleMapRef.current!.setZoom(16);
+        if (googleMapRef.current!.getZoom()! > 14) {
+          googleMapRef.current!.setZoom(14);
         }
         window.google.maps.event.removeListener(listener);
       });
@@ -237,22 +312,41 @@ export default function MapPage() {
         const marker = markersRef.current.get(device.id)!;
         marker.setPosition(latLng);
         marker.setIcon(icon);
+        marker.setLabel({
+          text: device.name || 'Taxi',
+          color: '#1e293b',
+          fontSize: '11px',
+          fontWeight: '600',
+          className: 'marker-label'
+        });
       } else {
+        const isSelected = selectedDevice?.id === device.id;
+        const zIndex = isSelected ? 1000 : (device.status === 'online' ? (pos.speed && pos.speed > 0 ? 500 : 400) : 300);
+
         const marker = new window.google.maps.Marker({
           position: latLng,
           map: googleMapRef.current!,
           icon,
           title: device.name,
+          zIndex,
+          label: {
+            text: device.name || 'Taxi',
+            color: '#1e293b',
+            fontSize: '11px',
+            fontWeight: '600',
+            className: 'marker-label'
+          },
         });
         marker.addListener('click', () => {
           setSelectedDevice(device);
           if (window.innerWidth >= 640) {
-            infoWindowRef.current?.setContent(generateInfoWindowContent(device, pos, isReadonly));
+            // Usamos positionsRef para garantizar que usamos los datos más frescos al hacer click (evitar stale closure)
+            const freshPos = positionsRef.current.get(device.id) || pos;
+            infoWindowRef.current?.setContent(generateInfoWindowContent(device, freshPos, isReadonly, followingDeviceIdRef.current === device.id));
             infoWindowRef.current?.open(googleMapRef.current!, marker);
           } else {
             // Ensure any open InfoWindow is closed on mobile when switching markers
             infoWindowRef.current?.close();
-            // Eliminamos el panTo para evitar que el mapa se mueva bruscamente
           }
         });
         markersRef.current.set(device.id, marker);
@@ -265,14 +359,26 @@ export default function MapPage() {
     ? (devices.find(d => d.id === selectedDevice.id) || selectedDevice) 
     : null;
 
-  // Actualizar la ventana de info en tiempo real si el coche se mueve o cambia de estado
+  // Actualizar z-index y ventana de info en tiempo real si el coche se mueve o cambia la selección
   useEffect(() => {
+    // 1. Actualizar zIndex de los marcadores para que el seleccionado quede arriba
+    devices.forEach(d => {
+      const marker = markersRef.current.get(d.id);
+      if (marker) {
+        const isSelected = currentSelectedDevice?.id === d.id;
+        const pos = positions.get(d.id);
+        const zIndex = isSelected ? 1000 : (d.status === 'online' ? (pos?.speed && pos.speed > 0 ? 500 : 400) : 300);
+        marker.setZIndex(zIndex);
+      }
+    });
+
+    // 2. Actualizar InfoWindow
     if (!currentSelectedDevice || !infoWindowRef.current) return;
     const pos = positions.get(currentSelectedDevice.id);
     if (pos && window.innerWidth >= 640) {
-      infoWindowRef.current.setContent(generateInfoWindowContent(currentSelectedDevice, pos, isReadonly));
+      infoWindowRef.current.setContent(generateInfoWindowContent(currentSelectedDevice, pos, isReadonly, followingDeviceId === currentSelectedDevice.id));
     }
-  }, [positions, currentSelectedDevice, isReadonly]);
+  }, [positions, currentSelectedDevice, isReadonly, devices, nowTick, followingDeviceId]);
 
   // Manejar visibilidad del BottomNav en móviles cuando se abre/cierra una tarjeta
   useEffect(() => {
@@ -323,6 +429,11 @@ export default function MapPage() {
         // Mover el marcador de Google Maps INMEDIATAMENTE, sin esperar a React
         const device = devicesRef.current.find(d => d.id === p.deviceId);
         if (device) updateMarkerImperative(device, p);
+        
+        // Seguir al taxi si está en modo follow
+        if (followingDeviceIdRef.current === p.deviceId && googleMapRef.current) {
+          googleMapRef.current.panTo({ lat: p.latitude, lng: p.longitude });
+        }
       });
       return next;
     });
@@ -344,11 +455,17 @@ export default function MapPage() {
       let message = '';
       
       if (ev.type === 'deviceStopped') {
-        title = 'Motor Apagado';
+        title = 'Vehículo Detenido';
         message = `${taxiName} se ha detenido.`;
       } else if (ev.type === 'deviceMoving') {
         title = 'En Movimiento';
         message = `${taxiName} empezó a moverse.`;
+      } else if (ev.type === 'ignitionOn') {
+        title = 'Motor Encendido';
+        message = `Se encendió el motor de ${taxiName}.`;
+      } else if (ev.type === 'ignitionOff') {
+        title = 'Motor Apagado';
+        message = `Se apagó el motor de ${taxiName}.`;
       } else if (ev.type === 'geofenceEnter') {
         title = 'Entrada a Zona';
         message = `${taxiName} entró a una geocerca.`;
@@ -394,25 +511,12 @@ export default function MapPage() {
   const stoppedCount = onlineCount - movingCount;
 
   return (
-    <div className="absolute inset-0 p-2 sm:p-4 view-panel fade-in flex flex-col">
-      {/* Estadísticas Rápidas flotantes */}
-      <div className="hidden sm:grid grid-cols-3 gap-4 mb-4 z-10 relative">
-          <div className="bg-white p-3 rounded-xl shadow-sm border border-gray-100 flex flex-row items-start gap-4 text-left">
-              <div className="w-10 h-10 rounded-full bg-blue-100 text-primary flex items-center justify-center text-lg shrink-0"><Car size={20} /></div>
-              <div><p className="text-xs text-gray-500 font-medium leading-normal">Total Taxis</p><p className="text-xl font-bold text-gray-800">{devices.length}</p></div>
-          </div>
-          <div className="bg-white p-3 rounded-xl shadow-sm border border-gray-100 flex flex-row items-start gap-4 text-left">
-              <div className="w-10 h-10 rounded-full bg-green-100 text-green-600 flex items-center justify-center text-lg shrink-0"><Zap size={20} /></div>
-              <div><p className="text-xs text-gray-500 font-medium leading-normal">En Movimiento</p><p className="text-xl font-bold text-gray-800">{movingCount}</p></div>
-          </div>
-          <div className="bg-white p-3 rounded-xl shadow-sm border border-gray-100 flex flex-row items-start gap-4 text-left">
-              <div className="w-10 h-10 rounded-full bg-red-100 text-red-600 flex items-center justify-center text-lg shrink-0"><Power size={20} /></div>
-              <div><p className="text-xs text-gray-500 font-medium leading-normal">Detenidos</p><p className="text-xl font-bold text-gray-800">{stoppedCount}</p></div>
-          </div>
-      </div>
+    <div className="absolute inset-0 fade-in">
+      {/* Contenedor Principal del Mapa (Pantalla Completa) */}
+      <div className="w-full h-full bg-white relative">
+        
+        {/* Stats eliminadas para un diseño más limpio */}
 
-      {/* Contenedor del Mapa */}
-      <div className="flex-1 bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden relative">
         {loadError && (
           <div className="absolute inset-0 flex items-center justify-center bg-red-50 z-10">
             <div className="text-center p-6">
@@ -429,7 +533,29 @@ export default function MapPage() {
             </div>
           </div>
         )}
-        <div ref={mapRef} className="w-full h-full" />
+        <div ref={mapRef} className="w-full h-full hide-marker-labels" />
+        
+        {/* Pill flotante para detener el modo seguimiento */}
+        {followingDeviceId && (
+          <div className="absolute top-6 left-1/2 -translate-x-1/2 z-[20] flex items-center justify-center animate-fade-in pointer-events-none">
+            <div className="bg-red-600 text-white rounded-full pl-4 pr-2 py-1.5 shadow-lg shadow-red-600/30 flex items-center gap-3 pointer-events-auto backdrop-blur-md bg-opacity-90 border border-red-500">
+              <span className="relative flex h-2.5 w-2.5">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-white"></span>
+              </span>
+              <span className="text-sm font-bold tracking-wide">
+                Siguiendo a {devices.find(d => d.id === followingDeviceId)?.name}
+              </span>
+              <button 
+                onClick={() => setFollowingDeviceId(null)}
+                className="ml-1 bg-white/20 hover:bg-white/30 rounded-full p-1.5 transition-colors"
+                title="Dejar de seguir"
+              >
+                <X size={16} />
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Panel lateral flotante de info del mapa */}
         <div className={`absolute top-2 sm:top-4 right-2 sm:right-4 left-2 sm:left-auto sm:w-72 bg-white/95 backdrop-blur-sm p-4 rounded-xl shadow-lg border border-gray-200 z-[10] max-h-[45%] sm:max-h-[80%] overflow-y-auto transition-all duration-300 ease-out ${showMobileEvents ? 'opacity-100 translate-y-0 pointer-events-auto' : 'opacity-0 -translate-y-4 pointer-events-none sm:opacity-100 sm:translate-y-0 sm:pointer-events-auto'}`}>
@@ -438,24 +564,47 @@ export default function MapPage() {
             </h3>
             <div className="space-y-3">
               {realtimeEvents.length === 0 ? (
-                <p className="text-xs text-gray-500 text-center py-4">Esperando eventos...</p>
+                <div className="flex flex-col items-center justify-center py-6 text-center">
+                  <Activity size={24} className="text-gray-300 mb-2" />
+                  <p className="text-xs font-semibold text-gray-700">Esperando eventos en vivo</p>
+                  <p className="text-[10px] text-gray-500 mt-1 max-w-[200px]">
+                    Aquí aparecerán automáticamente los encendidos, movimientos y alertas de los taxis activos.
+                  </p>
+                </div>
               ) : (
-                realtimeEvents.slice(0, 10).map((ev, i) => {
+                realtimeEvents.slice(0, 5).map((ev, i) => {
                   const device = devices.find(d => d.id === ev.deviceId);
                   const isAlarm = ev.type === 'alarm';
+                  
+                  let title = ev.type;
+                  let icon = <Zap size={12} />;
+                  let bgClass = 'bg-blue-50 text-blue-500';
+                  
+                  switch (ev.type) {
+                    case 'deviceOnline': title = 'Señal recuperada'; icon = <Wifi size={12} />; bgClass = 'bg-green-50 text-green-600'; break;
+                    case 'deviceOffline': title = 'Señal perdida'; icon = <WifiOff size={12} />; bgClass = 'bg-slate-100 text-slate-500'; break;
+                    case 'deviceUnknown': title = 'Señal inestable (Desconocida)'; icon = <WifiOff size={12} />; bgClass = 'bg-yellow-50 text-yellow-600'; break;
+                    case 'deviceMoving': title = 'Comenzó a moverse'; icon = <Play size={12} />; bgClass = 'bg-indigo-50 text-indigo-500'; break;
+                    case 'deviceStopped': title = 'Se detuvo'; icon = <Square size={12} />; bgClass = 'bg-gray-100 text-gray-500'; break;
+                    case 'ignitionOn': title = 'Motor Encendido'; icon = <Key size={12} />; bgClass = 'bg-orange-50 text-orange-600'; break;
+                    case 'ignitionOff': title = 'Motor Apagado'; icon = <Power size={12} />; bgClass = 'bg-gray-50 text-gray-600'; break;
+                    case 'geofenceEnter': title = 'Entró a zona'; icon = <MapPin size={12} />; break;
+                    case 'geofenceExit': title = 'Salió de zona'; icon = <MapPin size={12} />; break;
+                    case 'queuedCommandSent': title = 'Comando enviado al GPS'; icon = <Terminal size={12} />; bgClass = 'bg-purple-50 text-purple-600'; break;
+                    case 'commandResult': title = ev.attributes?.result ? `Respuesta: ${ev.attributes.result}` : 'Respuesta de comando'; icon = <CheckCircle2 size={12} />; bgClass = 'bg-emerald-50 text-emerald-600'; break;
+                    case 'alarm': title = `Alarma: ${ev.attributes?.alarm || ''}`; icon = <ShieldAlert size={12} />; bgClass = 'bg-red-50 text-red-500'; break;
+                  }
+
                   return (
                     <div key={i} className="flex items-start gap-3 border-b border-gray-50 pb-2 last:border-0 last:pb-0">
-                        <div className={`w-7 h-7 rounded-full ${isAlarm ? 'bg-red-50 text-red-500' : 'bg-blue-50 text-blue-500'} flex items-center justify-center shrink-0 mt-0.5`}>
-                          {isAlarm ? <ShieldAlert size={12} /> : <Zap size={12} />}
+                        <div className={`w-7 h-7 rounded-full ${bgClass} flex items-center justify-center shrink-0 mt-0.5`}>
+                          {icon}
                         </div>
                         <div className="flex-1 min-w-0">
                             <p className="text-xs font-medium text-gray-800 truncate">
-                              {ev.type === 'deviceOnline' ? 'Señal recuperada' : 
-                               ev.type === 'deviceOffline' ? 'Señal perdida' :
-                               ev.type === 'deviceMoving' ? 'Comenzó a moverse' :
-                               ev.type === 'deviceStopped' ? 'Motor apagado/detenido' : ev.type}
+                              {title}
                             </p>
-                            <p className="text-[10px] text-gray-500">{device?.name || 'ID: ' + ev.deviceId} • {new Date(ev.eventTime || Date.now()).toLocaleTimeString()}</p>
+                            <p className="text-[10px] text-gray-500">{device?.name || 'ID: ' + ev.deviceId} • {new Date(ev.eventTime || ev.serverTime || Date.now()).toLocaleTimeString()}</p>
                         </div>
                     </div>
                   );
@@ -533,7 +682,7 @@ export default function MapPage() {
                     <div>
                       <h3 className="text-xl font-bold text-slate-900 leading-tight">{currentSelectedDevice.name}</h3>
                       <p className="text-xs font-medium text-slate-500 mt-1">
-                        Última señal: {new Date(pos.fixTime).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                        Última señal: {formatRelativeTime(pos.serverTime)}
                       </p>
                     </div>
                   </div>
@@ -589,8 +738,22 @@ export default function MapPage() {
                         <Zap size={16} className="text-yellow-500 fill-yellow-500" /> Comandos
                       </button>
                     )}
-                    <button onClick={() => window.dispatchEvent(new CustomEvent('viewMapRoute', {detail: currentSelectedDevice.id}))} className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-[13px] py-3.5 rounded-xl flex items-center justify-center gap-2 active:scale-95 transition-all shadow-sm shadow-blue-600/20">
-                      <Route size={16} /> Ver Ruta
+                    <button 
+                      onClick={() => {
+                        setFollowingDeviceId(prev => {
+                          if (prev === currentSelectedDevice.id) return null;
+                          if (googleMapRef.current) {
+                            googleMapRef.current.panTo({ lat: pos.latitude, lng: pos.longitude });
+                            googleMapRef.current.setZoom(17);
+                          }
+                          return currentSelectedDevice.id;
+                        });
+                        // Ocultar panel para dejar vista limpia
+                        setSelectedDevice(null);
+                      }}
+                      className={`flex-1 text-white font-semibold text-[13px] py-3.5 rounded-xl flex items-center justify-center gap-2 active:scale-95 transition-all shadow-sm ${followingDeviceId === currentSelectedDevice.id ? 'bg-red-600 hover:bg-red-700 shadow-red-600/20' : 'bg-blue-600 hover:bg-blue-700 shadow-blue-600/20'}`}
+                    >
+                      <MapPin size={16} /> {followingDeviceId === currentSelectedDevice.id ? 'Detener Seguimiento' : 'Seguir Taxi'}
                     </button>
                   </div>
                 </div>

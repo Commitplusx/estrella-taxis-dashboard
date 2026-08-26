@@ -4,10 +4,28 @@ import { useAuth } from '../context/AuthContext';
 import { CarFront, RadioTower, WifiOff, MapPin } from 'lucide-react';
 import { useTraccarSocket } from '../hooks/useTraccarSocket';
 
+function formatRelativeTime(dateStr: string) {
+  const d = new Date(dateStr);
+  const now = new Date();
+  const diffMins = Math.round((now.getTime() - d.getTime()) / 60000);
+  
+  if (diffMins < 1) return 'Hace unos segundos';
+  if (diffMins < 60) return `Hace ${diffMins} min`;
+  const diffHours = Math.floor(diffMins / 60);
+  if (diffHours < 24) return `Hace ${diffHours} h`;
+  return `Hace ${Math.floor(diffHours / 24)} días`;
+}
+
 export default function Dashboard() {
   const { user } = useAuth();
   const [devices, setDevices] = useState<TraccarDevice[]>([]);
   const [loading, setLoading] = useState(true);
+  const [nowTick, setNowTick] = useState(Date.now());
+
+  useEffect(() => {
+    const interval = setInterval(() => setNowTick(Date.now()), 60000);
+    return () => clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     api.getDevices()
@@ -151,13 +169,18 @@ export default function Dashboard() {
                   {/* Text Data */}
                   <div>
                     <p className="text-sm sm:text-base font-bold text-gray-900 group-hover:text-blue-600 transition-colors">{device.name}</p>
-                    <div className="flex items-center gap-1.5 sm:gap-2 mt-0.5">
+                    <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 mt-0.5">
                       <span className="text-[9px] sm:text-[10px] font-bold text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded tracking-wide uppercase">
                         ID: {device.uniqueId}
                       </span>
-                      <span className="text-[10px] sm:text-xs text-gray-400 font-medium hidden sm:inline-block">
+                      <span className="text-[10px] sm:text-xs text-gray-400 font-medium">
                         &bull; {isOnline ? 'Señal Activa' : 'Desconectado'}
                       </span>
+                      {device.lastUpdate && (
+                        <span className="text-[10px] sm:text-xs text-gray-400 font-medium">
+                          &bull; Última señal: {formatRelativeTime(device.lastUpdate)}
+                        </span>
+                      )}
                     </div>
                   </div>
                 </div>

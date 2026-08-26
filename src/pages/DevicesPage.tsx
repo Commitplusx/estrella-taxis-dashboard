@@ -54,138 +54,166 @@ function EditDeviceModal({ device, groups, onClose, onSaved }: EditDeviceModalPr
     }
   };
 
+  const selectedCat = getCategoryDef(form.category);
+
   return (
-    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg">
-        <div className="flex items-center justify-between p-5 border-b border-gray-100">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 bg-blue-50 rounded-xl flex items-center justify-center">
-              <Car size={18} className="text-blue-600" />
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-md z-50 flex items-end sm:items-center justify-center sm:p-4">
+      <div className="bg-white sm:rounded-3xl rounded-t-3xl shadow-2xl w-full sm:max-w-lg flex flex-col max-h-[96vh] sm:max-h-[88vh]">
+
+        {/* ── Handle bar (mobile) ── */}
+        <div className="flex justify-center pt-3 pb-1 sm:hidden shrink-0">
+          <div className="w-10 h-1 bg-gray-200 rounded-full" />
+        </div>
+
+        {/* ── Header ── */}
+        <div className="flex items-center justify-between px-6 pt-4 pb-5 shrink-0">
+          <div className="flex items-center gap-3.5">
+            <div className="w-12 h-12 bg-blue-600 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-500/30 shrink-0">
+              {selectedCat.image ? (
+                <img src={selectedCat.image} alt="Icon" className="w-[22px] h-[22px] object-contain brightness-0 invert" />
+              ) : (
+                <svg viewBox="0 0 24 24" width="22" height="22">
+                  <path d={selectedCat.path} fill="white" />
+                </svg>
+              )}
             </div>
-            <h2 className="text-base font-bold text-gray-900">Editar taxi</h2>
+            <div>
+              <h2 className="text-lg font-extrabold text-gray-900 leading-tight">{device.name || 'Vehículo'}</h2>
+              <p className="text-sm text-blue-500 font-semibold">{selectedCat.label}</p>
+            </div>
           </div>
-          <button onClick={onClose} className="p-1.5 hover:bg-gray-100 rounded-lg transition">
-            <X size={18} className="text-gray-500" />
+          <button
+            onClick={onClose}
+            className="w-9 h-9 flex items-center justify-center bg-gray-100 hover:bg-gray-200 rounded-2xl transition"
+          >
+            <X size={16} className="text-gray-600" />
           </button>
         </div>
 
-        <div className="p-5 grid grid-cols-2 gap-4">
-          {/* Nombre */}
-          <div className="col-span-2">
-            <label className="flex items-center gap-1.5 text-xs font-medium text-gray-600 mb-1">
-              <User size={11} /> Nombre del taxi
-            </label>
-            <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-              placeholder="Ej: Ana Karen"
-              className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-          </div>
+        {/* ── Body ── */}
+        <div className="flex-1 overflow-y-auto min-h-0 px-6 space-y-4 pb-4">
 
-          {/* Unique ID */}
-          <div className="col-span-2">
-            <label className="flex items-center gap-1.5 text-xs font-medium text-gray-600 mb-1">
-              <Hash size={11} /> Identificador único (IMEI)
-            </label>
-            <input value={form.uniqueId} onChange={e => setForm(f => ({ ...f, uniqueId: e.target.value }))}
-              placeholder="Ej: 123456789012345"
-              className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-          </div>
-
-          {/* Teléfono */}
-          <div>
-            <label className="flex items-center gap-1.5 text-xs font-medium text-gray-600 mb-1">
-              <Phone size={11} /> Teléfono
-            </label>
-            <input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))}
-              placeholder="+52 961 000 0000"
-              className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-          </div>
-
-          {/* Modelo */}
-          <div>
-            <label className="flex items-center gap-1.5 text-xs font-medium text-gray-600 mb-1">
-              <Car size={11} /> Modelo del vehículo
-            </label>
-            <input value={form.model} onChange={e => setForm(f => ({ ...f, model: e.target.value }))}
-              placeholder="Ej: Nissan Versa 2020"
-              className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-          </div>
-
-          {/* Categoría */}
-          <div className="col-span-2">
-            <label className="flex items-center gap-1.5 text-xs font-medium text-gray-600 mb-2">
-              Tipo de vehículo — ícono en el mapa
-            </label>
-            {/* Mostrar selección actual */}
-            <div className="flex items-center gap-2 mb-2 p-2.5 bg-blue-50 border border-blue-200 rounded-xl">
-              <svg viewBox="0 0 24 24" width="28" height="28">
-                <path
-                  d={getCategoryDef(form.category).path}
-                  fill="#1d4ed8"
-                  stroke="white"
-                  strokeWidth="1"
-                />
-              </svg>
-              <span className="text-sm font-semibold text-blue-700">
-                {getCategoryDef(form.category).label}
-              </span>
+          {/* Nombre + IMEI */}
+          <div className="bg-gray-50 rounded-2xl overflow-hidden divide-y divide-gray-100 border border-gray-100">
+            <div className="flex items-center gap-3 px-4 py-3">
+              <span className="text-xs font-bold text-gray-400 w-14 shrink-0 uppercase">Nombre</span>
+              <input
+                value={form.name}
+                onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+                placeholder="Ej: Taxi 01"
+                className="flex-1 bg-transparent text-sm font-semibold text-gray-800 focus:outline-none placeholder:text-gray-300"
+              />
             </div>
-            {/* Grid de selección */}
-            <div className="grid grid-cols-4 gap-1.5 max-h-48 overflow-y-auto pr-1">
-              {VEHICLE_CATEGORIES.map(cat => (
-                <button
-                  key={cat.value}
-                  type="button"
-                  onClick={() => setForm(f => ({ ...f, category: cat.value }))}
-                  className={`flex flex-col items-center gap-1 p-2 rounded-xl border transition-all ${
-                    form.category === cat.value
-                      ? 'border-blue-500 bg-blue-50 shadow-sm'
-                      : 'border-gray-100 bg-gray-50 hover:border-gray-300 hover:bg-white'
-                  }`}
-                  title={cat.label}
-                >
-                  <svg viewBox="0 0 24 24" width="22" height="22">
-                    <path
-                      d={cat.path}
-                      fill={form.category === cat.value ? '#1d4ed8' : '#64748b'}
-                      stroke="white"
-                      strokeWidth="0.5"
-                    />
-                  </svg>
-                  <span className={`text-[9px] font-medium leading-tight text-center line-clamp-2 ${
-                    form.category === cat.value ? 'text-blue-700' : 'text-gray-500'
-                  }`}>
-                    {cat.label}
-                  </span>
-                </button>
-              ))}
+            <div className="flex items-center gap-3 px-4 py-3">
+              <span className="text-xs font-bold text-gray-400 w-14 shrink-0 uppercase">IMEI</span>
+              <input
+                value={form.uniqueId}
+                onChange={e => setForm(f => ({ ...f, uniqueId: e.target.value }))}
+                placeholder="869066065085806"
+                className="flex-1 bg-transparent text-sm font-mono text-gray-800 focus:outline-none placeholder:text-gray-300"
+              />
             </div>
           </div>
 
-          {/* Grupo */}
-          <div>
-            <label className="flex items-center gap-1.5 text-xs font-medium text-gray-600 mb-1">
-              <Layers size={11} /> Grupo
-            </label>
-            <select value={form.groupId} onChange={e => setForm(f => ({ ...f, groupId: Number(e.target.value) }))}
-              className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
-              <option value={0}>Sin grupo</option>
-              {groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
-            </select>
+          {/* Teléfono, Modelo, Grupo */}
+          <div className="bg-gray-50 rounded-2xl overflow-hidden divide-y divide-gray-100 border border-gray-100">
+            <div className="flex items-center gap-3 px-4 py-3">
+              <span className="text-xs font-bold text-gray-400 w-14 shrink-0 uppercase">Tel.</span>
+              <input
+                value={form.phone}
+                onChange={e => setForm(f => ({ ...f, phone: e.target.value }))}
+                placeholder="+52 961 000 0000"
+                className="flex-1 bg-transparent text-sm font-medium text-gray-800 focus:outline-none placeholder:text-gray-300"
+              />
+            </div>
+            <div className="flex items-center gap-3 px-4 py-3">
+              <span className="text-xs font-bold text-gray-400 w-14 shrink-0 uppercase">Modelo</span>
+              <input
+                value={form.model}
+                onChange={e => setForm(f => ({ ...f, model: e.target.value }))}
+                placeholder="Nissan Versa 2020"
+                className="flex-1 bg-transparent text-sm font-medium text-gray-800 focus:outline-none placeholder:text-gray-300"
+              />
+            </div>
+            <div className="flex items-center gap-3 px-4 py-3">
+              <span className="text-xs font-bold text-gray-400 w-14 shrink-0 uppercase">Grupo</span>
+              <select
+                value={form.groupId}
+                onChange={e => setForm(f => ({ ...f, groupId: Number(e.target.value) }))}
+                className="flex-1 bg-transparent text-sm font-medium text-gray-800 focus:outline-none"
+              >
+                <option value={0}>Sin grupo</option>
+                {groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+              </select>
+            </div>
           </div>
+
+          {/* Tipo / Ícono picker */}
+          <div>
+            <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3 px-1">
+              Ícono en el mapa
+            </p>
+            <div className="grid grid-cols-5 gap-2">
+              {VEHICLE_CATEGORIES.map(cat => {
+                const active = form.category === cat.value;
+                return (
+                  <button
+                    key={cat.value}
+                    type="button"
+                    onClick={() => setForm(f => ({ ...f, category: cat.value }))}
+                    title={cat.label}
+                    className={`relative flex flex-col items-center gap-1.5 py-3 px-1 rounded-2xl transition-all duration-150 ${
+                      active
+                        ? 'bg-blue-600 shadow-lg shadow-blue-500/30'
+                        : 'bg-gray-100 hover:bg-gray-200'
+                    }`}
+                  >
+                    {cat.image ? (
+                      <img src={cat.image} alt={cat.label} className="w-[22px] h-[22px] object-contain" style={{ filter: active ? 'brightness(0) invert(1)' : 'grayscale(100%) opacity(50%)' }} />
+                    ) : (
+                      <svg viewBox="0 0 24 24" width="22" height="22">
+                        <path
+                          d={cat.path}
+                          fill={active ? 'white' : '#94a3b8'}
+                        />
+                      </svg>
+                    )}
+                    <span className={`text-[9px] font-bold leading-tight text-center ${
+                      active ? 'text-blue-100' : 'text-gray-400'
+                    }`}>
+                      {cat.label}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
         </div>
 
-        {error && <p className="mx-5 -mt-2 text-xs text-red-600 bg-red-50 px-3 py-2 rounded-xl">{error}</p>}
+        {/* ── Error ── */}
+        {error && (
+          <p className="mx-6 mb-2 text-xs text-red-600 bg-red-50 px-4 py-2.5 rounded-2xl border border-red-100 shrink-0">{error}</p>
+        )}
 
-        <div className="flex gap-2 p-5 pt-0">
-          <button onClick={onClose} className="flex-1 px-4 py-2 border border-gray-200 text-gray-700 rounded-xl text-sm font-medium hover:bg-gray-50 transition">
+        {/* ── Footer ── */}
+        <div className="flex gap-3 px-6 pb-6 pt-3 shrink-0">
+          <button
+            onClick={onClose}
+            className="flex-1 py-3.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-2xl text-sm font-bold transition"
+          >
             Cancelar
           </button>
-          <button onClick={handleSave} disabled={saving}
-            className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-xl text-sm font-semibold transition">
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="flex-1 flex items-center justify-center gap-2 py-3.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-2xl text-sm font-bold transition shadow-lg shadow-blue-600/30"
+          >
             <Save size={14} />
             {saving ? 'Guardando...' : 'Guardar cambios'}
           </button>
         </div>
+
       </div>
     </div>
   );

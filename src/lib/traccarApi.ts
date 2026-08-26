@@ -268,7 +268,7 @@ export type TraccarEvent = {
   id: number;
   deviceId: number;
   type: string;
-  serverTime: string;
+  eventTime: string;
   positionId: number;
   geofenceId: number;
   attributes: Record<string, any>;

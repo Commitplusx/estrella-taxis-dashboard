@@ -24,7 +24,7 @@ export default function Layout() {
 
   const getPageTitle = (path: string) => {
     if (path === '/map' || path === '/') return 'Mapa en Vivo';
-    if (path === '/dashboard') return 'Dashboard';
+    if (path === '/dashboard') return '';
     if (path === '/devices') return 'Mis Taxis';
     if (path === '/connections') return 'Conexiones';
     if (path === '/reports') return 'Reportes';
@@ -65,7 +65,7 @@ export default function Layout() {
       <main className="flex-1 flex flex-col bg-[#F8FAFC] relative overflow-hidden w-full">
         
         {/* HEADER TOP GLOBAl */}
-        <header className="h-16 flex-none bg-white border-b border-gray-100 hidden md:flex items-center justify-between px-4 sm:px-8 shrink-0 relative z-10 shadow-sm transition-all duration-300">
+        <header className="hidden">
             <div className="flex items-center gap-4">
                 <button 
                   className="md:hidden w-10 h-10 rounded-xl bg-gray-50 text-gray-600 hover:bg-blue-50 hover:text-primary transition flex items-center justify-center" 
