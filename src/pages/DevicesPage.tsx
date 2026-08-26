@@ -1,32 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { api, BASE_URL, type TraccarDevice } from '../lib/traccarApi';
-import { X, Save, Car, Phone, User, Hash, Layers, Tag, ShieldAlert, Power, Radio, Zap, Edit2 } from 'lucide-react';
+import { X, Save, Car, Phone, User, Hash, Layers, ShieldAlert, Power, Radio, Zap, Edit2 } from 'lucide-react';
 import { CommandModal } from '../components/CommandModal';
 import { ShareModal } from '../components/ShareModal';
 import toast from 'react-hot-toast';
 import { useAuth } from '../context/AuthContext';
+import { VEHICLE_CATEGORIES, getCategoryDef } from '../lib/mapIcons';
 
-// Categorías idénticas a las de Traccar
-const DEVICE_CATEGORIES = [
-  { value: 'default',    label: 'Automóvil / Taxi' },
-  { value: 'animal',     label: 'Animal' },
-  { value: 'bicycle',    label: 'Bicicleta' },
-  { value: 'boat',       label: 'Barco' },
-  { value: 'bus',        label: 'Autobús' },
-  { value: 'helicopter', label: 'Helicóptero' },
-  { value: 'motorcycle', label: 'Motocicleta' },
-  { value: 'offroad',    label: 'Todoterreno' },
-  { value: 'person',     label: 'Persona' },
-  { value: 'pickup',     label: 'Camioneta' },
-  { value: 'plane',      label: 'Avión' },
-  { value: 'ship',       label: 'Barco grande' },
-  { value: 'tractor',    label: 'Tractor' },
-  { value: 'train',      label: 'Tren' },
-  { value: 'tram',       label: 'Tranvía' },
-  { value: 'trolleybus', label: 'Trolebús' },
-  { value: 'truck',      label: 'Camión' },
-  { value: 'van',        label: 'Furgoneta' },
-];
+
+
 
 interface EditDeviceModalProps {
   device: TraccarDevice;
@@ -129,16 +111,54 @@ function EditDeviceModal({ device, groups, onClose, onSaved }: EditDeviceModalPr
           </div>
 
           {/* Categoría */}
-          <div>
-            <label className="flex items-center gap-1.5 text-xs font-medium text-gray-600 mb-1">
-              <Tag size={11} /> Categoría
+          <div className="col-span-2">
+            <label className="flex items-center gap-1.5 text-xs font-medium text-gray-600 mb-2">
+              Tipo de vehículo — ícono en el mapa
             </label>
-            <select value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))}
-              className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
-              {DEVICE_CATEGORIES.map(c => (
-                <option key={c.value} value={c.value}>{c.label}</option>
+            {/* Mostrar selección actual */}
+            <div className="flex items-center gap-2 mb-2 p-2.5 bg-blue-50 border border-blue-200 rounded-xl">
+              <svg viewBox="0 0 24 24" width="28" height="28">
+                <path
+                  d={getCategoryDef(form.category).path}
+                  fill="#1d4ed8"
+                  stroke="white"
+                  strokeWidth="1"
+                />
+              </svg>
+              <span className="text-sm font-semibold text-blue-700">
+                {getCategoryDef(form.category).label}
+              </span>
+            </div>
+            {/* Grid de selección */}
+            <div className="grid grid-cols-4 gap-1.5 max-h-48 overflow-y-auto pr-1">
+              {VEHICLE_CATEGORIES.map(cat => (
+                <button
+                  key={cat.value}
+                  type="button"
+                  onClick={() => setForm(f => ({ ...f, category: cat.value }))}
+                  className={`flex flex-col items-center gap-1 p-2 rounded-xl border transition-all ${
+                    form.category === cat.value
+                      ? 'border-blue-500 bg-blue-50 shadow-sm'
+                      : 'border-gray-100 bg-gray-50 hover:border-gray-300 hover:bg-white'
+                  }`}
+                  title={cat.label}
+                >
+                  <svg viewBox="0 0 24 24" width="22" height="22">
+                    <path
+                      d={cat.path}
+                      fill={form.category === cat.value ? '#1d4ed8' : '#64748b'}
+                      stroke="white"
+                      strokeWidth="0.5"
+                    />
+                  </svg>
+                  <span className={`text-[9px] font-medium leading-tight text-center line-clamp-2 ${
+                    form.category === cat.value ? 'text-blue-700' : 'text-gray-500'
+                  }`}>
+                    {cat.label}
+                  </span>
+                </button>
               ))}
-            </select>
+            </div>
           </div>
 
           {/* Grupo */}

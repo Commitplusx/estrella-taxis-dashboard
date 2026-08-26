@@ -6,6 +6,7 @@ import { api, type TraccarDevice, type TraccarPosition } from '../lib/traccarApi
 import { useTraccarSocket } from '../hooks/useTraccarSocket';
 import { CommandModal } from '../components/CommandModal';
 import { useAuth } from '../context/AuthContext';
+import { getMarkerIcon } from '../lib/mapIcons';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function knotsToKmh(knots: number) {
@@ -230,29 +231,17 @@ export default function MapPage() {
       if (!pos) return;
 
       const latLng = { lat: pos.latitude, lng: pos.longitude };
-      const isMoving = (pos.speed || 0) > 0.5;
-      const color = device.status === 'online' ? (isMoving ? '#1d4ed8' : '#16a34a') : '#94a3b8';
-
-      const svgMarker = {
-        path: 'M 12 2 L 22 22 L 12 17 L 2 22 Z',
-        fillColor: color,
-        fillOpacity: 1,
-        strokeColor: '#ffffff',
-        strokeWeight: 2.5,
-        scale: 1.2,
-        anchor: new window.google.maps.Point(12, 12),
-        rotation: pos.course || 0,
-      };
+      const icon = getMarkerIcon(device.category, device.status, pos.speed || 0, pos.course || 0, window.google.maps);
 
       if (markersRef.current.has(device.id)) {
         const marker = markersRef.current.get(device.id)!;
         marker.setPosition(latLng);
-        marker.setIcon(svgMarker);
+        marker.setIcon(icon);
       } else {
         const marker = new window.google.maps.Marker({
           position: latLng,
           map: googleMapRef.current!,
-          icon: svgMarker,
+          icon,
           title: device.name,
         });
         marker.addListener('click', () => {
@@ -302,22 +291,11 @@ export default function MapPage() {
   const updateMarkerImperative = useCallback((device: TraccarDevice, pos: TraccarPosition) => {
     if (!googleMapRef.current || !window.google?.maps) return;
     const latLng = { lat: pos.latitude, lng: pos.longitude };
-    const isMoving = (pos.speed || 0) > 0.5;
-    const color = device.status === 'online' ? (isMoving ? '#1d4ed8' : '#16a34a') : '#94a3b8';
-    const svgMarker = {
-      path: 'M 12 2 L 22 22 L 12 17 L 2 22 Z',
-      fillColor: color,
-      fillOpacity: 1,
-      strokeColor: '#ffffff',
-      strokeWeight: 2.5,
-      scale: 1.2,
-      anchor: new window.google.maps.Point(12, 12),
-      rotation: pos.course || 0,
-    };
+    const icon = getMarkerIcon(device.category, device.status, pos.speed || 0, pos.course || 0, window.google.maps);
     const marker = markersRef.current.get(device.id);
     if (marker) {
       marker.setPosition(latLng);
-      marker.setIcon(svgMarker);
+      marker.setIcon(icon);
     }
   }, []);
 
