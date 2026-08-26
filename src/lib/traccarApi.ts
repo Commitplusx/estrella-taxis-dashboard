@@ -65,6 +65,15 @@ export const api = {
       if (!res.ok) throw new Error('Error al solicitar recuperación');
     }),
 
+  updatePassword: (token: string, password: string) =>
+    fetch(`${BASE_URL}/password/update`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ token, password }),
+    }).then(res => {
+      if (!res.ok) throw new Error('Error al actualizar contraseña. El enlace puede haber expirado.');
+    }),
+
   // ── Dispositivos (Taxis) ──────────────────────────
   getDevices: () => request<TraccarDevice[]>('/devices'),
 
