@@ -169,7 +169,10 @@ export default function MapPage() {
   }, [mapsLoaded]);
 
   // Traer los taxis y sus posiciones desde el servidor
+  const isFetchingRef = useRef(false);
   const loadFullState = useCallback(async () => {
+    if (isFetchingRef.current) return;
+    isFetchingRef.current = true;
     try {
       const [devs, pos] = await Promise.all([api.getDevices(), api.getPositions()]);
       setDevices(devs);
@@ -178,6 +181,8 @@ export default function MapPage() {
       setPositions(posMap);
     } catch (e: any) {
       setLoadError(e.message || 'Error al cargar los datos del mapa.');
+    } finally {
+      isFetchingRef.current = false;
     }
   }, []);
 
