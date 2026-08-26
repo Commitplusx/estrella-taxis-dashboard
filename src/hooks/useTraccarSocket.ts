@@ -79,10 +79,36 @@ export function useTraccarSocket({ onDevices, onPositions, onEvents, onConnect }
       };
     };
 
+    const handleVisibilityAndOnline = () => {
+      if (destroyed) return;
+      if (!wsRef.current || wsRef.current.readyState === WebSocket.CLOSED) {
+        if (reconnectTimer.current) clearTimeout(reconnectTimer.current);
+        reconnectDelay.current = 3_000;
+        connect();
+      } else if (wsRef.current.readyState === WebSocket.OPEN) {
+        try {
+          wsRef.current.send('{}'); // Traccar WS Ping
+        } catch (e) {
+          console.log('[Traccar WS] Ping falló, forzando reconexión');
+          wsRef.current.close();
+        }
+      }
+    };
+
+    window.addEventListener('online', handleVisibilityAndOnline);
+    
+    const onVisibilityChange = () => {
+      if (!document.hidden) handleVisibilityAndOnline();
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+
     connect();
 
     return () => {
       destroyed = true;
+      window.removeEventListener('online', handleVisibilityAndOnline);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      
       if (reconnectTimer.current) clearTimeout(reconnectTimer.current);
       if (wsRef.current) {
         wsRef.current.onclose = null; // Evitar que se lance el reconnectTimer tras desmontar
