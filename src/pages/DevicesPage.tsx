@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { api, BASE_URL, type TraccarDevice } from '../lib/traccarApi';
-import { X, Save, Car, Phone, User, Hash, Layers, ShieldAlert, Power, Radio, Zap, Edit2 } from 'lucide-react';
+import { X, Save, Car, Phone, User, Hash, Layers, Tag, ShieldAlert, Power, Radio, Zap, Edit2 } from 'lucide-react';
 import { CommandModal } from '../components/CommandModal';
 import { ShareModal } from '../components/ShareModal';
 import toast from 'react-hot-toast';
