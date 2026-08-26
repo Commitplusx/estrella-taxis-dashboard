@@ -6,7 +6,18 @@ import { CheckCircle2 } from 'lucide-react';
 export default function ResetPassword() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const token = searchParams.get('passwordReset') || searchParams.get('token');
+
+  // useSearchParams convierte '+' en espacios porque sigue la spec de form-urlencoding.
+  // Traccar genera tokens Base64 que contienen '+', así que extraemos el valor
+  // del raw query string y sólo decodeamos %XX, preservando los '+' literales.
+  const rawToken = (() => {
+    const raw = window.location.search;
+    const match = raw.match(/[?&]passwordReset=([^&]*)/);
+    if (match) return decodeURIComponent(match[1]);
+    const fallback = raw.match(/[?&]token=([^&]*)/);
+    if (fallback) return decodeURIComponent(fallback[1]);
+    return null;
+  })();
   
   const [password, setPassword] = useState('');
   const [state, setState] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
@@ -15,15 +26,15 @@ export default function ResetPassword() {
 
   useEffect(() => {
     setMounted(true);
-    if (!token) {
+    if (!rawToken) {
       setError('Enlace inválido o expirado.');
       setState('error');
     }
-  }, [token]);
+  }, [rawToken]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!token) return;
+    if (!rawToken) return;
     
     if (password.length < 6) {
       setError('La contraseña debe tener al menos 6 caracteres.');
@@ -35,7 +46,7 @@ export default function ResetPassword() {
     setError('');
 
     try {
-      await api.updatePassword(token, password);
+      await api.updatePassword(rawToken, password);
       setState('success');
       setTimeout(() => {
         navigate('/login');
@@ -91,7 +102,7 @@ export default function ResetPassword() {
                     required
                     value={password}
                     onChange={e => setPassword(e.target.value)}
-                    disabled={state === 'loading' || state === 'success' || !token}
+                    disabled={state === 'loading' || state === 'success' || !rawToken}
                     className="w-full px-4 py-3.5 border border-slate-200 rounded-xl text-sm font-medium focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all bg-slate-50 focus:bg-white disabled:opacity-60 text-slate-900 placeholder:text-slate-400"
                     placeholder="••••••••"
                   />
@@ -100,11 +111,11 @@ export default function ResetPassword() {
 
               <button
                 type="submit"
-                disabled={state === 'loading' || state === 'success' || !token}
+                disabled={state === 'loading' || state === 'success' || !rawToken}
                 className={`w-full py-4 lg:py-3.5 px-4 rounded-xl text-sm font-bold transition-all duration-500 flex items-center justify-center gap-2 mt-6 ${
                   state === 'success'
                     ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/30 scale-105'
-                    : state === 'error' || !token
+                    : state === 'error' || !rawToken
                     ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
                     : 'bg-blue-600 hover:bg-blue-700 active:scale-[0.98] text-white shadow-md shadow-blue-600/20 lg:shadow-sm'
                 }`}
@@ -118,7 +129,7 @@ export default function ResetPassword() {
                 
                 {state === 'success' && <><CheckCircle2 size={18} /> ¡Contraseña actualizada!</>}
                 {state === 'error' && 'Inténtalo de nuevo'}
-                {state === 'idle' && (token ? 'Guardar Contraseña' : 'Enlace inválido')}
+                {state === 'idle' && (rawToken ? 'Guardar Contraseña' : 'Enlace inválido')}
                 {state === 'loading' && 'Guardando...'}
               </button>
             </form>
