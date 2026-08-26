@@ -12,10 +12,20 @@ export default function ResetPassword() {
   // del raw query string y sólo decodeamos %XX, preservando los '+' literales.
   const rawToken = (() => {
     const raw = window.location.search;
+    console.log('[ResetPassword] raw search:', raw);
     const match = raw.match(/[?&]passwordReset=([^&]*)/);
-    if (match) return decodeURIComponent(match[1]);
+    if (match) {
+      const t = decodeURIComponent(match[1]);
+      console.log('[ResetPassword] token extraído:', t);
+      return t;
+    }
     const fallback = raw.match(/[?&]token=([^&]*)/);
-    if (fallback) return decodeURIComponent(fallback[1]);
+    if (fallback) {
+      const t = decodeURIComponent(fallback[1]);
+      console.log('[ResetPassword] token (fallback):', t);
+      return t;
+    }
+    console.log('[ResetPassword] SIN TOKEN en la URL');
     return null;
   })();
   
