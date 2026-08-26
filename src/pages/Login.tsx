@@ -22,7 +22,7 @@ export default function Login() {
   }, []);
 
   if (user && !isTransitioning) {
-    return <Navigate to="/" replace />;
+    return <Navigate to="/map" replace />;
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -89,7 +89,7 @@ export default function Login() {
   };
 
   return (
-    <div className={`h-screen flex bg-white font-sans overflow-hidden transition-opacity duration-700 relative ${mounted ? 'opacity-100' : 'opacity-0'}`}>
+    <div className={`h-screen flex bg-white font-sans overflow-hidden transition-opacity duration-700 relative page-transition ${mounted ? 'opacity-100' : 'opacity-0'}`}>
       
       {/* ─── Progress Bar Superior Estilo Apple/Vercel ──────────────────────── */}
       <div className="absolute top-0 left-0 w-full h-1 bg-transparent z-[100]">
