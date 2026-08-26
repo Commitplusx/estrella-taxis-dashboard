@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { Car, MapPin, Users, Activity, CheckCircle2, Navigation2 } from 'lucide-react';
+import { Car, MapPin, Users, Activity, CheckCircle2, Navigation2, MailCheck } from 'lucide-react';
 
 export default function Login() {
   const { user, login, resetPassword } = useAuth();
@@ -130,103 +130,126 @@ export default function Login() {
 
         {/* ─── Contenedor del Formulario ─── */}
         <div className="w-full max-w-sm flex flex-col relative z-20">
-          <div className="bg-white p-8 lg:p-10 rounded-[2rem] shadow-xl shadow-blue-900/5 lg:shadow-[0_8px_30px_rgb(0,0,0,0.04)] lg:border lg:border-slate-100/60">
-            
-            <div className="mb-8 text-left lg:text-center">
-              <h2 className="text-[28px] lg:text-2xl font-extrabold text-slate-900 tracking-tight leading-tight">Bienvenido de vuelta</h2>
-              <p className="text-slate-500 text-[14px] mt-2 font-medium">Ingresa tus credenciales para continuar</p>
-            </div>
-
-            <form onSubmit={handleSubmit} className="space-y-5">
-              <style>{`
-                input:-webkit-autofill,
-                input:-webkit-autofill:hover, 
-                input:-webkit-autofill:focus, 
-                input:-webkit-autofill:active {
-                    -webkit-box-shadow: 0 0 0 30px #f8fafc inset !important;
-                    -webkit-text-fill-color: #0f172a !important;
-                    border-radius: 1rem;
-                }
-              `}</style>
-
-              {/* Error message */}
-              <div className={`overflow-hidden transition-all duration-300 ${state === 'error' ? 'max-h-20 opacity-100 mb-4' : 'max-h-0 opacity-0 mb-0'}`}>
-                <div className="bg-red-50 text-red-600 text-sm p-3.5 rounded-xl font-medium text-center border border-red-100">
-                  {error}
-                </div>
+          
+          {isForgotPassword && state === 'success' ? (
+            <div className="bg-white p-8 lg:p-10 rounded-[2rem] shadow-xl shadow-blue-900/5 lg:shadow-[0_8px_30px_rgb(0,0,0,0.04)] lg:border lg:border-slate-100/60 text-center animate-in fade-in zoom-in duration-500">
+              <div className="w-20 h-20 bg-emerald-50 rounded-full flex items-center justify-center mx-auto mb-6">
+                <MailCheck className="w-10 h-10 text-emerald-500" strokeWidth={1.5} />
               </div>
-
-              <div className={`transition-all duration-500 ${state === 'success' ? 'opacity-0 scale-95 h-0 overflow-hidden' : 'opacity-100 scale-100'}`}>
-                {/* Email */}
-                <div className="space-y-1.5 mb-5">
-                  <label className="block text-[13px] font-semibold text-slate-700 ml-1">Correo Electrónico</label>
-                  <input
-                    type="email"
-                    required
-                    autoComplete="email"
-                    value={email}
-                    onChange={e => setEmail(e.target.value)}
-                    disabled={state === 'loading' || state === 'success'}
-                    className="w-full px-4 py-3.5 border border-slate-200 rounded-xl text-sm font-medium focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all bg-slate-50 focus:bg-white disabled:opacity-60 text-slate-900 placeholder:text-slate-400"
-                    placeholder="tu@correo.com"
-                  />
+              <h2 className="text-[24px] font-extrabold text-slate-900 tracking-tight leading-tight mb-2">
+                ¡Revisa tu bandeja!
+              </h2>
+              <p className="text-slate-500 text-[14px] mb-8 font-medium px-4">
+                Hemos enviado un enlace de recuperación a <strong>{email}</strong>.
+              </p>
+              <button
+                onClick={() => { setIsForgotPassword(false); setError(''); setState('idle'); setEmail(''); }}
+                className="w-full py-3.5 px-4 rounded-xl text-sm font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors"
+              >
+                Volver al inicio de sesión
+              </button>
+            </div>
+          ) : (
+            <div className="bg-white p-8 lg:p-10 rounded-[2rem] shadow-xl shadow-blue-900/5 lg:shadow-[0_8px_30px_rgb(0,0,0,0.04)] lg:border lg:border-slate-100/60">
+              
+              <div className="mb-8 text-left lg:text-center">
+                <h2 className="text-[28px] lg:text-2xl font-extrabold text-slate-900 tracking-tight leading-tight">
+                  {isForgotPassword ? 'Recuperar Cuenta' : 'Bienvenido de vuelta'}
+                </h2>
+                <p className="text-slate-500 text-[14px] mt-2 font-medium">
+                  {isForgotPassword ? 'Ingresa tu correo para recibir un enlace' : 'Ingresa tus credenciales para continuar'}
+                </p>
+              </div>
+  
+              <form onSubmit={handleSubmit} className="space-y-5">
+                <style>{`
+                  input:-webkit-autofill,
+                  input:-webkit-autofill:hover, 
+                  input:-webkit-autofill:focus, 
+                  input:-webkit-autofill:active {
+                      -webkit-box-shadow: 0 0 0 30px #f8fafc inset !important;
+                      -webkit-text-fill-color: #0f172a !important;
+                      border-radius: 1rem;
+                  }
+                `}</style>
+  
+                {/* Error message */}
+                <div className={`overflow-hidden transition-all duration-300 ${state === 'error' ? 'max-h-20 opacity-100 mb-4' : 'max-h-0 opacity-0 mb-0'}`}>
+                  <div className="bg-red-50 text-red-600 text-sm p-3.5 rounded-xl font-medium text-center border border-red-100">
+                    {error}
+                  </div>
                 </div>
-
-                {/* Contraseña */}
-                {!isForgotPassword && (
-                  <div className="space-y-1.5">
-                    <div className="flex items-center justify-between ml-1">
-                      <label className="text-[13px] font-semibold text-slate-700">Contraseña</label>
-                      <button
-                        type="button"
-                        onClick={() => { setIsForgotPassword(true); setError(''); setState('idle'); }}
-                        className="text-[13px] text-blue-600 hover:text-blue-700 font-bold transition-colors"
-                      >
-                        ¿Olvidaste tu contraseña?
-                      </button>
-                    </div>
+  
+                <div className={`transition-all duration-500 ${state === 'success' ? 'opacity-0 scale-95 h-0 overflow-hidden' : 'opacity-100 scale-100'}`}>
+                  {/* Email */}
+                  <div className="space-y-1.5 mb-5">
+                    <label className="block text-[13px] font-semibold text-slate-700 ml-1">Correo Electrónico</label>
                     <input
-                      type="password"
+                      type="email"
                       required
-                      autoComplete="current-password"
-                      value={password}
-                      onChange={e => setPassword(e.target.value)}
+                      autoComplete="email"
+                      value={email}
+                      onChange={e => setEmail(e.target.value)}
                       disabled={state === 'loading' || state === 'success'}
                       className="w-full px-4 py-3.5 border border-slate-200 rounded-xl text-sm font-medium focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all bg-slate-50 focus:bg-white disabled:opacity-60 text-slate-900 placeholder:text-slate-400"
-                      placeholder="••••••••"
+                      placeholder="tu@correo.com"
                     />
                   </div>
-                )}
-              </div>
-
-              {/* Submit */}
-              <button
-                type="submit"
-                disabled={state === 'loading' || state === 'success'}
-                className={`w-full py-4 lg:py-3.5 px-4 rounded-xl text-sm font-bold transition-all duration-500 flex items-center justify-center gap-2 mt-6 ${
-                  state === 'success'
-                    ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/30 scale-105'
-                    : state === 'error'
-                    ? 'bg-red-500 text-white hover:bg-red-600'
-                    : 'bg-blue-600 hover:bg-blue-700 active:scale-[0.98] text-white shadow-md shadow-blue-600/20 lg:shadow-sm'
-                } disabled:opacity-100`}
-              >
-                {state === 'loading' && (
-                  <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24" fill="none">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                  </svg>
-                )}
-                {state === 'loading' && (isForgotPassword ? 'Enviando...' : loadingText)}
-                
-                {state === 'success' && <><CheckCircle2 size={18} /> {isForgotPassword ? 'Correo enviado' : loadingText}</>}
-                {state === 'error' && 'Inténtalo de nuevo'}
-                {state === 'idle' && (isForgotPassword ? 'Enviar correo de recuperación' : 'Iniciar Sesión')}
-              </button>
-            </form>
-
-            {isForgotPassword && (
-              <div className="text-center mt-6">
+  
+                  {/* Contraseña */}
+                  <div className={`transition-all duration-500 ease-in-out overflow-hidden ${isForgotPassword ? 'opacity-0 max-h-0 m-0' : 'opacity-100 max-h-[120px] mt-5'}`}>
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between ml-1">
+                        <label className="text-[13px] font-semibold text-slate-700">Contraseña</label>
+                        <button
+                          type="button"
+                          onClick={() => { setIsForgotPassword(true); setError(''); setState('idle'); }}
+                          className="text-[13px] text-blue-600 hover:text-blue-700 font-bold transition-colors"
+                        >
+                          ¿Olvidaste tu contraseña?
+                        </button>
+                      </div>
+                      <input
+                        type="password"
+                        required={!isForgotPassword}
+                        autoComplete="current-password"
+                        value={password}
+                        onChange={e => setPassword(e.target.value)}
+                        disabled={state === 'loading' || state === 'success'}
+                        className="w-full px-4 py-3.5 border border-slate-200 rounded-xl text-sm font-medium focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all bg-slate-50 focus:bg-white disabled:opacity-60 text-slate-900 placeholder:text-slate-400"
+                        placeholder="••••••••"
+                      />
+                    </div>
+                  </div>
+                </div>
+  
+                {/* Submit */}
+                <button
+                  type="submit"
+                  disabled={state === 'loading' || state === 'success'}
+                  className={`w-full py-4 lg:py-3.5 px-4 rounded-xl text-sm font-bold transition-all duration-500 flex items-center justify-center gap-2 ${!isForgotPassword ? 'mt-6' : 'mt-2'} ${
+                    state === 'success'
+                      ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/30 scale-105'
+                      : state === 'error'
+                      ? 'bg-red-500 text-white hover:bg-red-600'
+                      : 'bg-blue-600 hover:bg-blue-700 active:scale-[0.98] text-white shadow-md shadow-blue-600/20 lg:shadow-sm'
+                  } disabled:opacity-100`}
+                >
+                  {state === 'loading' && (
+                    <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24" fill="none">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                  )}
+                  {state === 'loading' && (isForgotPassword ? 'Enviando...' : loadingText)}
+                  
+                  {state === 'success' && <><CheckCircle2 size={18} /> {loadingText}</>}
+                  {state === 'error' && 'Inténtalo de nuevo'}
+                  {state === 'idle' && (isForgotPassword ? 'Enviar enlace' : 'Iniciar Sesión')}
+                </button>
+              </form>
+  
+              <div className={`text-center overflow-hidden transition-all duration-500 ease-in-out ${isForgotPassword ? 'opacity-100 max-h-20 mt-6' : 'opacity-0 max-h-0 mt-0'}`}>
                 <button
                   onClick={() => { setIsForgotPassword(false); setError(''); setState('idle'); }}
                   className="text-[13px] font-semibold text-slate-500 hover:text-slate-900 transition-colors"
@@ -234,8 +257,8 @@ export default function Login() {
                   Volver al inicio de sesión
                 </button>
               </div>
-            )}
-          </div>
+            </div>
+          )}
 
           {!isForgotPassword && (
             <div className={`mt-10 lg:mt-8 flex flex-col items-center justify-center gap-2 transition-opacity duration-500 ${state === 'success' ? 'opacity-0' : 'opacity-100'}`}>
