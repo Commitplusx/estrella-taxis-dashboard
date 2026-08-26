@@ -34,13 +34,32 @@ export function useTraccarSocket({ onDevices, onPositions, onEvents, onConnect }
   useEffect(() => {
     let destroyed = false;
 
-    const connect = () => {
+    const connect = async () => {
       if (destroyed) return;
 
-      // El WebSocket SIEMPRE debe conectarse al mismo dominio donde está hospedado el dashboard
-      const wsHost = window.location.host;
-      const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const wsUrl = `${wsProtocol}//${wsHost}/api/socket`;
+      let token = '';
+      try {
+        // Obtenemos un token temporal del backend (Vercel nos lo da por REST que sí funciona)
+        const res = await fetch('/api/session/token', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams({ expiration: new Date(Date.now() + 86400000).toISOString() })
+        });
+        if (res.ok) {
+          token = await res.text();
+        }
+      } catch (e) {
+        console.warn('[Traccar WS] No se pudo obtener token para el socket', e);
+      }
+
+      // Vercel NO soporta WebSockets. Tenemos que saltarnos el proxy y apuntar directo al backend.
+      // Como apuntamos a otro dominio, las cookies no viajan solas, por eso le inyectamos el ?token=
+      const isDev = import.meta.env.DEV;
+      const wsHost = isDev ? window.location.host : 'taxis.estrella-eats.mx';
+      const wsProtocol = isDev && window.location.protocol !== 'https:' ? 'ws:' : 'wss:';
+      
+      const wsUrl = `${wsProtocol}//${wsHost}/api/socket${token ? `?token=${token}` : ''}`;
       
       console.log(`[Traccar WS] Intentando conectar a: ${wsUrl}`);
       const ws = new WebSocket(wsUrl);
@@ -57,15 +76,12 @@ export function useTraccarSocket({ onDevices, onPositions, onEvents, onConnect }
           const data: SocketMessage = JSON.parse(event.data);
           
           if (data.devices?.length) {
-            console.log(`[Traccar WS] 📡 Dispositivos recibidos: ${data.devices.length}`);
             if (onDevicesRef.current) onDevicesRef.current(data.devices);
           }
           if (data.positions?.length) {
-            console.log(`[Traccar WS] 📍 Posiciones recibidas: ${data.positions.length}`);
             if (onPositionsRef.current) onPositionsRef.current(data.positions);
           }
           if (data.events?.length) {
-            console.log(`[Traccar WS] ⚡ Eventos recibidos: ${data.events.length}`, data.events);
             if (onEventsRef.current) onEventsRef.current(data.events as any[]);
           }
         } catch (e) {
