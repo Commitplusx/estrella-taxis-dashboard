@@ -37,11 +37,12 @@ export function useTraccarSocket({ onDevices, onPositions, onEvents, onConnect }
     const connect = () => {
       if (destroyed) return;
 
-      const isDev = import.meta.env.DEV;
-      const wsHost = isDev ? window.location.host : 'taxis.estrella-eats.mx';
-      const wsProtocol = isDev && window.location.protocol !== 'https:' ? 'ws' : 'wss';
-      const wsUrl = `${wsProtocol}://${wsHost}/api/socket`;
+      // El WebSocket SIEMPRE debe conectarse al mismo dominio donde está hospedado el dashboard
+      const wsHost = window.location.host;
+      const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const wsUrl = `${wsProtocol}//${wsHost}/api/socket`;
       
+      console.log(`[Traccar WS] Intentando conectar a: ${wsUrl}`);
       const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
 
@@ -54,10 +55,19 @@ export function useTraccarSocket({ onDevices, onPositions, onEvents, onConnect }
       ws.onmessage = (event) => {
         try {
           const data: SocketMessage = JSON.parse(event.data);
-          // Avisar a los componentes que llegaron datos frescos
-          if (data.devices?.length && onDevicesRef.current) onDevicesRef.current(data.devices);
-          if (data.positions?.length && onPositionsRef.current) onPositionsRef.current(data.positions);
-          if (data.events?.length && onEventsRef.current) onEventsRef.current(data.events as any[]);
+          
+          if (data.devices?.length) {
+            console.log(`[Traccar WS] 📡 Dispositivos recibidos: ${data.devices.length}`);
+            if (onDevicesRef.current) onDevicesRef.current(data.devices);
+          }
+          if (data.positions?.length) {
+            console.log(`[Traccar WS] 📍 Posiciones recibidas: ${data.positions.length}`);
+            if (onPositionsRef.current) onPositionsRef.current(data.positions);
+          }
+          if (data.events?.length) {
+            console.log(`[Traccar WS] ⚡ Eventos recibidos: ${data.events.length}`, data.events);
+            if (onEventsRef.current) onEventsRef.current(data.events as any[]);
+          }
         } catch (e) {
           console.error('[Traccar WS] Error al procesar mensaje:', e);
         }
