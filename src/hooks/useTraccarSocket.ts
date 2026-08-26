@@ -11,25 +11,25 @@ type UseTraccarSocketOptions = {
   onDevices?: (devices: TraccarDevice[]) => void;
   onPositions?: (positions: TraccarPosition[]) => void;
   onEvents?: (events: any[]) => void;
+  onConnect?: () => void; // <--- Añadimos esto para sincronizar tras una caída
 };
 
-const MAX_RECONNECT_DELAY_MS = 30_000; // Tope máximo de espera (30 segundos)
+const MAX_RECONNECT_DELAY_MS = 30_000;
 
-export function useTraccarSocket({ onDevices, onPositions, onEvents }: UseTraccarSocketOptions) {
+export function useTraccarSocket({ onDevices, onPositions, onEvents, onConnect }: UseTraccarSocketOptions) {
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const reconnectDelay = useRef(3_000); // Empezamos intentando reconectar a los 3s
+  const reconnectDelay = useRef(3_000);
 
-  // Guardamos las funciones que vienen de los componentes en referencias.
-  // Así el WebSocket siempre usa la versión más reciente sin tener que desconectarse.
   const onDevicesRef = useRef(onDevices);
   const onPositionsRef = useRef(onPositions);
   const onEventsRef = useRef(onEvents);
+  const onConnectRef = useRef(onConnect);
 
-  // Mantener las referencias al día en cada render
   useEffect(() => { onDevicesRef.current = onDevices; }, [onDevices]);
   useEffect(() => { onPositionsRef.current = onPositions; }, [onPositions]);
   useEffect(() => { onEventsRef.current = onEvents; }, [onEvents]);
+  useEffect(() => { onConnectRef.current = onConnect; }, [onConnect]);
 
   useEffect(() => {
     let destroyed = false;
@@ -37,14 +37,18 @@ export function useTraccarSocket({ onDevices, onPositions, onEvents }: UseTracca
     const connect = () => {
       if (destroyed) return;
 
-      // Protocolo ws:// o wss:// según si estamos en local o producción
-      const wsUrl = `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}/api/socket`;
+      const isDev = import.meta.env.DEV;
+      const wsHost = isDev ? window.location.host : 'taxis.estrella-eats.mx';
+      const wsProtocol = isDev && window.location.protocol !== 'https:' ? 'ws' : 'wss';
+      const wsUrl = `${wsProtocol}://${wsHost}/api/socket`;
+      
       const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
 
       ws.onopen = () => {
         console.log('[Traccar WS] Conectado');
-        reconnectDelay.current = 3_000; // Volvemos al delay normal si hay éxito
+        reconnectDelay.current = 3_000;
+        if (onConnectRef.current) onConnectRef.current(); // Pedir datos frescos al servidor!
       };
 
       ws.onmessage = (event) => {
