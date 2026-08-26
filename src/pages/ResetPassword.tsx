@@ -68,7 +68,7 @@ export default function ResetPassword() {
   };
 
   return (
-    <div className={`h-screen flex bg-white font-sans overflow-hidden transition-opacity duration-700 relative ${mounted ? 'opacity-100' : 'opacity-0'}`}>
+    <div className={`h-screen flex bg-white font-sans overflow-hidden transition-opacity duration-700 relative page-transition ${mounted ? 'opacity-100' : 'opacity-0'}`}>
       
       {/* Panel Izquierdo (Hero) */}
       <div className="hidden lg:flex flex-col w-[55%] bg-black items-center justify-center relative z-10">

@@ -5,6 +5,7 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import Layout from './components/Layout';
 import Login from './pages/Login';
 import ResetPassword from './pages/ResetPassword';
+import Landing from './pages/Landing';
 import Dashboard from './pages/Dashboard';
 import MapPage from './pages/MapPage';
 import DevicesPage from './pages/DevicesPage';
@@ -56,23 +57,23 @@ function AppRoutes() {
         }}
       />
       <Routes>
+        <Route path="/" element={<Landing />} />
         <Route path="/login" element={<Login />} />
         <Route path="/reset-password" element={<ResetPassword />} />
-        <Route path="/" element={<PrivateRoute><Layout /></PrivateRoute>}>
-          <Route index element={<Navigate to="/map" replace />} />
-          <Route path="dashboard" element={<Dashboard />} />
-          <Route path="map" element={<MapPage />} />
-          <Route path="devices" element={<DevicesPage />} />
-          <Route path="connections" element={<DeviceConnectionsPage />} />
-          <Route path="reports" element={<ReportsPage />} />
-          <Route path="replay" element={<ReplayPage />} />
-          <Route path="notifications" element={<NotificationsPage />} />
-          <Route path="groups" element={<GroupsPage />} />
-          <Route path="drivers" element={<DriversPage />} />
-          <Route path="geofences" element={<GeofencesPage />} />
-          <Route path="maintenance" element={<MaintenancePage />} />
-          <Route path="users" element={<UsersPage />} />
-          <Route path="settings" element={<SettingsPage />} />
+        <Route element={<PrivateRoute><Layout /></PrivateRoute>}>
+          <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/map" element={<MapPage />} />
+          <Route path="/devices" element={<DevicesPage />} />
+          <Route path="/connections" element={<DeviceConnectionsPage />} />
+          <Route path="/reports" element={<ReportsPage />} />
+          <Route path="/replay" element={<ReplayPage />} />
+          <Route path="/notifications" element={<NotificationsPage />} />
+          <Route path="/groups" element={<GroupsPage />} />
+          <Route path="/drivers" element={<DriversPage />} />
+          <Route path="/geofences" element={<GeofencesPage />} />
+          <Route path="/maintenance" element={<MaintenancePage />} />
+          <Route path="/users" element={<UsersPage />} />
+          <Route path="/settings" element={<SettingsPage />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
