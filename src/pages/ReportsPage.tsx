@@ -4,8 +4,8 @@ import { loadGoogleMaps } from '../lib/mapsLoader';
 import { exportToExcel } from '../lib/exportExcel';
 import {
   Calendar, Search, Map as MapIcon, Navigation, Clock,
-  Play, Download, ChevronDown, Car, Layers, BarChart3,
-  MapPin, Zap, AlertTriangle, RefreshCw, X, Sparkles
+  Play, Download, ChevronDown, ChevronRight, Car, Layers, BarChart3,
+  MapPin, Zap, AlertTriangle, RefreshCw, X, Sparkles, Activity
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
@@ -145,10 +145,10 @@ function FiltersBar({
   const [activePreset, setActivePreset] = useState('today');
 
   return (
-    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 flex flex-col gap-4">
-      {/* Presets rápidos */}
-      <div className="flex items-center gap-2 flex-wrap">
-        <span className="text-xs font-bold text-gray-500 mr-1">Período:</span>
+    <div className="bg-white sm:rounded-3xl border-y sm:border border-gray-100 shadow-sm p-4 sm:p-5 flex flex-col gap-4 sm:gap-5 mx-[-16px] sm:mx-0">
+
+      {/* Scrollable Pills sin etiqueta Período */}
+      <div className="flex overflow-x-auto scrollbar-hide pb-1 gap-2">
         {[
           { key: 'today', label: 'Hoy' },
           { key: 'yesterday', label: 'Ayer' },
@@ -165,9 +165,9 @@ function FiltersBar({
                 setTo(r.to);
               }
             }}
-            className={`px-3 py-1.5 text-xs font-bold rounded-lg transition border ${activePreset === p.key
-              ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
-              : 'bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100'
+            className={`shrink-0 px-5 py-2 text-[13px] font-bold rounded-full transition-all duration-300 ${activePreset === p.key
+              ? 'bg-gray-900 text-white shadow-md shadow-gray-900/20'
+              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
               }`}>
             {p.label}
           </button>
@@ -177,19 +177,18 @@ function FiltersBar({
       <div className={`grid grid-cols-1 ${activePreset === 'custom' ? 'sm:grid-cols-2 lg:grid-cols-4' : 'lg:grid-cols-2'} gap-3 items-end`}>
         {/* Selector de dispositivos */}
         <div className="relative lg:col-span-2">
-          <label className="block text-xs font-bold text-gray-500 mb-1">Taxis</label>
           <button onClick={() => setShowDevicePicker(!showDevicePicker)}
-            className={`w-full flex items-center justify-between gap-2 border rounded-xl px-3 py-2.5 text-sm transition text-left ${showDevicePicker ? 'bg-white border-blue-400 ring-2 ring-blue-100' : 'bg-gray-50 border-gray-200 hover:border-blue-300 hover:bg-white'}`}>
+            className={`w-full flex items-center justify-between gap-3 border rounded-2xl px-4 py-3 text-sm transition-all focus:outline-none ${showDevicePicker ? 'bg-white border-blue-400 ring-4 ring-blue-50' : 'bg-gray-50/50 border-gray-200 hover:border-gray-300 hover:bg-gray-50'}`}>
             <div className="flex items-center gap-2 min-w-0">
-              <Car size={14} className="text-blue-500 shrink-0" />
-              <span className="truncate text-gray-700 font-medium">
-                {selectedDevices.length === 0 ? 'Selecciona un taxi...' :
-                  selectedDevices.length === devices.length ? `Todos los taxis (${devices.length})` :
+              <Car size={16} className={showDevicePicker ? 'text-blue-500' : 'text-gray-400'} />
+              <span className="truncate font-semibold text-gray-800">
+                {selectedDevices.length === 0 ? 'Seleccionar Taxis...' :
+                  selectedDevices.length === devices.length ? 'Todos los taxis' :
                     selectedDevices.length <= 2 ? selectedNames.join(', ') :
                       `${selectedDevices.length} taxis seleccionados`}
               </span>
             </div>
-            <ChevronDown size={14} className={`text-gray-400 shrink-0 transition-transform ${showDevicePicker ? 'rotate-180' : ''}`} />
+            <ChevronDown size={16} className={`text-gray-400 shrink-0 transition-transform duration-300 ${showDevicePicker ? 'rotate-180' : ''}`} />
           </button>
 
           {showDevicePicker && (
@@ -257,10 +256,10 @@ function FiltersBar({
         )}
       </div>
 
-      <div className="flex justify-end pt-1">
+      <div className="flex justify-end mt-1 sm:mt-2">
         <button onClick={onSearch} disabled={loading || selectedDevices.length === 0}
-          className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-bold transition shadow-sm disabled:opacity-50">
-          {loading ? <RefreshCw size={14} className="animate-spin" /> : <Search size={14} />}
+          className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-3.5 bg-blue-600 hover:bg-blue-700 active:scale-[0.98] text-white rounded-2xl text-[15px] font-bold transition-all shadow-lg shadow-blue-600/30 disabled:opacity-50 disabled:active:scale-100 disabled:shadow-none">
+          {loading ? <RefreshCw size={18} className="animate-spin" /> : <Search size={18} />}
           Generar Reporte
         </button>
       </div>
@@ -328,6 +327,13 @@ export default function ReportsPage() {
   const [selectedGroups, setSelectedGroups] = useState<number[]>([]);
   const [activeTab, setActiveTab] = useState<TabType>('trips');
   const [loading, setLoading] = useState(false);
+  const [showRightScroll, setShowRightScroll] = useState(true);
+
+  const handleTabScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const { scrollLeft, scrollWidth, clientWidth } = e.currentTarget;
+    // Ocultar la flecha si estamos a 10px del final
+    setShowRightScroll(scrollLeft + clientWidth < scrollWidth - 10);
+  };
   const [toastMessage, setToastMessage] = useState<{ text: string, type: 'success' | 'error' } | null>(null);
 
   const showToast = (text: string, type: 'success' | 'error' = 'success') => {
@@ -607,22 +613,28 @@ export default function ReportsPage() {
       />
 
       {/* Tabs */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden flex flex-col shrink-0 mb-10">
-        <div className="flex border-b border-gray-100 overflow-x-auto shrink-0">
-          {TABS.map(tab => (
-            <button key={tab.id} onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-2 px-4 py-3.5 text-sm font-bold whitespace-nowrap border-b-2 transition-colors ${activeTab === tab.id
-                ? 'border-blue-600 text-blue-600 bg-blue-50/50'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'
-                }`}>
-              {tab.icon}{tab.label}
-            </button>
-          ))}
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm flex flex-col shrink-0 mb-10 overflow-hidden">
+        <div className="relative border-b border-gray-100">
+          <div className="flex overflow-x-auto scrollbar-hide shrink-0 relative z-0" onScroll={handleTabScroll}>
+            {TABS.map(tab => (
+              <button key={tab.id} onClick={() => setActiveTab(tab.id)}
+                className={`flex items-center gap-2 px-4 py-3.5 text-sm font-bold whitespace-nowrap border-b-2 transition-colors ${activeTab === tab.id
+                  ? 'border-blue-600 text-blue-600 bg-blue-50/50'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+                  }`}>
+                {tab.icon}{tab.label}
+              </button>
+            ))}
+          </div>
+          {/* Indicador de scroll flotante en móvil */}
+          <div className={`absolute right-0 top-0 bottom-0 w-12 bg-gradient-to-l from-white via-white/80 to-transparent pointer-events-none md:hidden flex justify-end items-center pr-1 z-10 transition-opacity duration-500 ease-in-out ${showRightScroll ? 'opacity-100' : 'opacity-0'}`}>
+            <ChevronRight size={16} className="text-gray-400 animate-pulse" />
+          </div>
         </div>
 
-        {/* â”€â”€ VIAJES â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+        {/* ────────────────────────────────────────────────────────── */}
         {activeTab === 'trips' && (
-          <div className="flex flex-col">
+          <div key={`trips-${trips.length}`} className="flex flex-col animate-slide-up">
             {trips.length > 0 && (
               <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between shrink-0 bg-gray-50/50">
                 <span className="text-sm font-bold text-gray-700">{trips.length} viaje{trips.length !== 1 ? 's' : ''} encontrado{trips.length !== 1 ? 's' : ''}</span>
@@ -638,35 +650,48 @@ export default function ReportsPage() {
               {!loading && trips.length > 0 && (
                 <>
                   {/* Mobile cards */}
-                  <div className="md:hidden divide-y divide-gray-100">
+                  <div className="md:hidden flex flex-col gap-4 p-4">
                     {trips.map((t, i) => (
-                      <div key={i} className="p-4 flex flex-col gap-2">
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-lg">{t.deviceName}</span>
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs font-bold text-gray-500">{fmtDuration(t.duration)}</span>
-                            <button onClick={() => viewTripRoute(t)}
-                              title="Ver ruta en mapa"
-                              className="flex items-center gap-1 px-2 py-1 bg-blue-600 text-white text-[10px] font-bold rounded-lg hover:bg-blue-700 transition">
-                              <MapIcon size={10} /> Ruta
-                            </button>
+                      <div key={i} onClick={() => viewTripRoute(t)} className="bg-white rounded-3xl p-4 shadow-sm border border-gray-100 flex flex-col gap-4 relative overflow-hidden transition-all duration-300 active:scale-[0.98] hover:shadow-md cursor-pointer group">
+                        <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-blue-500"></div>
+
+                        <div className="flex items-start justify-between pl-2">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-2xl bg-blue-50 flex items-center justify-center shrink-0">
+                              <Car size={18} className="text-blue-600" />
+                            </div>
+                            <div>
+                              <span className="text-[15px] font-bold text-gray-900 block leading-tight">{t.deviceName}</span>
+                              <span className="text-[11px] font-medium text-gray-500 flex items-center gap-1 mt-0.5">
+                                <Clock size={10} /> {fmtTime(t.startTime)}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="flex flex-col items-end">
+                            <span className="text-xs font-bold text-blue-700 bg-blue-50 px-3 py-1.5 rounded-full">
+                              {fmtDuration(t.duration)}
+                            </span>
+                            <span className="text-[10px] text-gray-400 font-medium mt-1.5 uppercase tracking-wider">Terminó {fmtTime(t.endTime)}</span>
                           </div>
                         </div>
-                        <div className="grid grid-cols-3 gap-2 mt-1">
-                          <div className="text-center bg-gray-50 rounded-xl p-2">
-                            <p className="text-xs text-gray-400">Distancia</p>
-                            <p className="text-sm font-bold text-gray-800">{fmtDist(t.distance)}</p>
+
+                        <div className="grid grid-cols-3 gap-2 mt-1 pl-2">
+                          <div className="flex flex-col items-center justify-center bg-gray-50/80 rounded-2xl p-2.5 border border-gray-100/50">
+                            <Navigation size={14} className="text-gray-400 mb-1.5" />
+                            <p className="text-[10px] text-gray-500 uppercase tracking-widest font-semibold mb-0.5">Dist.</p>
+                            <p className="text-sm font-black text-gray-800">{fmtDist(t.distance)}</p>
                           </div>
-                          <div className="text-center bg-gray-50 rounded-xl p-2">
-                            <p className="text-xs text-gray-400">V. Prom</p>
-                            <p className="text-sm font-bold text-gray-800">{fmtSpeed(t.averageSpeed)}</p>
+                          <div className="flex flex-col items-center justify-center bg-gray-50/80 rounded-2xl p-2.5 border border-gray-100/50">
+                            <Activity size={14} className="text-gray-400 mb-1.5" />
+                            <p className="text-[10px] text-gray-500 uppercase tracking-widest font-semibold mb-0.5">Prom.</p>
+                            <p className="text-sm font-black text-gray-800">{fmtSpeed(t.averageSpeed)}</p>
                           </div>
-                          <div className="text-center bg-gray-50 rounded-xl p-2">
-                            <p className="text-xs text-gray-400">V. Máx</p>
-                            <p className="text-sm font-bold text-red-600">{fmtSpeed(t.maxSpeed)}</p>
+                          <div className="flex flex-col items-center justify-center bg-red-50/50 rounded-2xl p-2.5 border border-red-100/50">
+                            <Zap size={14} className="text-red-400 mb-1.5" />
+                            <p className="text-[10px] text-red-500 uppercase tracking-widest font-semibold mb-0.5">Máx.</p>
+                            <p className="text-sm font-black text-red-600">{fmtSpeed(t.maxSpeed)}</p>
                           </div>
                         </div>
-                        <p className="text-[11px] text-gray-400">{fmtTime(t.startTime)} → {fmtTime(t.endTime)}</p>
                       </div>
                     ))}
                   </div>
@@ -700,9 +725,9 @@ export default function ReportsPage() {
           </div>
         )}
 
-        {/* â”€â”€ PARADAS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+        {/* ────────────────────────────────────────────────────────── */}
         {activeTab === 'stops' && (
-          <div className="flex flex-col">
+          <div key={`stops-${stops.length}`} className="flex flex-col animate-slide-up">
             {stops.length > 0 && (
               <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between shrink-0 bg-gray-50/50">
                 <span className="text-sm font-bold text-gray-700">{stops.length} parada{stops.length !== 1 ? 's' : ''}</span>
@@ -717,17 +742,37 @@ export default function ReportsPage() {
               {!loading && stops.length === 0 && <div className="flex flex-col items-center justify-center h-40 text-gray-400 gap-2"><MapPin size={32} className="opacity-30" /><p className="text-sm">Selecciona un período y genera el reporte</p></div>}
               {!loading && stops.length > 0 && (
                 <>
-                  <div className="md:hidden divide-y divide-gray-100">
+                  <div className="md:hidden flex flex-col gap-4 p-4">
                     {stops.map((s, i) => (
-                      <div key={i} className="p-4 flex flex-col gap-2">
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded-lg">{s.deviceName}</span>
-                          <span className="text-sm font-bold text-gray-800">{fmtDuration(s.duration)}</span>
+                      <div key={i} className="bg-white rounded-3xl p-4 shadow-sm border border-gray-100 flex flex-col gap-3 relative overflow-hidden transition-all duration-300">
+                        <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-orange-500"></div>
+
+                        <div className="flex items-start justify-between pl-2">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-2xl bg-orange-50 flex items-center justify-center shrink-0">
+                              <MapPin size={18} className="text-orange-600" />
+                            </div>
+                            <div>
+                              <span className="text-[15px] font-bold text-gray-900 block leading-tight">{s.deviceName}</span>
+                              <span className="text-[11px] font-medium text-gray-500 flex items-center gap-1 mt-0.5">
+                                <Clock size={10} /> {fmtTime(s.startTime)}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="flex flex-col items-end">
+                            <span className="text-xs font-bold text-orange-700 bg-orange-50 px-3 py-1.5 rounded-full">
+                              {fmtDuration(s.duration)}
+                            </span>
+                            <span className="text-[10px] text-gray-400 font-medium mt-1.5 uppercase tracking-wider">Hasta {fmtTime(s.endTime)}</span>
+                          </div>
                         </div>
-                        <div className="text-xs text-gray-600 bg-gray-50 px-3 py-2 rounded-lg">
-                          <AddressCell stop={s} mapsLoaded={mapsLoaded} />
+
+                        <div className="flex items-start gap-2 bg-gray-50/80 px-3 py-3 rounded-2xl border border-gray-100/50 mt-1 ml-2">
+                          <Navigation size={14} className="text-gray-400 mt-0.5 shrink-0" />
+                          <div className="text-[13px] text-gray-600 font-medium leading-normal">
+                            <AddressCell stop={s} mapsLoaded={mapsLoaded} />
+                          </div>
                         </div>
-                        <p className="text-[11px] text-gray-400">{fmtTime(s.startTime)} → {fmtTime(s.endTime)}</p>
                       </div>
                     ))}
                   </div>
@@ -761,7 +806,7 @@ export default function ReportsPage() {
 
         {/* â”€â”€ EVENTOS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
         {activeTab === 'events' && (
-          <div className="flex flex-col">
+          <div key={`events-${events.length}`} className="flex flex-col animate-slide-up">
             {events.length > 0 && (
               <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between shrink-0 bg-gray-50/50">
                 <span className="text-sm font-bold text-gray-700">{events.length} evento{events.length !== 1 ? 's' : ''}</span>
@@ -775,18 +820,58 @@ export default function ReportsPage() {
               {loading && <div className="flex items-center justify-center h-40 text-gray-400 text-sm"><RefreshCw size={20} className="animate-spin mr-2" />Cargando eventos...</div>}
               {!loading && events.length === 0 && <div className="flex flex-col items-center justify-center h-40 text-gray-400 gap-2"><Zap size={32} className="opacity-30" /><p className="text-sm">Selecciona un período y genera el reporte</p></div>}
               {!loading && events.length > 0 && (
-                <div className="divide-y divide-gray-100">
-                  {events.map((ev, i) => {
-                    const meta = EVENT_LABELS[ev.type] || { label: ev.type, color: 'text-gray-600 bg-gray-50' };
-                    return (
-                      <div key={i} className="flex items-center gap-4 px-4 py-3 hover:bg-gray-50 transition">
-                        <span className={`text-[11px] font-bold px-2 py-1 rounded-lg whitespace-nowrap ${meta.color}`}>{meta.label}</span>
-                        <span className="text-sm font-semibold text-gray-800 flex-1">{ev.deviceName}</span>
-                        <span className="text-xs text-gray-400 whitespace-nowrap">{fmtTime(ev.eventTime || ev.serverTime || '')}</span>
-                      </div>
-                    );
-                  })}
-                </div>
+                <>
+                  {/* Mobile Cards (Events) */}
+                  <div className="md:hidden flex flex-col gap-4 p-4">
+                    {events.map((ev, i) => {
+                      const meta = EVENT_LABELS[ev.type] || { label: ev.type, color: 'text-gray-600 bg-gray-50' };
+                      const isOffline = ev.type === 'deviceOffline';
+                      const isOnline = ev.type === 'deviceOnline';
+                      return (
+                        <div key={i} className="bg-white rounded-3xl p-4 shadow-sm border border-gray-100 flex gap-4 relative overflow-hidden items-center">
+                          <div className={`absolute left-0 top-0 bottom-0 w-1.5 ${isOffline ? 'bg-red-500' : isOnline ? 'bg-green-500' : 'bg-blue-500'}`}></div>
+
+                          <div className={`w-12 h-12 shrink-0 rounded-2xl flex items-center justify-center shadow-sm ml-1 ${isOffline ? 'bg-red-50 text-red-500 border border-red-100' :
+                              isOnline ? 'bg-green-50 text-green-500 border border-green-100' :
+                                'bg-blue-50 text-blue-500 border border-blue-100'
+                            }`}>
+                            {isOffline ? <Zap size={20} /> :
+                              isOnline ? <Car size={20} /> :
+                                <AlertTriangle size={20} />}
+                          </div>
+
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between mb-1.5">
+                              <span className="text-[15px] font-bold text-gray-900 truncate pr-2 leading-tight">{ev.deviceName}</span>
+                              <div className="flex flex-col items-end shrink-0">
+                                <span className="text-[10px] font-bold text-gray-400 whitespace-nowrap bg-gray-50 px-2 py-1 rounded-md flex items-center gap-1 border border-gray-100">
+                                  <Clock size={10} className="text-gray-400" />
+                                  {fmtTime(ev.eventTime || ev.serverTime || '')}
+                                </span>
+                              </div>
+                            </div>
+                            <span className={`inline-block text-[11px] font-bold px-2.5 py-1 rounded-full whitespace-nowrap ${meta.color}`}>
+                              {meta.label}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  {/* Desktop Table (Events) */}
+                  <div className="hidden md:block divide-y divide-gray-100">
+                    {events.map((ev, i) => {
+                      const meta = EVENT_LABELS[ev.type] || { label: ev.type, color: 'text-gray-600 bg-gray-50' };
+                      return (
+                        <div key={i} className="flex items-center gap-4 px-4 py-3 hover:bg-gray-50 transition">
+                          <span className={`text-[11px] font-bold px-2 py-1 rounded-lg whitespace-nowrap ${meta.color}`}>{meta.label}</span>
+                          <span className="text-sm font-semibold text-gray-800 flex-1">{ev.deviceName}</span>
+                          <span className="text-xs text-gray-400 whitespace-nowrap">{fmtTime(ev.eventTime || ev.serverTime || '')}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </>
               )}
             </div>
           </div>
@@ -867,7 +952,7 @@ export default function ReportsPage() {
         )}
 
         {/* ────────────────────────────────────────────────────────── */}
-        <div className={activeTab === 'route' ? 'flex flex-col' : 'hidden'}>
+        <div className={activeTab === 'route' ? 'flex flex-col animate-slide-up' : 'hidden'}>
           {route.length > 0 && (
             <div className="px-4 py-2 border-b border-gray-100 shrink-0 bg-gray-50/50">
               <span className="text-xs text-gray-500 font-medium">

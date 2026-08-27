@@ -4,6 +4,7 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   plugins: [react()],
   server: {
+    host: true, // Permitir conexiones desde otros dispositivos en la red local (celulares)
     proxy: {
       // Proxy específico para el WebSocket
       '/api/socket': {
@@ -29,10 +30,16 @@ export default defineConfig({
           });
           proxy.on('proxyRes', (proxyRes, _req, _res) => {
             // Eliminar CSP headers que Traccar manda en sus endpoints de reportes.
-            // Si no se eliminan, el navegador los aplica y bloquea los scripts de Vite/React.
             delete proxyRes.headers['content-security-policy'];
             delete proxyRes.headers['content-security-policy-report-only'];
             delete proxyRes.headers['x-frame-options'];
+
+            // Quitar el flag "Secure" de la cookie de sesión para que funcione en http:// local (celulares)
+            if (proxyRes.headers['set-cookie']) {
+              proxyRes.headers['set-cookie'] = proxyRes.headers['set-cookie'].map(cookie =>
+                cookie.replace(/;\s*secure/i, '').replace(/;\s*SameSite=None/i, '; SameSite=Lax')
+              );
+            }
           });
         }
       },

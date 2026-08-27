@@ -11,14 +11,36 @@ export default function Layout() {
   const [mounted, setMounted] = useState(false);
   React.useEffect(() => {
     setMounted(true);
-    
+
     const hide = () => setBottomNavHidden(true);
     const show = () => setBottomNavHidden(false);
     window.addEventListener('hideBottomNav', hide);
     window.addEventListener('showBottomNav', show);
+
+    let lastScrollY = 0;
+    const handleScroll = (e: Event) => {
+      const target = e.target as HTMLElement;
+      if (!target || typeof target.scrollTop !== 'number') return;
+
+      const currentScrollY = target.scrollTop;
+      if (currentScrollY <= 0) {
+        setBottomNavHidden(false);
+        return;
+      }
+      if (currentScrollY > lastScrollY + 10) {
+        setBottomNavHidden(true);
+      } else if (currentScrollY < lastScrollY - 10) {
+        setBottomNavHidden(false);
+      }
+      lastScrollY = currentScrollY;
+    };
+    // Use capturing phase to catch scroll events from any inner container
+    window.addEventListener('scroll', handleScroll, true);
+
     return () => {
       window.removeEventListener('hideBottomNav', hide);
       window.removeEventListener('showBottomNav', show);
+      window.removeEventListener('scroll', handleScroll, true);
     };
   }, []);
 
@@ -46,9 +68,8 @@ export default function Layout() {
 
       {/* Overlay oscuro en móvil cuando sidebar está abierto */}
       <div
-        className={`fixed inset-0 bg-gray-900/40 z-30 md:hidden transition-opacity duration-500 ease-out ${
-          sidebarOpen ? 'opacity-100 backdrop-blur-sm' : 'opacity-0 pointer-events-none'
-        }`}
+        className={`fixed inset-0 bg-gray-900/40 z-30 md:hidden transition-opacity duration-500 ease-out ${sidebarOpen ? 'opacity-100 backdrop-blur-sm' : 'opacity-0 pointer-events-none'
+          }`}
         onClick={() => setSidebarOpen(false)}
       />
 
@@ -63,22 +84,22 @@ export default function Layout() {
 
       {/* Contenido principal */}
       <main className="flex-1 flex flex-col bg-[#F8FAFC] relative overflow-hidden w-full">
-        
+
         {/* HEADER TOP GLOBAl */}
         <header className="hidden">
-            <div className="flex items-center gap-4">
-                <button 
-                  className="md:hidden w-10 h-10 rounded-xl bg-gray-50 text-gray-600 hover:bg-blue-50 hover:text-primary transition flex items-center justify-center" 
-                  onClick={() => setSidebarOpen(!sidebarOpen)}
-                >
-                    <Menu size={20} />
-                </button>
-                <h2 key={title} className="text-lg sm:text-xl font-bold text-gray-800 slide-in-right truncate">
-                  {title}
-                </h2>
-            </div>
-            <div className="flex items-center gap-2 sm:gap-4">
-                {/* 
+          <div className="flex items-center gap-4">
+            <button
+              className="md:hidden w-10 h-10 rounded-xl bg-gray-50 text-gray-600 hover:bg-blue-50 hover:text-primary transition flex items-center justify-center"
+              onClick={() => setSidebarOpen(!sidebarOpen)}
+            >
+              <Menu size={20} />
+            </button>
+            <h2 key={title} className="text-lg sm:text-xl font-bold text-gray-800 slide-in-right truncate">
+              {title}
+            </h2>
+          </div>
+          <div className="flex items-center gap-2 sm:gap-4">
+            {/* 
                 <button className="w-10 h-10 rounded-full bg-gray-50 text-gray-600 hover:bg-blue-50 hover:text-primary transition-colors relative">
                     <Bell size={20} />
                     <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full"></span>
@@ -90,20 +111,20 @@ export default function Layout() {
                     <Terminal size={18} />
                 </button>
                 */}
-            </div>
+          </div>
         </header>
 
         {/* VISTAS DINÁMICAS */}
         <div key={location.pathname} className="flex-1 overflow-hidden relative page-transition">
           <Outlet />
         </div>
-        
+
         {/* BOTTOM NAVIGATION (Mobile Solo) */}
-        <div className={`md:hidden absolute bottom-0 left-0 w-full px-2 pb-6 pt-2 bg-transparent z-50 flex justify-center pointer-events-none transition-all duration-300 ${sidebarOpen || bottomNavHidden ? 'translate-y-[150%] opacity-0' : 'translate-y-0 opacity-100'}`}>
+        <div className={`md:hidden absolute bottom-0 left-0 w-full px-2 pb-6 pt-2 bg-transparent z-50 flex justify-center pointer-events-none transition-all duration-500 ease-[cubic-bezier(0.2,0.8,0.2,1)] ${sidebarOpen || bottomNavHidden ? 'translate-y-24 opacity-0' : 'translate-y-0 opacity-100'}`}>
           <nav className="h-[68px] bg-white rounded-full inline-flex justify-center items-center px-4 gap-2 shadow-[0_12px_40px_rgba(0,0,0,0.12)] border border-gray-100 backdrop-blur-lg pointer-events-auto">
-            
-            <NavLink to="/map" className={({isActive}) => `relative flex flex-col items-center justify-center w-[64px] h-full gap-1 group`}>
-              {({isActive}) => (
+
+            <NavLink to="/map" className={({ isActive }) => `relative flex flex-col items-center justify-center w-[64px] h-full gap-1 group`}>
+              {({ isActive }) => (
                 <>
                   <div className={`p-2 rounded-xl transition-all duration-300 ${isActive && !sidebarOpen ? 'bg-gray-900 text-white shadow-md shadow-gray-900/30 -translate-y-1' : 'text-gray-800 group-hover:bg-gray-100'}`}>
                     <MapIcon size={20} />
@@ -113,8 +134,8 @@ export default function Layout() {
               )}
             </NavLink>
 
-            <NavLink to="/dashboard" className={({isActive}) => `relative flex flex-col items-center justify-center w-[64px] h-full gap-1 group`}>
-              {({isActive}) => (
+            <NavLink to="/dashboard" className={({ isActive }) => `relative flex flex-col items-center justify-center w-[64px] h-full gap-1 group`}>
+              {({ isActive }) => (
                 <>
                   <div className={`p-2 rounded-xl transition-all duration-300 ${isActive && !sidebarOpen ? 'bg-gray-900 text-white shadow-md shadow-gray-900/30 -translate-y-1' : 'text-gray-800 group-hover:bg-gray-100'}`}>
                     <BarChart3 size={20} />
@@ -124,8 +145,8 @@ export default function Layout() {
               )}
             </NavLink>
 
-            <NavLink to="/devices" className={({isActive}) => `relative flex flex-col items-center justify-center w-[64px] h-full gap-1 group`}>
-              {({isActive}) => (
+            <NavLink to="/devices" className={({ isActive }) => `relative flex flex-col items-center justify-center w-[64px] h-full gap-1 group`}>
+              {({ isActive }) => (
                 <>
                   <div className={`p-2 rounded-xl transition-all duration-300 ${isActive && !sidebarOpen ? 'bg-gray-900 text-white shadow-md shadow-gray-900/30 -translate-y-1' : 'text-gray-800 group-hover:bg-gray-100'}`}>
                     <Car size={20} />
