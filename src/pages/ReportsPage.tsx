@@ -20,7 +20,7 @@ interface Trip {
 interface Stop {
   deviceId: number; deviceName?: string;
   startTime: string; endTime: string;
-  address?: string; lat: number; lon: number;
+  address?: string; latitude: number; longitude: number;
   duration: number; engineHours?: number;
 }
 interface ReportEvent {
@@ -87,19 +87,35 @@ const fmtDuration = (ms: number) => {
 };
 const fmtDist = (m: number) => `${(m / 1000).toFixed(2)} km`;
 const fmtSpeed = (knots: number) => `${(knots * 1.852).toFixed(0)} km/h`;
-const fmtTime = (iso: string) => new Date(iso).toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short' });
+const fmtTime = (iso: string) => {
+  if (!iso) return '';
+  let d = new Date(iso);
+  let forceParsed = false;
+
+  // Si no trae info de zona horaria (y no es timezone negativo -06:00)
+  if (!iso.endsWith('Z') && !iso.includes('+') && iso.indexOf('-', 11) === -1) {
+    d = new Date(iso + 'Z');
+    forceParsed = true;
+  } else if (iso.includes('+00:00') || iso.endsWith('+0000')) {
+    d = new Date(iso.substring(0, 19) + 'Z');
+    forceParsed = true;
+  }
+
+  const result = d.toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short' });
+  return result;
+};
 
 const EVENT_LABELS: Record<string, { label: string; color: string }> = {
-  deviceOnline:    { label: 'GPS Conectado',       color: 'text-green-600 bg-green-50' },
-  deviceOffline:   { label: 'GPS Desconectado',    color: 'text-gray-600 bg-gray-50' },
-  deviceMoving:    { label: 'En movimiento',        color: 'text-blue-600 bg-blue-50' },
-  deviceStopped:   { label: 'Detenido',             color: 'text-orange-600 bg-orange-50' },
-  deviceOverspeed: { label: 'Exceso velocidad',     color: 'text-red-600 bg-red-50' },
-  geofenceEnter:   { label: 'Entrada geocerca',     color: 'text-purple-600 bg-purple-50' },
-  geofenceExit:    { label: 'Salida geocerca',      color: 'text-purple-600 bg-purple-50' },
-  alarm:           { label: 'Alarma',               color: 'text-yellow-600 bg-yellow-50' },
-  ignitionOn:      { label: 'Encendido ON',         color: 'text-emerald-600 bg-emerald-50' },
-  ignitionOff:     { label: 'Encendido OFF',        color: 'text-slate-600 bg-slate-50' },
+  deviceOnline: { label: 'GPS Conectado', color: 'text-green-600 bg-green-50' },
+  deviceOffline: { label: 'GPS Desconectado', color: 'text-gray-600 bg-gray-50' },
+  deviceMoving: { label: 'En movimiento', color: 'text-blue-600 bg-blue-50' },
+  deviceStopped: { label: 'Detenido', color: 'text-orange-600 bg-orange-50' },
+  deviceOverspeed: { label: 'Exceso velocidad', color: 'text-red-600 bg-red-50' },
+  geofenceEnter: { label: 'Entrada geocerca', color: 'text-purple-600 bg-purple-50' },
+  geofenceExit: { label: 'Salida geocerca', color: 'text-purple-600 bg-purple-50' },
+  alarm: { label: 'Alarma', color: 'text-yellow-600 bg-yellow-50' },
+  ignitionOn: { label: 'Encendido ON', color: 'text-emerald-600 bg-emerald-50' },
+  ignitionOff: { label: 'Encendido OFF', color: 'text-slate-600 bg-slate-50' },
 };
 
 // â”€â”€â”€ Filters Bar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -140,7 +156,7 @@ function FiltersBar({
           { key: 'month', label: 'Este mes' },
           { key: 'custom', label: 'Personalizado' },
         ].map(p => (
-          <button key={p.key} 
+          <button key={p.key}
             onClick={() => {
               setActivePreset(p.key);
               if (p.key !== 'custom') {
@@ -149,11 +165,10 @@ function FiltersBar({
                 setTo(r.to);
               }
             }}
-            className={`px-3 py-1.5 text-xs font-bold rounded-lg transition border ${
-              activePreset === p.key 
-                ? 'bg-blue-600 text-white border-blue-600 shadow-sm' 
-                : 'bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100'
-            }`}>
+            className={`px-3 py-1.5 text-xs font-bold rounded-lg transition border ${activePreset === p.key
+              ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
+              : 'bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100'
+              }`}>
             {p.label}
           </button>
         ))}
@@ -164,45 +179,59 @@ function FiltersBar({
         <div className="relative lg:col-span-2">
           <label className="block text-xs font-bold text-gray-500 mb-1">Taxis</label>
           <button onClick={() => setShowDevicePicker(!showDevicePicker)}
-            className="w-full flex items-center justify-between gap-2 border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-gray-50 hover:bg-white hover:border-blue-300 transition text-left">
-            <span className="truncate text-gray-700 font-medium">
-              {selectedDevices.length === 0 ? 'Ninguno seleccionado' :
-               selectedDevices.length === devices.length ? 'Todos los taxis' :
-               selectedDevices.length <= 2 ? selectedNames.join(', ') :
-               `${selectedDevices.length} taxis seleccionados`}
-            </span>
-            <ChevronDown size={14} className="text-gray-400 shrink-0" />
+            className={`w-full flex items-center justify-between gap-2 border rounded-xl px-3 py-2.5 text-sm transition text-left ${showDevicePicker ? 'bg-white border-blue-400 ring-2 ring-blue-100' : 'bg-gray-50 border-gray-200 hover:border-blue-300 hover:bg-white'}`}>
+            <div className="flex items-center gap-2 min-w-0">
+              <Car size={14} className="text-blue-500 shrink-0" />
+              <span className="truncate text-gray-700 font-medium">
+                {selectedDevices.length === 0 ? 'Selecciona un taxi...' :
+                  selectedDevices.length === devices.length ? `Todos los taxis (${devices.length})` :
+                    selectedDevices.length <= 2 ? selectedNames.join(', ') :
+                      `${selectedDevices.length} taxis seleccionados`}
+              </span>
+            </div>
+            <ChevronDown size={14} className={`text-gray-400 shrink-0 transition-transform ${showDevicePicker ? 'rotate-180' : ''}`} />
           </button>
 
           {showDevicePicker && (
-            <div className="absolute top-full left-0 right-0 z-50 mt-1 bg-white border border-gray-200 rounded-2xl shadow-xl overflow-hidden">
-              <div className="p-3 border-b border-gray-100 flex gap-2 items-center">
-                <Search size={14} className="text-gray-400" />
-                <input autoFocus value={deviceSearch} onChange={e => setDeviceSearch(e.target.value)}
-                  placeholder="Buscar taxi..." className="flex-1 text-sm outline-none" />
-                <button onClick={() => setShowDevicePicker(false)} className="p-1 hover:bg-gray-100 rounded-lg">
-                  <X size={14} className="text-gray-400" />
-                </button>
+            <div className="absolute top-full left-0 right-0 z-50 mt-2 bg-white border border-gray-100 rounded-2xl shadow-2xl overflow-hidden">
+              {/* Search */}
+              <div className="p-3 border-b border-gray-100 flex gap-2 items-center bg-gray-50/70">
+                <Search size={14} className="text-gray-400 shrink-0" />
+                <input value={deviceSearch} onChange={e => setDeviceSearch(e.target.value)} readOnly={false}
+                  placeholder="Buscar taxi por nombre..." className="flex-1 text-sm outline-none bg-transparent" />
+                <div className="flex items-center gap-1">
+                  <button onClick={selectAll} className="text-[11px] font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 px-2 py-1 rounded-lg transition">Todos</button>
+                  <button onClick={clearAll} className="text-[11px] font-bold text-gray-500 bg-gray-100 hover:bg-gray-200 px-2 py-1 rounded-lg transition">Limpiar</button>
+                  <button onClick={() => setShowDevicePicker(false)} className="p-1.5 hover:bg-gray-100 rounded-lg">
+                    <X size={13} className="text-gray-400" />
+                  </button>
+                </div>
               </div>
-              <div className="p-2 flex gap-2 border-b border-gray-100">
-                <button onClick={selectAll} className="text-xs font-bold text-blue-600 hover:underline">Todos</button>
-                <span className="text-gray-300">|</span>
-                <button onClick={clearAll} className="text-xs font-bold text-gray-500 hover:underline">Limpiar</button>
+              {/* Device grid */}
+              <div className="max-h-56 overflow-y-auto p-2.5 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+                {filteredDevices.map((d: TraccarDevice) => {
+                  const isSelected = selectedDevices.includes(d.id);
+                  return (
+                    <button key={d.id} onClick={() => toggleDevice(d.id)}
+                      className={`flex items-center gap-2.5 px-3 py-2.5 rounded-xl border-2 text-left transition-all ${isSelected
+                        ? 'bg-blue-50 border-blue-400 text-blue-700'
+                        : 'bg-white border-gray-100 text-gray-700 hover:border-gray-300 hover:bg-gray-50'}`}>
+                      <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${isSelected ? 'bg-blue-500' : 'bg-gray-100'}`}>
+                        {isSelected
+                          ? <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="white" strokeWidth="2" strokeLinecap="round" /></svg>
+                          : <Car size={12} className="text-gray-500" />}
+                      </div>
+                      <span className="text-xs font-semibold truncate">{d.name}</span>
+                    </button>
+                  );
+                })}
               </div>
-              <div className="max-h-48 overflow-y-auto p-2">
-                {filteredDevices.map((d: TraccarDevice) => (
-                  <label key={d.id} className="flex items-center gap-2 px-2 py-1.5 hover:bg-gray-50 rounded-lg cursor-pointer">
-                    <input type="checkbox" checked={selectedDevices.includes(d.id)}
-                      onChange={() => toggleDevice(d.id)} className="accent-blue-600" />
-                    <Car size={12} className="text-gray-400" />
-                    <span className="text-sm text-gray-700">{d.name}</span>
-                  </label>
-                ))}
-              </div>
-              <div className="p-3 border-t border-gray-100 flex justify-end">
+              {/* Footer */}
+              <div className="px-3 py-2.5 border-t border-gray-100 bg-gray-50/50 flex items-center justify-between">
+                <span className="text-xs text-gray-500">{selectedDevices.length} de {devices.length} seleccionados</span>
                 <button onClick={() => setShowDevicePicker(false)}
-                  className="px-4 py-1.5 bg-blue-600 text-white text-xs font-bold rounded-xl hover:bg-blue-700 transition">
-                  Listo
+                  className="px-4 py-1.5 bg-blue-600 text-white text-xs font-bold rounded-xl hover:bg-blue-700 transition shadow-sm">
+                  Aplicar
                 </button>
               </div>
             </div>
@@ -239,7 +268,59 @@ function FiltersBar({
   );
 }
 
-// â”€â”€â”€ Main Component â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+function AddressCell({ stop, mapsLoaded }: { stop: Stop, mapsLoaded: boolean }) {
+  const [address, setAddress] = useState(stop.address);
+  const [loading, setLoading] = useState(false);
+  const cellRef = useRef<HTMLDivElement>(null);
+
+  const fetchAddress = async () => {
+    if (!mapsLoaded || !window.google || address || loading) return;
+    setLoading(true);
+    try {
+      const geocoder = new window.google.maps.Geocoder();
+      const response = await geocoder.geocode({ location: { lat: Number(stop.latitude), lng: Number(stop.longitude) } });
+      if (response.results[0]) {
+        setAddress(response.results[0].formatted_address);
+      } else {
+        setAddress('Dirección no encontrada');
+      }
+    } catch (e) {
+      setAddress('Error al obtener dirección');
+    }
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    if (!mapsLoaded || address || !cellRef.current) return;
+    const observer = new IntersectionObserver((entries) => {
+      if (entries[0].isIntersecting) {
+        fetchAddress();
+        observer.disconnect();
+      }
+    }, { threshold: 0.1 });
+
+    observer.observe(cellRef.current);
+    return () => observer.disconnect();
+  }, [mapsLoaded, address]);
+
+  if (address) return <span ref={cellRef as any}>{address}</span>;
+
+  return (
+    <div ref={cellRef} className="flex flex-col gap-1.5">
+      <a href={`https://maps.google.com/?q=${stop.latitude},${stop.longitude}`} target="_blank" rel="noreferrer"
+        title="Ver en Google Maps"
+        className="text-blue-600 hover:underline font-mono text-[11px] flex flex-row items-center gap-1 w-max">
+        <MapPin size={10} className="text-blue-400" />
+        {Number(stop.latitude).toFixed(5)}, {Number(stop.longitude).toFixed(5)}
+      </a>
+      <span className="text-[10px] text-gray-500 flex items-center gap-1">
+        {loading ? <><RefreshCw size={10} className="animate-spin" /> Traduciendo...</> : (mapsLoaded ? 'Desplázate para geocodificar' : 'Esperando mapas...')}
+      </span>
+    </div>
+  );
+}
+
+// ——————————————————————————————————————————————————————————————————————————————————————————————————
 export default function ReportsPage() {
   const [devices, setDevices] = useState<TraccarDevice[]>([]);
   const [groups, setGroups] = useState<any[]>([]);
@@ -247,10 +328,10 @@ export default function ReportsPage() {
   const [selectedGroups, setSelectedGroups] = useState<number[]>([]);
   const [activeTab, setActiveTab] = useState<TabType>('trips');
   const [loading, setLoading] = useState(false);
-  const [toastMessage, setToastMessage] = useState<{text: string, type: 'success'|'error'} | null>(null);
+  const [toastMessage, setToastMessage] = useState<{ text: string, type: 'success' | 'error' } | null>(null);
 
-  const showToast = (text: string, type: 'success'|'error' = 'success') => {
-    setToastMessage({text, type});
+  const showToast = (text: string, type: 'success' | 'error' = 'success') => {
+    setToastMessage({ text, type });
     setTimeout(() => setToastMessage(null), 3000);
   };
 
@@ -270,6 +351,7 @@ export default function ReportsPage() {
 
   // Map for route tab
   const [mapsLoaded, setMapsLoaded] = useState(false);
+  const [mapReady, setMapReady] = useState(false);
   const mapRef = useRef<HTMLDivElement>(null);
   const googleMapRef = useRef<google.maps.Map | null>(null);
   const polylinesRef = useRef<google.maps.Polyline[]>([]);
@@ -279,7 +361,7 @@ export default function ReportsPage() {
       setDevices(devs);
       if (devs.length > 0) setSelectedDevices([devs[0].id]);
     });
-    fetch('/api/groups', { credentials: 'include' }).then(r => r.json()).then(setGroups).catch(() => {});
+    fetch('/api/groups', { credentials: 'include' }).then(r => r.json()).then(setGroups).catch(() => { });
     loadGoogleMaps().then(() => setMapsLoaded(true)).catch(console.error);
   }, []);
 
@@ -292,6 +374,7 @@ export default function ReportsPage() {
       mapTypeControl: false, streetViewControl: false, fullscreenControl: true,
       gestureHandling: 'greedy',
     });
+    setMapReady(true); // <<< Notifica a React que el mapa ya existe
   }, [mapsLoaded, activeTab]);
 
   const drawRoute = useCallback((positions: RoutePosition[]) => {
@@ -323,18 +406,19 @@ export default function ReportsPage() {
     if (route.length > 0 && activeTab === 'route' && googleMapRef.current) {
       drawRoute(route);
     }
-  }, [route, activeTab, drawRoute]);
+  }, [route, activeTab, mapReady, drawRoute]);
 
   const buildParams = (deviceId: number) => {
     const p = new URLSearchParams();
     p.append('deviceId', String(deviceId));
-    // El valor del input datetime-local ("YYYY-MM-DDTHH:mm") es hora local sin timezone.
-    // new Date() lo interpreta como UTC en algunos navegadores, causando un desfase de horas.
-    // La solución correcta es agregarle el offset del timezone del cliente antes de convertir a ISO.
+    // El input datetime-local ("YYYY-MM-DDTHH:mm") no trae timezone.
+    // Usamos el constructor de Date con partes explícitas para que JS lo interprete como hora LOCAL
+    // y toISOString() nos devuelva el UTC correcto automáticamente.
     const toLocalIso = (localStr: string) => {
-      const d = new Date(localStr);
-      const offsetMs = d.getTimezoneOffset() * 60_000;
-      return new Date(d.getTime() - offsetMs).toISOString();
+      const [datePart, timePart] = localStr.split('T');
+      const [year, month, day] = datePart.split('-').map(Number);
+      const [hour, minute] = (timePart || '00:00').split(':').map(Number);
+      return new Date(year, month - 1, day, hour, minute, 0, 0).toISOString();
     };
     p.append('from', toLocalIso(from));
     p.append('to', toLocalIso(to));
@@ -391,6 +475,7 @@ export default function ReportsPage() {
           if (r.ok) {
             const data: Summary[] = await r.json();
             results.push(...data.map(s => ({ ...s, deviceName: deviceNameMap[s.deviceId] || String(s.deviceId) })));
+            if (data.length > 0) successCount++;
           }
         }
         setSummary(results);
@@ -398,7 +483,7 @@ export default function ReportsPage() {
         const devId = selectedDevices[0];
         const r = await fetch(`/api/reports/route?${buildParams(devId)}`, { credentials: 'include', headers: { Accept: 'application/json' } });
         if (r.ok) {
-const data: RoutePosition[] = await r.json();
+          const data: RoutePosition[] = await r.json();
           setRoute(data);
           if (activeTab === 'route' && googleMapRef.current) drawRoute(data);
           successCount++;
@@ -413,6 +498,30 @@ const data: RoutePosition[] = await r.json();
     } catch (error) {
       console.error(error);
       showToast('Error de conexión al generar reporte', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const viewTripRoute = async (trip: Trip) => {
+    setActiveTab('route');
+    setLoading(true);
+    try {
+      const p = new URLSearchParams();
+      p.append('deviceId', String(trip.deviceId));
+      p.append('from', trip.startTime);
+      p.append('to', trip.endTime);
+      const r = await fetch(`/api/reports/route?${p.toString()}`, { credentials: 'include', headers: { Accept: 'application/json' } });
+      if (r.ok) {
+        const data: RoutePosition[] = await r.json();
+        setRoute(data);
+        // El useEffect de route se encargará de dibujar cuando el mapa esté listo
+        setTimeout(() => {
+          if (googleMapRef.current && data.length > 0) drawRoute(data);
+        }, 400);
+      }
+    } catch (e) {
+      console.error(e);
     } finally {
       setLoading(false);
     }
@@ -472,14 +581,13 @@ const data: RoutePosition[] = await r.json();
     <div className="h-full overflow-y-auto p-4 sm:p-6 fade-in block space-y-4 pb-32 md:pb-10 relative">
       {/* Toast Notification */}
       {toastMessage && (
-        <div className={`fixed bottom-24 md:bottom-auto md:top-6 left-1/2 md:left-auto md:right-6 -translate-x-1/2 md:translate-x-0 z-[60] px-4 py-2.5 rounded-full shadow-lg flex items-center gap-2 animate-in fade-in zoom-in-95 duration-300 border ${
-          toastMessage.type === 'success' 
-            ? 'bg-white border-green-100 text-green-700 shadow-green-900/10' 
-            : 'bg-white border-red-100 text-red-700 shadow-red-900/10'
-        }`}>
-          {toastMessage.type === 'success' 
-             ? <div className="w-6 h-6 rounded-full bg-green-100 flex items-center justify-center shrink-0"><RefreshCw size={12} className="text-green-600 animate-spin-once" /></div> 
-             : <div className="w-6 h-6 rounded-full bg-red-100 flex items-center justify-center shrink-0"><AlertTriangle size={12} className="text-red-600" /></div>}
+        <div className={`fixed bottom-24 md:bottom-auto md:top-6 left-1/2 md:left-auto md:right-6 -translate-x-1/2 md:translate-x-0 z-[60] px-4 py-2.5 rounded-full shadow-lg flex items-center gap-2 animate-in fade-in zoom-in-95 duration-300 border ${toastMessage.type === 'success'
+          ? 'bg-white border-green-100 text-green-700 shadow-green-900/10'
+          : 'bg-white border-red-100 text-red-700 shadow-red-900/10'
+          }`}>
+          {toastMessage.type === 'success'
+            ? <div className="w-6 h-6 rounded-full bg-green-100 flex items-center justify-center shrink-0"><RefreshCw size={12} className="text-green-600 animate-spin-once" /></div>
+            : <div className="w-6 h-6 rounded-full bg-red-100 flex items-center justify-center shrink-0"><AlertTriangle size={12} className="text-red-600" /></div>}
           <span className="font-bold text-[13px] tracking-tight whitespace-nowrap">{toastMessage.text}</span>
         </div>
       )}
@@ -503,11 +611,10 @@ const data: RoutePosition[] = await r.json();
         <div className="flex border-b border-gray-100 overflow-x-auto shrink-0">
           {TABS.map(tab => (
             <button key={tab.id} onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-2 px-4 py-3.5 text-sm font-bold whitespace-nowrap border-b-2 transition-colors ${
-                activeTab === tab.id
-                  ? 'border-blue-600 text-blue-600 bg-blue-50/50'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'
-              }`}>
+              className={`flex items-center gap-2 px-4 py-3.5 text-sm font-bold whitespace-nowrap border-b-2 transition-colors ${activeTab === tab.id
+                ? 'border-blue-600 text-blue-600 bg-blue-50/50'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+                }`}>
               {tab.icon}{tab.label}
             </button>
           ))}
@@ -536,7 +643,14 @@ const data: RoutePosition[] = await r.json();
                       <div key={i} className="p-4 flex flex-col gap-2">
                         <div className="flex items-center justify-between">
                           <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-lg">{t.deviceName}</span>
-                          <span className="text-xs font-bold text-gray-500">{fmtDuration(t.duration)}</span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-bold text-gray-500">{fmtDuration(t.duration)}</span>
+                            <button onClick={() => viewTripRoute(t)}
+                              title="Ver ruta en mapa"
+                              className="flex items-center gap-1 px-2 py-1 bg-blue-600 text-white text-[10px] font-bold rounded-lg hover:bg-blue-700 transition">
+                              <MapIcon size={10} /> Ruta
+                            </button>
+                          </div>
                         </div>
                         <div className="grid grid-cols-3 gap-2 mt-1">
                           <div className="text-center bg-gray-50 rounded-xl p-2">
@@ -560,13 +674,14 @@ const data: RoutePosition[] = await r.json();
                   <div className="hidden md:block overflow-x-auto">
                     <table className="w-full text-left">
                       <thead className="bg-gray-50 border-b border-gray-100 sticky top-0">
-                        <tr>{['Taxi','Inicio','Fin','Distancia','V. Prom','V. Máx','Duración'].map(h => (
+                        <tr>{['Taxi', 'Inicio', 'Fin', 'Distancia', 'V. Prom', 'V. Máx', 'Duración'].map(h => (
                           <th key={h} className="px-4 py-3 text-xs font-bold text-gray-500 uppercase tracking-wider whitespace-nowrap">{h}</th>
                         ))}</tr>
                       </thead>
                       <tbody className="divide-y divide-gray-100">
                         {trips.map((t, i) => (
-                          <tr key={i} className="hover:bg-gray-50 transition">
+                          <tr key={i} onClick={() => viewTripRoute(t)}
+                            className="hover:bg-blue-50 transition cursor-pointer group" title="Click para ver ruta en mapa">
                             <td className="px-4 py-3 text-sm font-semibold text-gray-900">{t.deviceName}</td>
                             <td className="px-4 py-3 text-xs text-gray-600 whitespace-nowrap">{fmtTime(t.startTime)}</td>
                             <td className="px-4 py-3 text-xs text-gray-600 whitespace-nowrap">{fmtTime(t.endTime)}</td>
@@ -609,7 +724,9 @@ const data: RoutePosition[] = await r.json();
                           <span className="text-xs font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded-lg">{s.deviceName}</span>
                           <span className="text-sm font-bold text-gray-800">{fmtDuration(s.duration)}</span>
                         </div>
-                        {s.address && <p className="text-xs text-gray-600 bg-gray-50 px-3 py-2 rounded-lg">{s.address}</p>}
+                        <div className="text-xs text-gray-600 bg-gray-50 px-3 py-2 rounded-lg">
+                          <AddressCell stop={s} mapsLoaded={mapsLoaded} />
+                        </div>
                         <p className="text-[11px] text-gray-400">{fmtTime(s.startTime)} → {fmtTime(s.endTime)}</p>
                       </div>
                     ))}
@@ -617,7 +734,7 @@ const data: RoutePosition[] = await r.json();
                   <div className="hidden md:block overflow-x-auto">
                     <table className="w-full text-left">
                       <thead className="bg-gray-50 border-b border-gray-100 sticky top-0">
-                        <tr>{['Taxi','Inicio','Fin','Duración','Dirección'].map(h => (
+                        <tr>{['Taxi', 'Inicio', 'Fin', 'Duración', 'Dirección'].map(h => (
                           <th key={h} className="px-4 py-3 text-xs font-bold text-gray-500 uppercase tracking-wider whitespace-nowrap">{h}</th>
                         ))}</tr>
                       </thead>
@@ -628,7 +745,9 @@ const data: RoutePosition[] = await r.json();
                             <td className="px-4 py-3 text-xs text-gray-600 whitespace-nowrap">{fmtTime(s.startTime)}</td>
                             <td className="px-4 py-3 text-xs text-gray-600 whitespace-nowrap">{fmtTime(s.endTime)}</td>
                             <td className="px-4 py-3 text-sm font-bold text-orange-600">{fmtDuration(s.duration)}</td>
-                            <td className="px-4 py-3 text-xs text-gray-600 max-w-xs truncate">{s.address || '—'}</td>
+                            <td className="px-4 py-3 text-xs text-gray-600">
+                              <AddressCell stop={s} mapsLoaded={mapsLoaded} />
+                            </td>
                           </tr>
                         ))}
                       </tbody>
@@ -682,7 +801,7 @@ const data: RoutePosition[] = await r.json();
                 <div className="flex gap-2">
                   <button onClick={handleAnalyzeWithAI} disabled={aiLoading}
                     className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl transition border border-indigo-700 disabled:opacity-50">
-                    {aiLoading ? <RefreshCw size={13} className="animate-spin" /> : <Sparkles size={13} />} 
+                    {aiLoading ? <RefreshCw size={13} className="animate-spin" /> : <Sparkles size={13} />}
                     {aiLoading ? 'Analizando...' : 'Auditar con IA'}
                   </button>
                   <button onClick={exportSummary}
@@ -747,32 +866,30 @@ const data: RoutePosition[] = await r.json();
           </div>
         )}
 
-        {/* â”€â”€ RUTA EN MAPA â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
-        {activeTab === 'route' && (
-          <div className="flex flex-col">
-            {route.length > 0 && (
-              <div className="px-4 py-2 border-b border-gray-100 shrink-0 bg-gray-50/50">
-                <span className="text-xs text-gray-500 font-medium">
-                  {route.length} puntos GPS · Colores: 🟢 lento → 🔴 rápido
-                </span>
+        {/* ────────────────────────────────────────────────────────── */}
+        <div className={activeTab === 'route' ? 'flex flex-col' : 'hidden'}>
+          {route.length > 0 && (
+            <div className="px-4 py-2 border-b border-gray-100 shrink-0 bg-gray-50/50">
+              <span className="text-xs text-gray-500 font-medium">
+                {route.length} puntos GPS · Colores: 🟢 lento → 🔴 rápido
+              </span>
+            </div>
+          )}
+          <div className="flex-1 min-h-[400px] relative">
+            {!mapsLoaded && (
+              <div className="absolute inset-0 flex items-center justify-center bg-gray-50 z-10 text-gray-400 text-sm">
+                Cargando mapa...
               </div>
             )}
-            <div className="flex-1 min-h-[400px] relative">
-              {!mapsLoaded && (
-                <div className="absolute inset-0 flex items-center justify-center bg-gray-50 z-10 text-gray-400 text-sm">
-                  Cargando mapa...
-                </div>
-              )}
-              <div ref={mapRef} className="w-full h-full" />
-              {!loading && route.length === 0 && mapsLoaded && (
-                <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-400 gap-2 pointer-events-none">
-                  <MapIcon size={40} className="opacity-20" />
-                  <p className="text-sm">Genera el reporte para ver la ruta</p>
-                </div>
-              )}
-            </div>
+            <div ref={mapRef} className="absolute inset-0" />
+            {!loading && route.length === 0 && mapsLoaded && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-400 gap-2 pointer-events-none">
+                <MapIcon size={40} className="opacity-20" />
+                <p className="text-sm">Genera el reporte para ver la ruta</p>
+              </div>
+            )}
           </div>
-        )}
+        </div>
       </div>
     </div>
   );

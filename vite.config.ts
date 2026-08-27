@@ -27,6 +27,13 @@ export default defineConfig({
             // Eliminar Origin para evitar que el filtro CSRF de Traccar (SessionHelper.isSessionOriginValid) tire 401
             proxyReq.removeHeader('Origin');
           });
+          proxy.on('proxyRes', (proxyRes, _req, _res) => {
+            // Eliminar CSP headers que Traccar manda en sus endpoints de reportes.
+            // Si no se eliminan, el navegador los aplica y bloquea los scripts de Vite/React.
+            delete proxyRes.headers['content-security-policy'];
+            delete proxyRes.headers['content-security-policy-report-only'];
+            delete proxyRes.headers['x-frame-options'];
+          });
         }
       },
     },
