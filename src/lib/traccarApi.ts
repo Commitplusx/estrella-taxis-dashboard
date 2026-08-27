@@ -177,7 +177,7 @@ export const api = {
   getGroups: () => request<TraccarGroup[]>('/groups?all=true'),
 
   // Grupos vinculados a un usuario específico
-  getUserGroups: (userId: number) => 
+  getUserGroups: (userId: number) =>
     request<TraccarGroup[]>(`/groups?userId=${userId}`),
 };
 
@@ -202,6 +202,16 @@ export type TraccarUser = {
   disabled?: boolean;
   deviceLimit: number;
   attributes: Record<string, unknown>;
+};
+
+export const formatTime = (dateStr: string) => {
+  if (!dateStr) return '';
+  // Forzamos el timezone de México para corregir saltos de 6 horas
+  return new Date(dateStr).toLocaleString('es-MX', {
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone: 'America/Mexico_City'
+  });
 };
 
 export type TraccarDevice = {
@@ -235,6 +245,16 @@ export type TraccarPosition = {
     motion?: boolean;
     [key: string]: unknown;
   };
+};
+
+export const formatDate = (dateStr: string) => {
+  if (!dateStr) return '';
+  return new Date(dateStr).toLocaleDateString('es-MX', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    timeZone: 'America/Mexico_City'
+  });
 };
 
 export type TraccarTrip = {

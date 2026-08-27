@@ -101,7 +101,11 @@ const fmtTime = (iso: string) => {
     forceParsed = true;
   }
 
-  const result = d.toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short' });
+  const result = d.toLocaleString('es-MX', {
+    dateStyle: 'short',
+    timeStyle: 'short',
+    timeZone: 'America/Mexico_City'
+  });
   return result;
 };
 
@@ -376,8 +380,12 @@ export default function ReportsPage() {
     if (googleMapRef.current) return;
     googleMapRef.current = new window.google.maps.Map(mapRef.current, {
       center: { lat: 16.2355, lng: -92.1267 },
-      zoom: 12,
-      mapTypeControl: false, streetViewControl: false, fullscreenControl: true,
+      zoom: 15,
+      mapId: 'DEMO_MAP_ID', // Requerido para mapas vectoriales (Tilt & Rotación)
+      tilt: 45,
+      heading: 0,
+      mapTypeControl: true, streetViewControl: true, fullscreenControl: true, zoomControl: true,
+      rotateControl: true,
       gestureHandling: 'greedy',
     });
     setMapReady(true); // <<< Notifica a React que el mapa ya existe
@@ -760,8 +768,9 @@ export default function ReportsPage() {
                             </div>
                           </div>
                           <div className="flex flex-col items-end">
-                            <span className="text-xs font-bold text-orange-700 bg-orange-50 px-3 py-1.5 rounded-full">
-                              {fmtDuration(s.duration)}
+                            <span className="text-xs font-bold text-orange-700 bg-orange-50 px-3 py-1.5 rounded-full flex flex-col items-end">
+                              <span className="text-[9px] font-bold text-orange-500 uppercase tracking-widest leading-none mb-0.5">Tiempo Estacionado</span>
+                              <span>{fmtDuration(s.duration)}</span>
                             </span>
                             <span className="text-[10px] text-gray-400 font-medium mt-1.5 uppercase tracking-wider">Hasta {fmtTime(s.endTime)}</span>
                           </div>
@@ -779,7 +788,7 @@ export default function ReportsPage() {
                   <div className="hidden md:block overflow-x-auto">
                     <table className="w-full text-left">
                       <thead className="bg-gray-50 border-b border-gray-100 sticky top-0">
-                        <tr>{['Taxi', 'Inicio', 'Fin', 'Duración', 'Dirección'].map(h => (
+                        <tr>{['Taxi', 'Inicio', 'Fin', 'T. Estacionado', 'Dirección'].map(h => (
                           <th key={h} className="px-4 py-3 text-xs font-bold text-gray-500 uppercase tracking-wider whitespace-nowrap">{h}</th>
                         ))}</tr>
                       </thead>
@@ -832,8 +841,8 @@ export default function ReportsPage() {
                           <div className={`absolute left-0 top-0 bottom-0 w-1.5 ${isOffline ? 'bg-red-500' : isOnline ? 'bg-green-500' : 'bg-blue-500'}`}></div>
 
                           <div className={`w-12 h-12 shrink-0 rounded-2xl flex items-center justify-center shadow-sm ml-1 ${isOffline ? 'bg-red-50 text-red-500 border border-red-100' :
-                              isOnline ? 'bg-green-50 text-green-500 border border-green-100' :
-                                'bg-blue-50 text-blue-500 border border-blue-100'
+                            isOnline ? 'bg-green-50 text-green-500 border border-green-100' :
+                              'bg-blue-50 text-blue-500 border border-blue-100'
                             }`}>
                             {isOffline ? <Zap size={20} /> :
                               isOnline ? <Car size={20} /> :
