@@ -39,7 +39,7 @@ function formatRelativeTime(dateStr: string) {
   return `Hace ${Math.floor(diffHours / 24)} días`;
 }
 
-export function generateInfoWindowContent(device: TraccarDevice, pos: TraccarPosition, isReadonly: boolean = false, isFollowing: boolean = false) {
+export function generateInfoWindowContent(device: TraccarDevice, pos: TraccarPosition, isReadonly: boolean = false, isFollowing: boolean = false, liveAddress: string = '') {
   const battery = pos.attributes?.batteryLevel;
   const ignition = pos.attributes?.ignition;
   const speed = knotsToKmh(pos.speed || 0);
@@ -52,6 +52,8 @@ export function generateInfoWindowContent(device: TraccarDevice, pos: TraccarPos
   } else if (Number(speed) > 2) {
     engineStatusHtml = `<div style="margin-top:8px; display:flex; align-items:center; justify-content:center; gap:6px; font-size:11px; color:#166534; background:#dcfce7; border:1px solid #bbf7d0; padding:6px; border-radius:8px; font-weight:700;"><span style="width:8px;height:8px;background:#22c55e;border-radius:50%;box-shadow:0 0 4px #22c55e"></span> MOTOR EN MOVIMIENTO</div>`;
   }
+
+  const finalAddress = liveAddress || (pos.address ? pos.address.split(',')[0] : '');
 
   return `
     <div style="font-family:Inter,sans-serif;min-width:220px;padding:4px">
@@ -73,7 +75,7 @@ export function generateInfoWindowContent(device: TraccarDevice, pos: TraccarPos
 
       ${engineStatusHtml}
 
-      ${pos.address ? `<div style="margin-top:10px;font-size:11px;color:#64748b;line-height:1.4"><strong style="color:#475569">📍 Dirección:</strong><br/>${pos.address.split(',')[0]}</div>` : ''}
+      ${finalAddress ? `<div style="margin-top:10px;font-size:11px;color:#64748b;line-height:1.4"><strong style="color:#475569">📍 Dirección:</strong><br/>${finalAddress}</div>` : ''}
       
       <div style="margin-top:10px;padding-top:8px;border-top:1px solid #f1f5f9;font-size:10px;color:#94a3b8;display:flex;justify-content:space-between;">
         <span>Última señal:</span>
@@ -111,6 +113,8 @@ export default function MapPage() {
   const positionsRef = useRef<Map<number, TraccarPosition>>(new Map());
   const devicesRef = useRef<TraccarDevice[]>([]);
   const [selectedDevice, setSelectedDevice] = useState<TraccarDevice | null>(null);
+  const [liveAddress, setLiveAddress] = useState<string>('');
+  const geocoderRef = useRef<google.maps.Geocoder | null>(null);
   const [commandDevice, setCommandDevice] = useState<TraccarDevice | null>(null);
   const [followingDeviceId, setFollowingDeviceId] = useState<number | null>(null);
   const followingDeviceIdRef = useRef<number | null>(null);
@@ -423,6 +427,30 @@ export default function MapPage() {
     ? (devices.find(d => d.id === selectedDevice.id) || selectedDevice)
     : null;
 
+  const selectedLat = currentSelectedDevice ? positions.get(currentSelectedDevice.id)?.latitude : undefined;
+  const selectedLng = currentSelectedDevice ? positions.get(currentSelectedDevice.id)?.longitude : undefined;
+
+  useEffect(() => {
+    if (!currentSelectedDevice || !mapsLoaded || !window.google || !selectedLat || !selectedLng) {
+      setLiveAddress('');
+      return;
+    }
+    
+    if (!geocoderRef.current) {
+       geocoderRef.current = new window.google.maps.Geocoder();
+    }
+
+    const timer = setTimeout(() => {
+        geocoderRef.current?.geocode({ location: { lat: selectedLat, lng: selectedLng } }, (results, status) => {
+            if (status === 'OK' && results && results[0]) {
+               const addr = results[0].formatted_address;
+               setLiveAddress(addr.split(',')[0]);
+            }
+        });
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [selectedLat, selectedLng, mapsLoaded, currentSelectedDevice]);
+
   // Actualizar z-index y ventana de info en tiempo real si el coche se mueve o cambia la selección
   useEffect(() => {
     // 1. Actualizar zIndex de los marcadores para que el seleccionado quede arriba
@@ -440,9 +468,9 @@ export default function MapPage() {
     if (!currentSelectedDevice || !infoWindowRef.current) return;
     const pos = positions.get(currentSelectedDevice.id);
     if (pos && window.innerWidth >= 640) {
-      infoWindowRef.current.setContent(generateInfoWindowContent(currentSelectedDevice, pos, isReadonly, followingDeviceId === currentSelectedDevice.id));
+      infoWindowRef.current.setContent(generateInfoWindowContent(currentSelectedDevice, pos, isReadonly, followingDeviceId === currentSelectedDevice.id, liveAddress));
     }
-  }, [positions, currentSelectedDevice, isReadonly, devices, nowTick, followingDeviceId]);
+  }, [positions, currentSelectedDevice, isReadonly, devices, nowTick, followingDeviceId, liveAddress]);
 
   // Función auxiliar para animación suave de salida (Fly-out)
   const animationFrameRef = useRef<number | null>(null);
@@ -976,10 +1004,10 @@ export default function MapPage() {
                       <span className="text-3xl font-black text-slate-800 tracking-tight">{speed}</span>
                       <span className="text-xs font-bold text-slate-400">km/h</span>
                     </div>
-                    {pos.address && (
+                    {(liveAddress || pos.address) && (
                       <div className="flex-1 text-right text-[11px] text-slate-500 leading-tight border-l border-slate-200 pl-4 line-clamp-2">
                         <strong className="text-slate-700 block mb-0.5">📍 Ubicación</strong>
-                        {pos.address.split(',')[0]}
+                        {liveAddress || pos.address?.split(',')[0]}
                       </div>
                     )}
                   </div>
