@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Outlet, useLocation, NavLink } from 'react-router-dom';
 import { Menu, Map as MapIcon, BarChart3, Car, Settings, Bell } from 'lucide-react';
 import Sidebar from './Sidebar';
+import MapPage from '../pages/MapPage';
 
 export default function Layout() {
   const location = useLocation();
@@ -115,8 +116,16 @@ export default function Layout() {
         </header>
 
         {/* VISTAS DINÁMICAS */}
-        <div key={location.pathname} className="flex-1 overflow-hidden relative page-transition">
-          <Outlet />
+        <div className="flex-1 overflow-hidden relative">
+          {/* MAPA PERSISTENTE (Nunca se desmonta para no recargar webgl ni websockets) */}
+          <div className={`absolute inset-0 z-0 ${location.pathname === '/map' || location.pathname === '/' ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}>
+            <MapPage />
+          </div>
+
+          {/* OTRAS PÁGINAS */}
+          <div key={location.pathname} className={`absolute inset-0 z-10 bg-[#F8FAFC] page-transition overflow-x-hidden overflow-y-auto ${location.pathname === '/map' || location.pathname === '/' ? 'hidden' : 'block'}`}>
+            <Outlet />
+          </div>
         </div>
 
         {/* BOTTOM NAVIGATION (Mobile Solo) */}

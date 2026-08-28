@@ -62,7 +62,7 @@ function AppRoutes() {
         <Route path="/reset-password" element={<ResetPassword />} />
         <Route element={<PrivateRoute><Layout /></PrivateRoute>}>
           <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/map" element={<MapPage />} />
+          <Route path="/map" element={null} />
           <Route path="/devices" element={<DevicesPage />} />
           <Route path="/connections" element={<DeviceConnectionsPage />} />
           <Route path="/reports" element={<ReportsPage />} />
