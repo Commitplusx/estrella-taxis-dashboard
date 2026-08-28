@@ -162,6 +162,11 @@ export default function MapPage() {
 
   // Cargar Google Maps y Ticker
   useEffect(() => {
+    // Solicitar permisos para Push Notifications Nativas
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
+
     loadGoogleMaps().then(() => setMapsLoaded(true)).catch(console.error);
     const interval = setInterval(() => setNowTick(Date.now()), 60000);
     return () => clearInterval(interval);
@@ -181,7 +186,7 @@ export default function MapPage() {
     googleMapRef.current = new window.google.maps.Map(mapRef.current, {
       center: { lat: 16.2355, lng: -92.1267 }, // Comitán, Chiapas
       zoom: 13,
-      mapId: 'DEMO_MAP_ID', // Habilita vector engine para rotación y 3D en móvil y PC
+      mapId: '4e5716e8dc53e17ddbdcd5ef', // ID Vectorial de Estrella Taxis
       tilt: 45,
       heading: 0,
       tiltInteractionEnabled: true,
@@ -568,6 +573,21 @@ export default function MapPage() {
         setTimeout(() => {
           setToastEvent(prev => prev?.id === id ? null : prev);
         }, 4000);
+
+        // Disparar Notificación Push NATIVA de HTML5 (si hay permisos)
+        if ('Notification' in window && Notification.permission === 'granted') {
+          try {
+            // Tratar de evitar saturación de sonido si llegan muchas alarmas juntas
+            new Notification(title, {
+              body: message,
+              icon: '/vite.svg', // Reemplazar en un futuro por logo de Estrella
+              silent: false,
+              tag: 'estrella-event' // Agrupa notificaciones
+            });
+          } catch (e) {
+            console.error('Push Notification Error:', e);
+          }
+        }
       }
     }
   }, [devices]);
