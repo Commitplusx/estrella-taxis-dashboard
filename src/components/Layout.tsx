@@ -118,7 +118,7 @@ export default function Layout() {
         {/* VISTAS DINÁMICAS */}
         <div className="flex-1 overflow-hidden relative">
           {/* MAPA PERSISTENTE (Nunca se desmonta para no recargar webgl ni websockets) */}
-          <div className={`absolute inset-0 z-0 ${location.pathname === '/map' || location.pathname === '/' ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}>
+          <div className={`absolute inset-0 z-0 transition-opacity duration-500 ease-in-out ${location.pathname === '/map' || location.pathname === '/' ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}>
             <MapPage />
           </div>
 

@@ -111,7 +111,12 @@ export function CommandModal({ device, onClose }: { device: TraccarDevice; onClo
       {confirmOpen && (
         <ConfirmDialog
           title="¿Enviar comando remoto?"
-          message={`Vas a enviar "${COMMANDS.find(c => c.value === type)?.label}" al taxi "${device.name}". Esta acción puede afectar la operación del vehículo.`}
+          message={
+            type === 'engineStop' 
+            ? `Vas a CORTAR LA CORRIENTE al taxi "${device.name}". Si va en movimiento, puede causar un accidente.\n\nEscribe la palabra APAGAR para confirmar:` 
+            : `Vas a enviar "${COMMANDS.find(c => c.value === type)?.label}" al taxi "${device.name}". Esta acción puede afectar la operación del vehículo.`
+          }
+          requireInput={type === 'engineStop' ? 'APAGAR' : undefined}
           confirmLabel="Sí, ejecutar"
           onConfirm={() => {
             setConfirmOpen(false);

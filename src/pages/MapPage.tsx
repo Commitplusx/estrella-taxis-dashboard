@@ -630,15 +630,19 @@ export default function MapPage() {
       } else if (ev.type === 'alarm') {
         title = '🚨 ALARMA';
         message = `${taxiName} reportó una alerta (${ev.attributes?.alarm || ''}).`;
+      } else if (ev.type === 'commandResult') {
+        title = '✅ Comando Ejecutado';
+        message = `El taxi ${taxiName} confirmó el comando: ${ev.attributes?.result || 'Exitoso'}`;
       }
 
       if (message) {
         const id = Date.now().toString();
-        setToastEvent({ id, title, message });
-        // Auto-ocultar el aviso después de 4 segundos
-        setTimeout(() => {
-          setToastEvent(prev => prev?.id === id ? null : prev);
-        }, 4000);
+        toast.custom((t) => (
+          <div className="bg-gray-900/90 backdrop-blur-sm text-white px-4 py-3 rounded-2xl shadow-xl border border-gray-700/50 flex flex-col items-center min-w-[200px] pointer-events-auto">
+            <span className="text-xs font-bold text-gray-400 mb-0.5">{title}</span>
+            <span className="text-sm font-semibold">{message}</span>
+          </div>
+        ), { id, duration: 4000 });
 
         // Disparar Notificación Push NATIVA de HTML5 (si hay permisos)
         if ('Notification' in window && Notification.permission === 'granted') {
@@ -891,15 +895,7 @@ export default function MapPage() {
         />
       )}
 
-      {/* Toast de Eventos Recientes */}
-      {toastEvent && (
-        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50 animate-fade-in pointer-events-none">
-          <div className="bg-gray-900/90 backdrop-blur-sm text-white px-4 py-3 rounded-2xl shadow-xl border border-gray-700/50 flex flex-col items-center min-w-[200px]">
-            <span className="text-xs font-bold text-gray-400 mb-0.5">{toastEvent.title}</span>
-            <span className="text-sm font-semibold">{toastEvent.message}</span>
-          </div>
-        </div>
-      )}
+      {/* Toast de Eventos Recientes eliminado por react-hot-toast */}
 
       {/* ─── Bottom Sheet for Mobile Info Window ─── */}
       <div

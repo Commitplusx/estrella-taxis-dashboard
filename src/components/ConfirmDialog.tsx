@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { AlertTriangle, X } from 'lucide-react';
 
 interface ConfirmDialogProps {
@@ -6,6 +6,7 @@ interface ConfirmDialogProps {
   message: string;
   confirmLabel?: string;
   confirmClass?: string;
+  requireInput?: string;
   onConfirm: () => void;
   onCancel: () => void;
 }
@@ -19,13 +20,18 @@ export function ConfirmDialog({
   message,
   confirmLabel = 'Confirmar',
   confirmClass = 'bg-red-600 hover:bg-red-700 text-white',
+  requireInput,
   onConfirm,
   onCancel,
 }: ConfirmDialogProps) {
+  const [inputVal, setInputVal] = useState('');
+  
+  const disabled = requireInput ? inputVal !== requireInput : false;
+
   return (
-    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[9999] flex items-center justify-center p-4">
+    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[9999] flex items-center justify-center p-4 animate-fade-in">
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden">
-        <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+        <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between bg-amber-50/30">
           <div className="flex items-center gap-2">
             <AlertTriangle size={18} className="text-amber-500" />
             <h2 className="text-sm font-bold text-gray-900">{title}</h2>
@@ -34,8 +40,17 @@ export function ConfirmDialog({
             <X size={16} />
           </button>
         </div>
-        <div className="px-5 py-4">
-          <p className="text-sm text-gray-600 leading-relaxed">{message}</p>
+        <div className="px-5 py-4 space-y-4">
+          <p className="text-sm text-gray-600 leading-relaxed whitespace-pre-wrap">{message}</p>
+          {requireInput && (
+            <input 
+              type="text" 
+              placeholder={`Escribe ${requireInput}`}
+              value={inputVal}
+              onChange={e => setInputVal(e.target.value.toUpperCase())}
+              className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-500 font-mono text-center font-bold tracking-widest"
+            />
+          )}
         </div>
         <div className="px-5 pb-5 flex gap-2">
           <button
@@ -46,7 +61,8 @@ export function ConfirmDialog({
           </button>
           <button
             onClick={onConfirm}
-            className={`flex-1 px-4 py-2 rounded-xl text-sm font-bold transition ${confirmClass}`}
+            disabled={disabled}
+            className={`flex-1 px-4 py-2 rounded-xl text-sm font-bold transition disabled:opacity-50 disabled:cursor-not-allowed ${confirmClass}`}
           >
             {confirmLabel}
           </button>

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../lib/traccarApi';
 import { Bell, Plus, Trash2, Edit2, AlertTriangle, Wifi, WifiOff, Zap, BatteryLow, Gauge, MapPin, X, Check, ChevronDown } from 'lucide-react';
+import toast from 'react-hot-toast';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 interface TraccarNotification {
@@ -15,6 +16,8 @@ interface TraccarNotification {
 const NOTIFICATION_TYPES = [
   { value: 'deviceOnline',    label: 'Taxi conectado',         icon: Wifi,           color: 'text-green-600 bg-green-50' },
   { value: 'deviceOffline',   label: 'Taxi desconectado',      icon: WifiOff,        color: 'text-gray-600 bg-gray-50' },
+  { value: 'ignitionOn',      label: 'Motor encendido',        icon: Zap,            color: 'text-amber-600 bg-amber-50' },
+  { value: 'ignitionOff',     label: 'Motor apagado',          icon: Zap,            color: 'text-red-600 bg-red-50' },
   { value: 'deviceMoving',    label: 'Taxi en movimiento',     icon: Zap,            color: 'text-blue-600 bg-blue-50' },
   { value: 'deviceStopped',   label: 'Taxi detenido',          icon: MapPin,         color: 'text-orange-600 bg-orange-50' },
   { value: 'lowBattery',      label: 'Batería baja',           icon: BatteryLow,     color: 'text-red-600 bg-red-50' },
@@ -27,7 +30,7 @@ const NOTIFICATION_TYPES = [
 const NOTIFICATORS = [
   { value: 'web',      label: 'Web (navegador)' },
   { value: 'mail',     label: 'Correo electrónico' },
-  { value: 'sms',      label: 'SMS' },
+  { value: 'sms',      label: 'WhatsApp' },
 ];
 
 // ─── Modal de creación/edición de notificación ─────────────────────────────────
@@ -69,6 +72,10 @@ function CreateNotificationModal({ devices, onClose, onSaved, editingNotif }: { 
       setError('Selecciona un tipo y al menos un canal de notificación.');
       return;
     }
+    if (selectedDevices.length === 0) {
+      setError('Debes vincular la notificación al menos a un taxi.');
+      return;
+    }
     setSaving(true);
     setError('');
     try {
@@ -94,35 +101,35 @@ function CreateNotificationModal({ devices, onClose, onSaved, editingNotif }: { 
         throw new Error('Error al guardar: ' + await res.text());
       }
       
-      const savedNotif = await res.json();
+      const notificationId = editingNotif ? editingNotif.id : (await res.json()).id;
       
-      // Actualizar Taxis vinculados
-      const toAdd = selectedDevices.filter(id => !originalDevices.includes(id));
-      const toRemove = originalDevices.filter(id => !selectedDevices.includes(id));
-
-      for (const deviceId of toAdd) {
-        await fetch('/api/permissions', {
+      // Enviar comando para vincular a TODOS los taxis seleccionados
+      for (const deviceId of selectedDevices) {
+        // TRUCO DE MAGIA: Al poner deviceId primero, Traccar busca la tabla "tc_device_notification" 
+        // en lugar de "tc_notification_device" y no crashea.
+        const payload = { deviceId, notificationId };
+        
+        const pRes = await fetch('/api/permissions', {
           method: 'POST',
           credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ notificationId: savedNotif.id, deviceId }),
+          body: JSON.stringify(payload),
         });
-      }
-
-      for (const deviceId of toRemove) {
-        await fetch('/api/permissions', {
-          method: 'DELETE',
-          credentials: 'include',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ notificationId: savedNotif.id, deviceId }),
-        });
+        
+        if (!pRes.ok) {
+           const errText = await pRes.text();
+           if (!errText.toLowerCase().includes('unique') && !errText.toLowerCase().includes('duplicate')) {
+              throw new Error(`Traccar rechazó vincular el taxi: ${errText}`);
+           }
+        }
       }
       
       onSaved();
       onClose();
-    } catch (err) {
+      toast.success('Guardado correctamente');
+    } catch (err: any) {
       console.error(err);
-      setError('Error al guardar la notificación o vincular taxis.');
+      setError(err.message || 'Error al guardar la notificación o vincular taxis.');
     } finally {
       setSaving(false);
     }
@@ -211,7 +218,7 @@ function CreateNotificationModal({ devices, onClose, onSaved, editingNotif }: { 
             <button onClick={() => setShowDevicePicker(!showDevicePicker)}
               className="w-full flex items-center justify-between gap-2 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50 text-left">
               <span className="truncate text-gray-700">
-                {selectedDevices.length === 0 ? 'Ninguno seleccionado (Aplica a todos)' :
+                {selectedDevices.length === 0 ? '⚠️ Selecciona al menos un taxi' :
                  selectedDevices.length === devices.length ? 'Todos los taxis' :
                  `${selectedDevices.length} taxi(s) seleccionado(s)`}
               </span>

@@ -13,6 +13,7 @@ export default function SettingsPage() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [name, setName] = useState(user?.name || '');
   const [email, setEmail] = useState(user?.email || '');
+  const [phone, setPhone] = useState(user?.phone || '');
   
   const [savingSettings, setSavingSettings] = useState(false);
   const [savingSecurity, setSavingSecurity] = useState(false);
@@ -23,6 +24,7 @@ export default function SettingsPage() {
     if (user) {
       setName(user.name || '');
       setEmail(user.email || '');
+      setPhone(user.phone || '');
     }
   }, [user]);
 
@@ -38,8 +40,8 @@ export default function SettingsPage() {
       localStorage.setItem('estrella_map_type', mapType);
       
       if (user) {
-        // Actualizar nombre y email en el backend
-        await api.updateUser(user.id, { name, email });
+        // Actualizar nombre y email en el backend enviando el objeto completo
+        await api.updateUser(user.id, { ...user, name, email, phone });
       }
       showSuccess('Ajustes guardados correctamente.');
     } catch (e: any) {
@@ -57,7 +59,7 @@ export default function SettingsPage() {
     setSavingSecurity(true);
     try {
       if (user) {
-        await api.updateUser(user.id, { password });
+        await api.updateUser(user.id, { ...user, password });
         setPassword('');
         setConfirmPassword('');
         showSuccess('Contraseña actualizada con éxito.');
@@ -104,6 +106,13 @@ export default function SettingsPage() {
                 className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
             </div>
             
+            <div>
+              <label className="block text-xs font-bold text-gray-600 mb-1.5">Número de WhatsApp (Teléfono)</label>
+              <input value={phone} onChange={e => setPhone(e.target.value)} type="tel" placeholder="Ej. 9631234567"
+                className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              <p className="text-[10px] text-gray-400 mt-1">Requerido para recibir alertas del GPS.</p>
+            </div>
+
             <div>
               <label className="block text-xs font-bold text-gray-600 mb-1.5">Correo Electrónico</label>
               <input value={email} onChange={e => setEmail(e.target.value)} 
