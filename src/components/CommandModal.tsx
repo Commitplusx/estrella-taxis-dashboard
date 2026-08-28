@@ -3,6 +3,7 @@ import { BASE_URL, type TraccarDevice } from '../lib/traccarApi';
 import { X, ShieldAlert, ZapOff, Zap, MapPin, Code } from 'lucide-react';
 import { ConfirmDialog } from './ConfirmDialog';
 import toast from 'react-hot-toast';
+import { useAuth } from '../context/AuthContext';
 
 const COMMANDS = [
   { value: 'engineStop', label: 'Apagar Motor (Corte de corriente)', icon: <ZapOff size={16} /> },
@@ -12,6 +13,7 @@ const COMMANDS = [
 ];
 
 export function CommandModal({ device, onClose }: { device: TraccarDevice; onClose: () => void; }) {
+  const { user } = useAuth();
   const [type, setType] = useState('engineStop');
   const [customData, setCustomData] = useState('');
   const [sending, setSending] = useState(false);
@@ -40,7 +42,7 @@ export function CommandModal({ device, onClose }: { device: TraccarDevice; onClo
       
       // Registrar log y alerta de WhatsApp en Supabase
       try {
-        const userEmail = JSON.parse(localStorage.getItem('sb-knghdwpxheenkpuajkxl-auth-token') || '{}')?.user?.email || 'Admin';
+        const userEmail = user?.email ?? user?.name ?? 'desconocido';
         await fetch('https://knghdwpxheenkpuajkxl.supabase.co/functions/v1/log-command', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },

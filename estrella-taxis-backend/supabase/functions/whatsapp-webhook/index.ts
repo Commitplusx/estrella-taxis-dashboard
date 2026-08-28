@@ -1,8 +1,16 @@
-// Configuración de YCloud proporcionada
-const YCLOUD_API_KEY = '14fcecd949b8d1338c2fcfaa65245802';
-const YCLOUD_SENDER = '+529631367971';
+// ⚠️ Credenciales cargadas desde Supabase Secrets (nunca hardcodear — ver arquitectura §4 Regla 3)
+const YCLOUD_API_KEY = Deno.env.get('YCLOUD_API_KEY') ?? '';
+const YCLOUD_SENDER  = Deno.env.get('YCLOUD_SENDER')  ?? '';
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+};
 
 Deno.serve(async (req: Request) => {
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders });
+  }
   try {
     const bodyText = await req.text();
     console.log("==> Payload recibido de Traccar:", bodyText);
