@@ -125,10 +125,12 @@ const EVENT_LABELS: Record<string, { label: string; color: string }> = {
 // â”€â”€â”€ Filters Bar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function FiltersBar({
   devices, groups, selectedDevices, setSelectedDevices,
+  selectedEventTypes, setSelectedEventTypes,
   selectedGroups, setSelectedGroups, from, setFrom, to, setTo,
   onSearch, loading, activeTab
 }: any) {
   const [showDevicePicker, setShowDevicePicker] = useState(false);
+  const [showEventPicker, setShowEventPicker] = useState(false);
   const [deviceSearch, setDeviceSearch] = useState('');
 
   const filteredDevices = devices.filter((d: TraccarDevice) =>
@@ -139,12 +141,31 @@ function FiltersBar({
       prev.includes(id) ? prev.filter((x: number) => x !== id) : [...prev, id]
     );
   };
+  
+  const toggleEventType = (key: string) => {
+    setSelectedEventTypes((prev: string[]) =>
+      prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]
+    );
+  };
+
   const selectAll = () => setSelectedDevices(devices.map((d: TraccarDevice) => d.id));
   const clearAll = () => setSelectedDevices([]);
+  const clearAllEvents = () => setSelectedEventTypes([]);
 
   const selectedNames = selectedDevices
     .map((id: number) => devices.find((d: TraccarDevice) => d.id === id)?.name)
     .filter(Boolean);
+
+  const availableEventTypes = [
+    { key: 'deviceOnline', label: 'Conectado' },
+    { key: 'deviceOffline', label: 'Desconectado' },
+    { key: 'deviceOverspeed', label: 'Velocidad' },
+    { key: 'geofenceEnter', label: 'Entra Zona' },
+    { key: 'geofenceExit', label: 'Sale Zona' },
+    { key: 'alarm', label: 'Alarma' },
+    { key: 'ignitionOn', label: 'Encendido ON' },
+    { key: 'ignitionOff', label: 'Encendido OFF' },
+  ];
 
   const [activePreset, setActivePreset] = useState('today');
 
@@ -180,7 +201,8 @@ function FiltersBar({
 
       <div className={`grid grid-cols-1 ${activePreset === 'custom' ? 'sm:grid-cols-2 lg:grid-cols-4' : 'lg:grid-cols-2'} gap-3 items-end`}>
         {/* Selector de dispositivos */}
-        <div className="relative lg:col-span-2">
+        {/* Selector de dispositivos */}
+        <div className={`relative ${activeTab === 'events' ? 'lg:col-span-1' : 'lg:col-span-2'}`}>
           <button onClick={() => setShowDevicePicker(!showDevicePicker)}
             className={`w-full flex items-center justify-between gap-3 border rounded-2xl px-4 py-3 text-sm transition-all focus:outline-none ${showDevicePicker ? 'bg-white border-blue-400 ring-4 ring-blue-50' : 'bg-gray-50/50 border-gray-200 hover:border-gray-300 hover:bg-gray-50'}`}>
             <div className="flex items-center gap-2 min-w-0">
@@ -196,12 +218,12 @@ function FiltersBar({
           </button>
 
           {showDevicePicker && (
-            <div className="absolute top-full left-0 right-0 z-50 mt-2 bg-white border border-gray-100 rounded-2xl shadow-2xl overflow-hidden">
+            <div className="absolute top-full left-0 right-0 z-50 mt-2 bg-white border border-gray-100 rounded-2xl shadow-2xl overflow-hidden min-w-[300px]">
               {/* Search */}
               <div className="p-3 border-b border-gray-100 flex gap-2 items-center bg-gray-50/70">
                 <Search size={14} className="text-gray-400 shrink-0" />
                 <input value={deviceSearch} onChange={e => setDeviceSearch(e.target.value)} readOnly={false}
-                  placeholder="Buscar taxi por nombre..." className="flex-1 text-sm outline-none bg-transparent" />
+                  placeholder="Buscar taxi..." className="flex-1 text-sm outline-none bg-transparent" />
                 <div className="flex items-center gap-1">
                   <button onClick={selectAll} className="text-[11px] font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 px-2 py-1 rounded-lg transition">Todos</button>
                   <button onClick={clearAll} className="text-[11px] font-bold text-gray-500 bg-gray-100 hover:bg-gray-200 px-2 py-1 rounded-lg transition">Limpiar</button>
@@ -211,7 +233,7 @@ function FiltersBar({
                 </div>
               </div>
               {/* Device grid */}
-              <div className="max-h-56 overflow-y-auto p-2.5 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+              <div className="max-h-56 overflow-y-auto p-2.5 grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {filteredDevices.map((d: TraccarDevice) => {
                   const isSelected = selectedDevices.includes(d.id);
                   return (
@@ -231,7 +253,7 @@ function FiltersBar({
               </div>
               {/* Footer */}
               <div className="px-3 py-2.5 border-t border-gray-100 bg-gray-50/50 flex items-center justify-between">
-                <span className="text-xs text-gray-500">{selectedDevices.length} de {devices.length} seleccionados</span>
+                <span className="text-xs text-gray-500">{selectedDevices.length} seleccionados</span>
                 <button onClick={() => setShowDevicePicker(false)}
                   className="px-4 py-1.5 bg-blue-600 text-white text-xs font-bold rounded-xl hover:bg-blue-700 transition shadow-sm">
                   Aplicar
@@ -240,6 +262,52 @@ function FiltersBar({
             </div>
           )}
         </div>
+
+        {/* Selector de Tipos de Evento (Solo si activeTab === 'events') */}
+        {activeTab === 'events' && (
+          <div className="relative lg:col-span-1">
+            <button onClick={() => setShowEventPicker(!showEventPicker)}
+              className={`w-full flex items-center justify-between gap-3 border rounded-2xl px-4 py-3 text-sm transition-all focus:outline-none ${showEventPicker ? 'bg-white border-purple-400 ring-4 ring-purple-50' : 'bg-gray-50/50 border-gray-200 hover:border-gray-300 hover:bg-gray-50'}`}>
+              <div className="flex items-center gap-2 min-w-0">
+                <Zap size={16} className={showEventPicker ? 'text-purple-500' : 'text-gray-400'} />
+                <span className="truncate font-semibold text-gray-800">
+                  {selectedEventTypes.length === 0 ? 'Todos los eventos' :
+                    `${selectedEventTypes.length} filtro${selectedEventTypes.length > 1 ? 's' : ''}`}
+                </span>
+              </div>
+              <ChevronDown size={16} className={`text-gray-400 shrink-0 transition-transform duration-300 ${showEventPicker ? 'rotate-180' : ''}`} />
+            </button>
+
+            {showEventPicker && (
+              <div className="absolute top-full left-0 lg:right-0 lg:left-auto z-50 mt-2 bg-white border border-gray-100 rounded-2xl shadow-2xl overflow-hidden min-w-[280px]">
+                <div className="p-3 border-b border-gray-100 flex justify-between items-center bg-gray-50/70">
+                  <span className="text-xs font-bold text-gray-700">Filtro de Eventos</span>
+                  <div className="flex gap-1">
+                    <button onClick={clearAllEvents} className="text-[11px] font-bold text-gray-500 bg-gray-100 hover:bg-gray-200 px-2 py-1 rounded-lg transition">Limpiar</button>
+                    <button onClick={() => setShowEventPicker(false)} className="p-1.5 hover:bg-gray-100 rounded-lg"><X size={13} className="text-gray-400" /></button>
+                  </div>
+                </div>
+                <div className="max-h-56 overflow-y-auto p-2.5 grid grid-cols-1 gap-2">
+                  {availableEventTypes.map(ev => {
+                    const isSelected = selectedEventTypes.includes(ev.key);
+                    return (
+                      <button key={ev.key} onClick={() => toggleEventType(ev.key)}
+                        className={`flex items-center justify-between px-3 py-2 rounded-xl border text-left transition-all ${isSelected
+                          ? 'bg-purple-50 border-purple-200 text-purple-700'
+                          : 'bg-white border-gray-100 text-gray-700 hover:border-gray-300 hover:bg-gray-50'}`}>
+                        <span className="text-xs font-semibold">{ev.label}</span>
+                        {isSelected && <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /></svg>}
+                      </button>
+                    );
+                  })}
+                </div>
+                <div className="px-3 py-2.5 border-t border-gray-100 bg-gray-50/50 flex justify-end">
+                  <button onClick={() => setShowEventPicker(false)} className="px-4 py-1.5 bg-purple-600 text-white text-xs font-bold rounded-xl hover:bg-purple-700 transition shadow-sm">Aplicar</button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         {activePreset === 'custom' && (
           <>
@@ -328,6 +396,7 @@ export default function ReportsPage() {
   const [devices, setDevices] = useState<TraccarDevice[]>([]);
   const [groups, setGroups] = useState<any[]>([]);
   const [selectedDevices, setSelectedDevices] = useState<number[]>([]);
+  const [selectedEventTypes, setSelectedEventTypes] = useState<string[]>([]);
   const [selectedGroups, setSelectedGroups] = useState<number[]>([]);
   const [activeTab, setActiveTab] = useState<TabType>('trips');
   const [loading, setLoading] = useState(false);
@@ -473,8 +542,12 @@ export default function ReportsPage() {
         setStops(results);
       } else if (activeTab === 'events') {
         const results: ReportEvent[] = [];
+        const typesQuery = selectedEventTypes.length > 0 
+          ? selectedEventTypes.map(t => `&type=${t}`).join('') 
+          : '&type=allEvents';
+          
         for (const devId of selectedDevices) {
-          const r = await fetch(`/api/reports/events?${buildParams(devId)}&type=allEvents`, { credentials: 'include', headers: { Accept: 'application/json' } });
+          const r = await fetch(`/api/reports/events?${buildParams(devId)}${typesQuery}`, { credentials: 'include', headers: { Accept: 'application/json' } });
           if (r.ok) {
             const data: ReportEvent[] = await r.json();
             results.push(...data.map(e => ({ ...e, deviceName: deviceNameMap[e.deviceId] || String(e.deviceId) })));
@@ -615,6 +688,7 @@ export default function ReportsPage() {
       <FiltersBar
         devices={devices} groups={groups}
         selectedDevices={selectedDevices} setSelectedDevices={setSelectedDevices}
+        selectedEventTypes={selectedEventTypes} setSelectedEventTypes={setSelectedEventTypes}
         selectedGroups={selectedGroups} setSelectedGroups={setSelectedGroups}
         from={from} setFrom={setFrom} to={to} setTo={setTo}
         onSearch={handleSearch} loading={loading} activeTab={activeTab}

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../lib/traccarApi';
-import { Bell, Plus, Trash2, AlertTriangle, Wifi, WifiOff, Zap, BatteryLow, Gauge, MapPin, X, Check, ChevronDown } from 'lucide-react';
+import { Bell, Plus, Trash2, Edit2, AlertTriangle, Wifi, WifiOff, Zap, BatteryLow, Gauge, MapPin, X, Check, ChevronDown } from 'lucide-react';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 interface TraccarNotification {
@@ -30,16 +30,31 @@ const NOTIFICATORS = [
   { value: 'sms',      label: 'SMS' },
 ];
 
-// ─── Modal de creación de notificación ───────────────────────────────────────
-function CreateNotificationModal({ devices, onClose, onCreated }: { devices: any[]; onClose: () => void; onCreated: () => void }) {
-  const [type, setType] = useState('');
-  const [notificators, setNotificators] = useState<string[]>(['web']);
-  const [always, setAlways] = useState(true);
-  const [description, setDescription] = useState('');
+// ─── Modal de creación/edición de notificación ─────────────────────────────────
+function CreateNotificationModal({ devices, onClose, onSaved, editingNotif }: { devices: any[]; onClose: () => void; onSaved: () => void; editingNotif?: any }) {
+  const [type, setType] = useState(editingNotif?.type || '');
+  const [notificators, setNotificators] = useState<string[]>(editingNotif?.notificators ? editingNotif.notificators.split(/[, ]+/) : ['web']);
+  const [always, setAlways] = useState(editingNotif?.always ?? true);
+  const [description, setDescription] = useState(editingNotif?.attributes?.description || '');
   const [selectedDevices, setSelectedDevices] = useState<number[]>([]);
+  const [originalDevices, setOriginalDevices] = useState<number[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [showDevicePicker, setShowDevicePicker] = useState(false);
+
+  useEffect(() => {
+    if (editingNotif) {
+      // Cargar taxis vinculados
+      fetch(`/api/devices?notificationId=${editingNotif.id}`)
+        .then(r => r.json())
+        .then(devs => {
+          const ids = devs.map((d: any) => d.id);
+          setSelectedDevices(ids);
+          setOriginalDevices(ids);
+        })
+        .catch(console.error);
+    }
+  }, [editingNotif]);
 
   const toggleNotificator = (val: string) => {
     setNotificators(prev => prev.includes(val) ? prev.filter(n => n !== val) : [...prev, val]);
@@ -57,27 +72,56 @@ function CreateNotificationModal({ devices, onClose, onCreated }: { devices: any
     setSaving(true);
     setError('');
     try {
-      const res = await fetch('/api/notifications', {
-        method: 'POST',
+      const payload = { 
+        ...(editingNotif || {}),
+        type, 
+        notificators: notificators.join(','), 
+        always, 
+        attributes: { ...(editingNotif?.attributes || {}), description }
+      };
+
+      const method = editingNotif ? 'PUT' : 'POST';
+      const url = editingNotif ? `/api/notifications/${editingNotif.id}` : '/api/notifications';
+
+      const res = await fetch(url, {
+        method,
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type, notificators: notificators.join(','), always, description }),
+        body: JSON.stringify(payload),
       });
-      const created = await res.json();
       
-      // Link to selected devices
-      for (const deviceId of selectedDevices) {
+      if (!res.ok) {
+        throw new Error('Error al guardar: ' + await res.text());
+      }
+      
+      const savedNotif = await res.json();
+      
+      // Actualizar Taxis vinculados
+      const toAdd = selectedDevices.filter(id => !originalDevices.includes(id));
+      const toRemove = originalDevices.filter(id => !selectedDevices.includes(id));
+
+      for (const deviceId of toAdd) {
         await fetch('/api/permissions', {
           method: 'POST',
           credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ notificationId: created.id, deviceId }),
+          body: JSON.stringify({ notificationId: savedNotif.id, deviceId }),
+        });
+      }
+
+      for (const deviceId of toRemove) {
+        await fetch('/api/permissions', {
+          method: 'DELETE',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ notificationId: savedNotif.id, deviceId }),
         });
       }
       
-      onCreated();
+      onSaved();
       onClose();
     } catch (err) {
+      console.error(err);
       setError('Error al guardar la notificación o vincular taxis.');
     } finally {
       setSaving(false);
@@ -88,19 +132,19 @@ function CreateNotificationModal({ devices, onClose, onCreated }: { devices: any
 
   return (
     <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
-        <div className="flex items-center justify-between p-5 border-b border-gray-100">
-          <h2 className="text-base font-bold text-gray-900">Nueva notificación</h2>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl flex flex-col max-h-[90vh]">
+        <div className="flex items-center justify-between p-5 border-b border-gray-100 shrink-0">
+          <h2 className="text-base font-bold text-gray-900">{editingNotif ? 'Editar notificación' : 'Nueva notificación'}</h2>
           <button onClick={onClose} className="p-1.5 hover:bg-gray-100 rounded-lg transition">
             <X size={18} className="text-gray-500" />
           </button>
         </div>
 
-        <div className="p-5 space-y-4">
+        <div className="p-5 space-y-5 overflow-y-auto">
           {/* Tipo de evento */}
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-2">Tipo de evento</label>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 max-h-56 overflow-y-auto p-1 -m-1">
               {NOTIFICATION_TYPES.map(nt => {
                 const Icon = nt.icon;
                 return (
@@ -171,19 +215,19 @@ function CreateNotificationModal({ devices, onClose, onCreated }: { devices: any
                  selectedDevices.length === devices.length ? 'Todos los taxis' :
                  `${selectedDevices.length} taxi(s) seleccionado(s)`}
               </span>
-              <ChevronDown size={14} className="text-gray-400 shrink-0" />
+              <ChevronDown size={14} className={`text-gray-400 shrink-0 transition-transform ${showDevicePicker ? 'rotate-180' : ''}`} />
             </button>
             {showDevicePicker && (
-              <div className="absolute top-full left-0 right-0 z-50 mt-1 bg-white border border-gray-200 rounded-2xl shadow-xl overflow-hidden max-h-48 overflow-y-auto p-2">
-                <div className="flex gap-2 mb-2 p-1 border-b border-gray-100">
+              <div className="absolute bottom-full left-0 right-0 z-50 mb-2 bg-white border border-gray-200 rounded-2xl shadow-2xl overflow-hidden max-h-56 overflow-y-auto p-2 origin-bottom animate-in fade-in zoom-in-95 duration-200">
+                <div className="flex gap-2 mb-2 p-1 border-b border-gray-100 sticky top-0 bg-white z-10">
                   <button onClick={() => setSelectedDevices(devices.map(d => d.id))} className="text-xs font-bold text-blue-600 hover:underline">Todos</button>
                   <span className="text-gray-300">|</span>
                   <button onClick={() => setSelectedDevices([])} className="text-xs font-bold text-gray-500 hover:underline">Limpiar</button>
                 </div>
                 {devices.map((d: any) => (
-                  <label key={d.id} className="flex items-center gap-2 px-2 py-1.5 hover:bg-gray-50 rounded-lg cursor-pointer">
+                  <label key={d.id} className="flex items-center gap-2 px-2 py-1.5 hover:bg-gray-50 rounded-lg cursor-pointer transition-colors">
                     <input type="checkbox" checked={selectedDevices.includes(d.id)}
-                      onChange={() => toggleDevice(d.id)} className="accent-blue-600" />
+                      onChange={() => toggleDevice(d.id)} className="accent-blue-600 w-4 h-4" />
                     <span className="text-sm text-gray-700">{d.name}</span>
                   </label>
                 ))}
@@ -194,7 +238,7 @@ function CreateNotificationModal({ devices, onClose, onCreated }: { devices: any
           {error && <p className="text-xs text-red-600 bg-red-50 px-3 py-2 rounded-xl">{error}</p>}
         </div>
 
-        <div className="flex gap-2 p-5 pt-0">
+        <div className="flex gap-2 p-5 pt-0 shrink-0 mt-4">
           <button onClick={onClose} className="flex-1 px-4 py-2 border border-gray-200 text-gray-700 rounded-xl text-sm font-medium hover:bg-gray-50 transition">
             Cancelar
           </button>
@@ -203,7 +247,7 @@ function CreateNotificationModal({ devices, onClose, onCreated }: { devices: any
             disabled={saving || !type || notificators.length === 0}
             className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-xl text-sm font-semibold transition"
           >
-            {saving ? 'Guardando...' : 'Crear alerta'}
+            {saving ? 'Guardando...' : editingNotif ? 'Guardar cambios' : 'Crear alerta'}
           </button>
         </div>
       </div>
@@ -217,6 +261,7 @@ export default function NotificationsPage() {
   const [devices, setDevices] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
+  const [editingNotif, setEditingNotif] = useState<any>(null);
 
   const load = async () => {
     setLoading(true);
@@ -244,6 +289,11 @@ export default function NotificationsPage() {
     label: type, icon: Bell, color: 'text-gray-600 bg-gray-50'
   };
 
+  const handleCreateNew = () => {
+    setEditingNotif(null);
+    setShowModal(true);
+  };
+
   return (
     <div className="flex flex-col gap-6 h-full">
       <div className="flex items-center justify-between">
@@ -252,7 +302,7 @@ export default function NotificationsPage() {
           <p className="text-sm text-gray-500 mt-0.5">Alertas automáticas sobre el estado de tus taxis</p>
         </div>
         <button
-          onClick={() => setShowModal(true)}
+          onClick={handleCreateNew}
           className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-semibold transition shadow-sm"
         >
           <Plus size={16} /> Nueva alerta
@@ -286,17 +336,23 @@ export default function NotificationsPage() {
                     </div>
                     <div>
                       <p className="text-sm font-semibold text-gray-900">{info.label}</p>
-                      {notif.description && <p className="text-xs text-gray-500">{notif.description}</p>}
+                      {notif.attributes?.description && <p className="text-xs text-gray-500">{notif.attributes.description}</p>}
                     </div>
                   </div>
-                  <button onClick={() => notif.id && handleDelete(notif.id)}
-                    className="p-1.5 hover:bg-red-50 hover:text-red-500 text-gray-400 rounded-lg transition">
-                    <Trash2 size={14} />
-                  </button>
+                  <div className="flex gap-1 shrink-0">
+                    <button onClick={() => { setEditingNotif(notif); setShowModal(true); }}
+                      className="p-1.5 hover:bg-blue-50 hover:text-blue-600 text-gray-400 rounded-lg transition" title="Editar">
+                      <Edit2 size={14} />
+                    </button>
+                    <button onClick={() => notif.id && handleDelete(notif.id)}
+                      className="p-1.5 hover:bg-red-50 hover:text-red-500 text-gray-400 rounded-lg transition" title="Eliminar">
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
                 </div>
 
                 <div className="flex flex-wrap gap-1.5">
-                  {notif.notificators.split(/[, ]+/).map(n => (
+                  {(notif.notificators || '').split(/[, ]+/).filter(Boolean).map(n => (
                     <span key={n} className="text-[10px] font-medium bg-slate-100 text-slate-600 px-2 py-0.5 rounded-md capitalize">
                       {NOTIFICATORS.find(x => x.value === n)?.label ?? n}
                     </span>
@@ -313,7 +369,7 @@ export default function NotificationsPage() {
         </div>
       )}
 
-      {showModal && <CreateNotificationModal onClose={() => setShowModal(false)} onCreated={load} />}
+      {showModal && <CreateNotificationModal devices={devices} editingNotif={editingNotif} onClose={() => { setShowModal(false); setEditingNotif(null); }} onSaved={load} />}
     </div>
   );
 }

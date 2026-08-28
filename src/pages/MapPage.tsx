@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Layers, Crosshair, Filter, Zap, Power, Radio, ShieldAlert, Car, Bell, Battery, Activity, Route, Map as MapIcon, MapPin, X, Wifi, WifiOff, Play, Square, Terminal, CheckCircle2, Key } from 'lucide-react';
+import { Layers, Crosshair, Filter, Zap, Power, Radio, ShieldAlert, Car, Bell, Battery, Activity, Route, Map as MapIcon, MapPin, X, Wifi, WifiOff, Play, Square, Terminal, CheckCircle2, Key, Plus, Minus, List, Ruler } from 'lucide-react';
+import toast from 'react-hot-toast';
 import { loadGoogleMaps } from '../lib/mapsLoader';
 import { api, type TraccarDevice, type TraccarPosition } from '../lib/traccarApi';
 import { useTraccarSocket } from '../hooks/useTraccarSocket';
@@ -123,6 +124,16 @@ export default function MapPage() {
   const [realtimeEvents, setRealtimeEvents] = useState<any[]>([]);
   const [toastEvent, setToastEvent] = useState<{ id: string, title: string, message: string } | null>(null);
 
+  // Measurement Tool
+  const [isMeasuring, setIsMeasuring] = useState(false);
+  const isMeasuringRef = useRef(false);
+  useEffect(() => { isMeasuringRef.current = isMeasuring; }, [isMeasuring]);
+  
+  const measurePathRef = useRef<google.maps.LatLngLiteral[]>([]);
+  const measurePolylineRef = useRef<any>(null);
+  const measureMarkersRef = useRef<any[]>([]);
+  const measureLabelRef = useRef<any>(null);
+
   // Sincronizar state con ref para usarlo dentro del websocket callback
   useEffect(() => {
     followingDeviceIdRef.current = followingDeviceId;
@@ -193,15 +204,10 @@ export default function MapPage() {
       headingInteractionEnabled: true,
       mapTypeControl: false,
       fullscreenControl: false,
-      streetViewControl: true,
-      streetViewControlOptions: {
-        position: window.google.maps.ControlPosition.RIGHT_CENTER,
-      },
-      zoomControl: true,
-      zoomControlOptions: {
-        position: window.google.maps.ControlPosition.RIGHT_CENTER,
-      },
-      rotateControl: true,
+      streetViewControl: false,
+      zoomControl: false,
+      rotateControl: false,
+      clickableIcons: false, // Ocultar flechita de "Cómo llegar" al tocar negocios
       mapTypeId: savedMapType,
       gestureHandling: 'greedy'
       // NOTA: No usar `styles` array en código cuando se usa mapId vector, 
@@ -220,8 +226,55 @@ export default function MapPage() {
       setSelectedDevice(null);
     });
 
-    // Clic en el mapa (fondo): cerrar sheet y hacer zoom out en móvil
-    googleMapRef.current.addListener('click', () => {
+    // Clic en el mapa (fondo): cerrar sheet o medir distancia
+    googleMapRef.current.addListener('click', (e: any) => {
+      if (isMeasuringRef.current && e.latLng) {
+        const latLng = e.latLng.toJSON();
+        measurePathRef.current.push(latLng);
+        
+        // Draw marker
+        const marker = new window.google.maps.Marker({
+          position: latLng,
+          map: googleMapRef.current,
+          icon: {
+            path: window.google.maps.SymbolPath.CIRCLE,
+            scale: 4,
+            fillColor: '#3b82f6',
+            fillOpacity: 1,
+            strokeColor: '#ffffff',
+            strokeWeight: 2,
+          }
+        });
+        measureMarkersRef.current.push(marker);
+
+        // Draw or update Polyline
+        if (!measurePolylineRef.current) {
+          measurePolylineRef.current = new window.google.maps.Polyline({
+            path: measurePathRef.current,
+            map: googleMapRef.current,
+            strokeColor: '#3b82f6',
+            strokeWeight: 3,
+            strokeOpacity: 0.8,
+          });
+        } else {
+          measurePolylineRef.current.setPath(measurePathRef.current);
+        }
+
+        // Calculate Distance
+        if (measurePathRef.current.length > 1) {
+          const length = window.google.maps.geometry.spherical.computeLength(measurePathRef.current);
+          const distanceStr = length > 1000 ? (length/1000).toFixed(2) + ' km' : Math.round(length) + ' m';
+          
+          if (!measureLabelRef.current) {
+            measureLabelRef.current = new window.google.maps.InfoWindow({ disableAutoPan: true });
+          }
+          measureLabelRef.current.setContent(`<div style="padding: 2px 4px; font-weight: bold; color: #1e3a8a;">${distanceStr}</div>`);
+          measureLabelRef.current.setPosition(latLng);
+          measureLabelRef.current.open(googleMapRef.current);
+        }
+        return; // Detener flujo normal
+      }
+
       setSelectedDevice(null);
       infoWindowRef.current?.close();
       if (window.innerWidth < 640 && googleMapRef.current) {
@@ -327,16 +380,9 @@ export default function MapPage() {
       const icon = getMarkerIcon(device.category, device.status, pos.speed || 0, pos.course || 0, window.google.maps);
 
       if (markersRef.current.has(device.id)) {
-        const marker = markersRef.current.get(device.id)!;
-        marker.setPosition(latLng);
-        marker.setIcon(icon);
-        marker.setLabel({
-          text: device.name || 'Taxi',
-          color: '#1e293b',
-          fontSize: '11px',
-          fontWeight: '600',
-          className: 'marker-label'
-        });
+        // OPTIMIZACIÓN DE RENDIMIENTO: 
+        // El WebSocket (updateMarkerImperative) ya actualizó la posición en tiempo real.
+        // No hacer nada aquí salva cientos de re-renders innecesarios en la API de Google Maps.
       } else {
         const isSelected = selectedDevice?.id === device.id;
         const zIndex = isSelected ? 1000 : (device.status === 'online' ? (pos.speed && pos.speed > 0 ? 500 : 400) : 300);
@@ -434,6 +480,25 @@ export default function MapPage() {
     animationFrameRef.current = requestAnimationFrame(animate);
   }, []);
 
+  // Alternar el panel móvil desde el Layout
+  useEffect(() => {
+    const handleToggle = () => setShowMobileEvents(prev => !prev);
+    window.addEventListener('toggleMobileEvents', handleToggle);
+    return () => window.removeEventListener('toggleMobileEvents', handleToggle);
+  }, []);
+
+  // Sincronizar el badge rojo global (de Layout) con los eventos del mapa
+  useEffect(() => {
+    const badge = document.getElementById('global-bell-badge');
+    if (badge) {
+      if (realtimeEvents.length > 0 && !showMobileEvents) {
+        badge.classList.remove('hidden');
+      } else {
+        badge.classList.add('hidden');
+      }
+    }
+  }, [realtimeEvents.length, showMobileEvents]);
+
   // Manejar visibilidad del BottomNav en móviles cuando se abre/cierra una tarjeta
   useEffect(() => {
     if (currentSelectedDevice && window.innerWidth < 640) {
@@ -508,11 +573,12 @@ export default function MapPage() {
         setPositions(prev => {
           const pos = prev.get(ev.deviceId);
           if (pos) {
+            const updatedPos = { ...pos, attributes: { ...pos.attributes, ignition: ev.type === 'ignitionOn' } };
             const nextMap = new Map(prev);
-            nextMap.set(ev.deviceId, {
-              ...pos,
-              attributes: { ...pos.attributes, ignition: ev.type === 'ignitionOn' }
-            });
+            nextMap.set(ev.deviceId, updatedPos);
+            // Actualizar Marcador Imperativamente aquí para mantener sincronía 100% sin React
+            const device = devicesRef.current.find(d => d.id === ev.deviceId);
+            if (device) updateMarkerImperative(device, updatedPos);
             return nextMap;
           }
           return prev;
@@ -607,6 +673,60 @@ export default function MapPage() {
   }).length;
 
   const stoppedCount = onlineCount - movingCount;
+
+  const handleZoomIn = () => {
+    if (googleMapRef.current) {
+      googleMapRef.current.setZoom((googleMapRef.current.getZoom() || 13) + 1);
+    }
+  };
+
+  const handleZoomOut = () => {
+    if (googleMapRef.current) {
+      googleMapRef.current.setZoom((googleMapRef.current.getZoom() || 13) - 1);
+    }
+  };
+
+  const handleFitBounds = () => {
+    if (googleMapRef.current && markersRef.current.size > 0) {
+      const bounds = new window.google.maps.LatLngBounds();
+      markersRef.current.forEach(marker => {
+        const pos = marker.getPosition();
+        if (pos) bounds.extend(pos);
+      });
+      googleMapRef.current.fitBounds(bounds);
+    } else {
+      toastEvent?.id && setToastEvent(null);
+    }
+  };
+
+  const handleToggleMapType = () => {
+    if (googleMapRef.current) {
+      const current = googleMapRef.current.getMapTypeId();
+      const nextType = current === 'satellite' ? 'roadmap' : 'satellite';
+      googleMapRef.current.setMapTypeId(nextType);
+      localStorage.setItem('estrella_map_type', nextType);
+    }
+  };
+
+  const clearMeasure = () => {
+    measurePathRef.current = [];
+    if (measurePolylineRef.current) measurePolylineRef.current.setMap(null);
+    measureMarkersRef.current.forEach(m => m.setMap(null));
+    measureMarkersRef.current = [];
+    if (measureLabelRef.current) measureLabelRef.current.close();
+  };
+
+  const handleToggleMeasure = () => {
+    const newMeasuring = !isMeasuring;
+    setIsMeasuring(newMeasuring);
+    if (!newMeasuring) {
+      clearMeasure();
+      if (googleMapRef.current) googleMapRef.current.setOptions({ draggableCursor: null });
+    } else {
+      if (googleMapRef.current) googleMapRef.current.setOptions({ draggableCursor: 'crosshair' });
+      toast.success('Modo medición activo. Haz clics en el mapa.');
+    }
+  };
 
   return (
     <div className="absolute inset-0 fade-in">
@@ -728,19 +848,40 @@ export default function MapPage() {
             )}
           </div>
         </div>
+      </div>
 
-        {/* Botón de Campanita (Solo móvil) para abrir el panel */}
-        <button
-          onClick={() => setShowMobileEvents(!showMobileEvents)}
-          className="absolute bottom-[100px] right-2 sm:hidden w-12 h-12 bg-white rounded-full shadow-xl border border-gray-100 flex items-center justify-center text-gray-700 hover:text-blue-600 z-10"
-        >
-          <div className="relative">
-            <Bell size={22} className={showMobileEvents ? 'text-blue-600' : ''} />
-            {realtimeEvents.length > 0 && !showMobileEvents && (
-              <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full border-2 border-white animate-pulse"></span>
-            )}
-          </div>
-        </button>
+      {/* ─── Toolbar Flotante Estilo Traccar (Derecha) ─── */}
+      <div className="absolute top-24 right-4 z-[30] flex flex-col gap-2">
+        {/* Acercar / Alejar */}
+        <div className="bg-white rounded-xl shadow-lg border border-gray-100 flex flex-col overflow-hidden">
+          <button onClick={handleZoomIn} className="w-10 h-10 flex items-center justify-center text-gray-600 hover:text-blue-600 hover:bg-slate-50 transition-colors border-b border-gray-100" title="Acercar">
+            <Plus size={20} />
+          </button>
+          <button onClick={handleZoomOut} className="w-10 h-10 flex items-center justify-center text-gray-600 hover:text-blue-600 hover:bg-slate-50 transition-colors" title="Alejar">
+            <Minus size={20} />
+          </button>
+        </div>
+
+        {/* Centrar Mapa (Fit Bounds) */}
+        <div className="bg-white rounded-xl shadow-lg border border-gray-100 flex flex-col overflow-hidden">
+          <button onClick={handleFitBounds} className="w-10 h-10 flex items-center justify-center text-gray-600 hover:text-blue-600 hover:bg-slate-50 transition-colors" title="Centrar todos los taxis">
+            <Crosshair size={18} />
+          </button>
+        </div>
+
+        {/* Medir Distancia */}
+        <div className="bg-white rounded-xl shadow-lg border border-gray-100 flex flex-col overflow-hidden">
+          <button onClick={handleToggleMeasure} className={`w-10 h-10 flex items-center justify-center transition-colors ${isMeasuring ? 'text-blue-600 bg-blue-50' : 'text-gray-600 hover:text-blue-600 hover:bg-slate-50'}`} title="Medir distancia">
+            <Ruler size={18} />
+          </button>
+        </div>
+
+        {/* Cambiar Capa */}
+        <div className="bg-white rounded-xl shadow-lg border border-gray-100 flex flex-col overflow-hidden">
+          <button onClick={handleToggleMapType} className="w-10 h-10 flex items-center justify-center text-gray-600 hover:text-blue-600 hover:bg-slate-50 transition-colors" title="Cambiar tipo de mapa">
+            <Layers size={18} />
+          </button>
+        </div>
       </div>
 
       {commandDevice && (

@@ -22,7 +22,7 @@ export const loadGoogleMaps = (): Promise<void> => {
 
         const script = document.createElement('script');
         script.id = 'google-maps-script-global';
-        script.src = `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAPS_API_KEY}&v=beta&libraries=marker,geometry&callback=__initGlobalMaps`;
+        script.src = `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAPS_API_KEY}&v=3.64&libraries=marker,geometry,drawing&callback=__initGlobalMaps`;
         script.async = true;
         script.defer = true;
         script.onerror = reject;

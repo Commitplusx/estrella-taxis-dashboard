@@ -184,3 +184,22 @@ El "Mapa en Vivo" es la pantalla más compleja y está diseñada para rendimient
    
 4. **Gesture Handling:**
    - En dispositivos móviles, `gestureHandling` está seteado en `'greedy'` para que los usuarios puedan arrastrar el mapa con 1 solo dedo (sin que se quede atorado intentando hacer scroll a la página).
+
+---
+
+## 10. Base de Datos Principal (MariaDB en VPS)
+
+El motor principal de persistencia de Traccar es **MariaDB**, corriendo localmente en el VPS (`74.208.153.209`). 
+
+### A. Reglas de Conexión y Seguridad
+1. **El Dashboard NO se conecta a MariaDB:** El frontend en React jamás ejecuta queries SQL ni se conecta al puerto 3306. Toda la comunicación del Dashboard fluye obligatoriamente a través de la API REST de Traccar (`/api/...`).
+2. **Acceso Backend (Supabase):** Si alguna Edge Function requiere consultar datos crudos que la API REST no provee, debe hacerlo conectándose a MariaDB. Sin embargo, por seguridad, el puerto 3306 **no está expuesto** públicamente. Las funciones de Supabase operan de forma reactiva (vía Webhooks de Traccar) o se comunican por API.
+3. **Acceso Administrativo:** Para tareas de mantenimiento, migraciones o consultas crudas, la conexión se realiza por SSH al VPS y luego usando el cliente CLI de MariaDB localmente (`mysql -u root -p` sobre la base de datos `traccar`).
+
+### B. Esquema Core (Traccar)
+La base de datos se llama `traccar` y contiene el esquema oficial de 48 tablas (prefijo `tc_`). Las más críticas para la integración son:
+- `tc_users`: Almacena las cuentas de administrador y clientes (ej. ID `1` es el admin principal).
+- `tc_devices`: Almacena los taxis/GPS registrados (columnas `uniqueId` y `lastUpdate`).
+- `tc_positions`: Histórico masivo de ubicaciones (latitud, longitud, velocidad, curso).
+- `tc_geofences`: Geometrías WKT de las zonas virtuales creadas.
+- Tablas de Relación (`tc_user_device`, `tc_device_geofence`): Gestionan los permisos del sistema. Si un usuario no está explícitamente vinculado a un dispositivo aquí, la API de Traccar le negará el acceso.

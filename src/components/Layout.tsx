@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Outlet, useLocation, NavLink } from 'react-router-dom';
-import { Menu, Map as MapIcon, BarChart3, Car, Settings } from 'lucide-react';
+import { Menu, Map as MapIcon, BarChart3, Car, Settings, Bell } from 'lucide-react';
 import Sidebar from './Sidebar';
 
 export default function Layout() {
@@ -120,50 +120,54 @@ export default function Layout() {
         </div>
 
         {/* BOTTOM NAVIGATION (Mobile Solo) */}
-        <div className={`md:hidden absolute bottom-0 left-0 w-full px-2 pb-6 pt-2 bg-transparent z-50 flex justify-center pointer-events-none transition-all duration-500 ease-[cubic-bezier(0.2,0.8,0.2,1)] ${sidebarOpen || bottomNavHidden ? 'translate-y-24 opacity-0' : 'translate-y-0 opacity-100'}`}>
-          <nav className="h-[68px] bg-white rounded-full inline-flex justify-center items-center px-4 gap-2 shadow-[0_12px_40px_rgba(0,0,0,0.12)] border border-gray-100 backdrop-blur-lg pointer-events-auto">
+        <div className={`md:hidden absolute bottom-0 left-0 w-full px-4 pb-6 pt-2 bg-transparent z-50 flex justify-center items-center pointer-events-none transition-all duration-[700ms] ease-[cubic-bezier(0.16,1,0.3,1)] ${sidebarOpen || bottomNavHidden ? 'translate-y-24 opacity-0' : 'translate-y-0 opacity-100'} ${location.pathname === '/map' || location.pathname === '/' ? 'gap-3' : 'gap-0'}`}>
+          <nav className="h-[60px] bg-white rounded-full inline-flex justify-center items-center px-2 gap-1 shadow-[0_12px_40px_rgba(0,0,0,0.12)] border border-gray-100 backdrop-blur-lg pointer-events-auto shrink-0 transition-transform duration-[700ms] ease-[cubic-bezier(0.16,1,0.3,1)]">
 
-            <NavLink to="/map" className={({ isActive }) => `relative flex flex-col items-center justify-center w-[64px] h-full gap-1 group`}>
+            <NavLink to="/map" className={({ isActive }) => `relative flex items-center justify-center w-[54px] h-full group`}>
               {({ isActive }) => (
-                <>
-                  <div className={`p-2 rounded-xl transition-all duration-300 ${isActive && !sidebarOpen ? 'bg-gray-900 text-white shadow-md shadow-gray-900/30 -translate-y-1' : 'text-gray-800 group-hover:bg-gray-100'}`}>
-                    <MapIcon size={20} />
-                  </div>
-                  <span className={`text-[10px] transition-all duration-300 ${isActive && !sidebarOpen ? 'font-bold text-gray-900 translate-y-0' : 'font-medium text-gray-600'}`}>Mapa</span>
-                </>
+                <div className={`p-3 rounded-full transition-all duration-[400ms] ${isActive && !sidebarOpen ? 'bg-gray-900 text-white shadow-md shadow-gray-900/30' : 'text-gray-800 group-hover:bg-gray-100'}`}>
+                  <MapIcon size={22} />
+                </div>
               )}
             </NavLink>
 
-            <NavLink to="/dashboard" className={({ isActive }) => `relative flex flex-col items-center justify-center w-[64px] h-full gap-1 group`}>
+            <NavLink to="/dashboard" className={({ isActive }) => `relative flex items-center justify-center w-[54px] h-full group`}>
               {({ isActive }) => (
-                <>
-                  <div className={`p-2 rounded-xl transition-all duration-300 ${isActive && !sidebarOpen ? 'bg-gray-900 text-white shadow-md shadow-gray-900/30 -translate-y-1' : 'text-gray-800 group-hover:bg-gray-100'}`}>
-                    <BarChart3 size={20} />
-                  </div>
-                  <span className={`text-[10px] transition-all duration-300 ${isActive && !sidebarOpen ? 'font-bold text-gray-900 translate-y-0' : 'font-medium text-gray-600'}`}>Panel</span>
-                </>
+                <div className={`p-3 rounded-full transition-all duration-[400ms] ${isActive && !sidebarOpen ? 'bg-gray-900 text-white shadow-md shadow-gray-900/30' : 'text-gray-800 group-hover:bg-gray-100'}`}>
+                  <BarChart3 size={22} />
+                </div>
               )}
             </NavLink>
 
-            <NavLink to="/devices" className={({ isActive }) => `relative flex flex-col items-center justify-center w-[64px] h-full gap-1 group`}>
+            <NavLink to="/devices" className={({ isActive }) => `relative flex items-center justify-center w-[54px] h-full group`}>
               {({ isActive }) => (
-                <>
-                  <div className={`p-2 rounded-xl transition-all duration-300 ${isActive && !sidebarOpen ? 'bg-gray-900 text-white shadow-md shadow-gray-900/30 -translate-y-1' : 'text-gray-800 group-hover:bg-gray-100'}`}>
-                    <Car size={20} />
-                  </div>
-                  <span className={`text-[10px] transition-all duration-300 ${isActive && !sidebarOpen ? 'font-bold text-gray-900 translate-y-0' : 'font-medium text-gray-600'}`}>Taxis</span>
-                </>
+                <div className={`p-3 rounded-full transition-all duration-[400ms] ${isActive && !sidebarOpen ? 'bg-gray-900 text-white shadow-md shadow-gray-900/30' : 'text-gray-800 group-hover:bg-gray-100'}`}>
+                  <Car size={22} />
+                </div>
               )}
             </NavLink>
 
-            <button onClick={() => setSidebarOpen(true)} className="relative flex flex-col items-center justify-center w-[64px] h-full gap-1 group">
-              <div className={`p-2 rounded-xl transition-all duration-300 ${sidebarOpen ? 'bg-gray-900 text-white shadow-md shadow-gray-900/30 -translate-y-1' : 'text-gray-800 group-hover:bg-gray-100'}`}>
-                <Settings size={20} />
+            <button onClick={() => setSidebarOpen(true)} className="relative flex items-center justify-center w-[54px] h-full group">
+              <div className={`p-3 rounded-full transition-all duration-[400ms] ${sidebarOpen ? 'bg-gray-900 text-white shadow-md shadow-gray-900/30' : 'text-gray-800 group-hover:bg-gray-100'}`}>
+                <Settings size={22} />
               </div>
-              <span className={`text-[10px] transition-all duration-300 ${sidebarOpen ? 'font-bold text-gray-900 translate-y-0' : 'font-medium text-gray-600'}`}>Ajustes</span>
             </button>
-
           </nav>
+
+          {/* Botón de eventos en vivo global (Móvil) */}
+          <button 
+            onClick={() => window.dispatchEvent(new Event('toggleMobileEvents'))}
+            className={`bg-white rounded-full flex items-center justify-center text-gray-800 hover:bg-gray-50 pointer-events-auto transition-all duration-[700ms] ease-[cubic-bezier(0.34,1.3,0.64,1)] shrink-0 overflow-hidden origin-left ${
+              location.pathname === '/map' || location.pathname === '/' 
+                ? 'w-[60px] h-[60px] opacity-100 scale-100 shadow-[0_12px_40px_rgba(0,0,0,0.12)] border border-gray-100 rotate-0 translate-x-0' 
+                : 'w-0 h-[60px] opacity-0 scale-50 border-transparent shadow-none -rotate-90 -translate-x-4'
+            }`}
+          >
+            <div className="relative shrink-0 flex items-center justify-center w-[60px] h-[60px]">
+              <Bell size={26} />
+              <div id="global-bell-badge" className="hidden absolute top-3 right-3 w-3 h-3 bg-red-500 rounded-full border-2 border-white animate-pulse"></div>
+            </div>
+          </button>
         </div>
       </main>
     </div>

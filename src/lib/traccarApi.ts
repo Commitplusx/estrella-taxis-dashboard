@@ -171,6 +171,21 @@ export const api = {
   getDriverDevices: (driverId: number) =>
     request<TraccarDevice[]>(`/devices?driverId=${driverId}`),
 
+  linkDeviceToGeofence: (deviceId: number, geofenceId: number) =>
+    request<void>('/permissions', {
+      method: 'POST',
+      body: JSON.stringify({ deviceId, geofenceId }),
+    }),
+
+  unlinkDeviceFromGeofence: (deviceId: number, geofenceId: number) =>
+    request<void>('/permissions', {
+      method: 'DELETE',
+      body: JSON.stringify({ deviceId, geofenceId }),
+    }),
+
+  getGeofenceDevices: (geofenceId: number) =>
+    request<TraccarDevice[]>(`/devices?geofenceId=${geofenceId}`),
+
   // ── Grupos ────────────────────────────────────────
   // ?all=true: Traccar devuelve TODOS los grupos del sistema (solo funciona para admins,
   // para usuarios normales Traccar lo ignora y devuelve sus grupos asignados igualmente).
