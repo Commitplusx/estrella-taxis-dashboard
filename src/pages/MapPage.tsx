@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Layers, Crosshair, Filter, Zap, Power, Radio, ShieldAlert, Car, Bell, Battery, Activity, Route, Map as MapIcon, MapPin, X, Wifi, WifiOff, Play, Square, Terminal, CheckCircle2, Key, Plus, Minus, List, Ruler } from 'lucide-react';
+import { Layers, Crosshair, Filter, Zap, Power, Radio, ShieldAlert, Car, Bell, Battery, Activity, Route, Map as MapIcon, MapPin, X, Wifi, WifiOff, Play, Square, Terminal, CheckCircle2, Key, Plus, Minus, List, Ruler, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { loadGoogleMaps } from '../lib/mapsLoader';
 import { api, type TraccarDevice, type TraccarPosition } from '../lib/traccarApi';
@@ -27,33 +27,36 @@ function getStatusColor(device: TraccarDevice) {
   return '#f59e0b';
 }
 
-function formatRelativeTime(dateStr: string) {
+function formatRelativeTime(dateStr: string, nowMs: number = Date.now()) {
   const d = new Date(dateStr);
-  const now = new Date();
-  const diffMins = Math.round((now.getTime() - d.getTime()) / 60000);
+  const diffMs = nowMs - d.getTime();
+  const diffSecs = Math.max(0, Math.floor(diffMs / 1000));
+  const diffMins = Math.floor(diffSecs / 60);
 
-  if (diffMins < 1) return 'Hace unos segundos';
-  if (diffMins < 60) return `Hace ${diffMins} min`;
+  if (diffSecs < 10) return 'Hace un momento';
+  if (diffSecs < 60) return `Hace ${diffSecs} segs`;
   const diffHours = Math.floor(diffMins / 60);
-  if (diffHours < 24) return `Hace ${diffHours} h`;
+  if (diffHours < 24) return `Hace ${diffMins} min`;
   return `Hace ${Math.floor(diffHours / 24)} días`;
 }
 
-export function generateInfoWindowContent(device: TraccarDevice, pos: TraccarPosition, isReadonly: boolean = false, isFollowing: boolean = false, liveAddress: string = '') {
+export function generateInfoWindowContent(device: TraccarDevice, pos: TraccarPosition, isReadonly: boolean = false, isFollowing: boolean = false, liveAddress: string = '', nowMs: number = Date.now()) {
   const battery = pos.attributes?.batteryLevel;
   const ignition = pos.attributes?.ignition;
   const speed = knotsToKmh(pos.speed || 0);
+  const isMoving = Number(speed) > 2;
 
   let engineStatusHtml = '';
   if (ignition === true) {
     engineStatusHtml = `<div style="margin-top:8px; display:flex; align-items:center; justify-content:center; gap:6px; font-size:11px; color:#166534; background:#dcfce7; border:1px solid #bbf7d0; padding:6px; border-radius:8px; font-weight:700;"><span style="width:8px;height:8px;background:#22c55e;border-radius:50%;box-shadow:0 0 4px #22c55e"></span> MOTOR ENCENDIDO</div>`;
   } else if (ignition === false) {
     engineStatusHtml = `<div style="margin-top:8px; display:flex; align-items:center; justify-content:center; gap:6px; font-size:11px; color:#991b1b; background:#fee2e2; border:1px solid #fecaca; padding:6px; border-radius:8px; font-weight:700;"><span style="width:8px;height:8px;background:#ef4444;border-radius:50%;box-shadow:0 0 4px #ef4444"></span> MOTOR APAGADO</div>`;
-  } else if (Number(speed) > 2) {
+  } else if (isMoving) {
     engineStatusHtml = `<div style="margin-top:8px; display:flex; align-items:center; justify-content:center; gap:6px; font-size:11px; color:#166534; background:#dcfce7; border:1px solid #bbf7d0; padding:6px; border-radius:8px; font-weight:700;"><span style="width:8px;height:8px;background:#22c55e;border-radius:50%;box-shadow:0 0 4px #22c55e"></span> MOTOR EN MOVIMIENTO</div>`;
   }
 
   const finalAddress = liveAddress || (pos.address ? pos.address.split(',')[0] : '');
+  const timeText = formatRelativeTime(pos.serverTime, nowMs);
 
   return `
     <div style="font-family:Inter,sans-serif;min-width:220px;padding:4px">
@@ -75,11 +78,11 @@ export function generateInfoWindowContent(device: TraccarDevice, pos: TraccarPos
 
       ${engineStatusHtml}
 
-      ${finalAddress ? `<div style="margin-top:10px;font-size:11px;color:#64748b;line-height:1.4"><strong style="color:#475569">📍 Dirección:</strong><br/>${finalAddress}</div>` : ''}
+      ${finalAddress ? `<div style="margin-top:10px;font-size:11px;color:#64748b;line-height:1.4"><div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:2px;"><strong style="color:#475569">📍 Dirección:</strong> ${device.status === 'online' ? `<span style="display:flex;align-items:center;color:#059669;font-weight:700;font-size:9px;background:#ecfdf5;padding:2px 6px;border-radius:4px;border:1px solid #a7f3d0;">${isMoving ? '<svg class="animate-spin" style="width:10px;height:10px;margin-right:4px;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"></path></svg>' : '<span style="width:6px;height:6px;background:#10b981;border-radius:50%;margin-right:4px;"></span>'} EN VIVO</span>` : ''}</div>${finalAddress}</div>` : ''}
       
       <div style="margin-top:10px;padding-top:8px;border-top:1px solid #f1f5f9;font-size:10px;color:#94a3b8;display:flex;justify-content:space-between;">
         <span>Última señal:</span>
-        <strong style="color:#475569">${formatRelativeTime(pos.serverTime)}</strong>
+        <strong style="color:#475569">${timeText}</strong>
       </div>
       
       <div style="display:flex;gap:6px;margin-top:12px">
@@ -183,7 +186,7 @@ export default function MapPage() {
     }
 
     loadGoogleMaps().then(() => setMapsLoaded(true)).catch(console.error);
-    const interval = setInterval(() => setNowTick(Date.now()), 60000);
+    const interval = setInterval(() => setNowTick(Date.now()), 1000); // 1 segundo para mostrar contador en vivo
     return () => clearInterval(interval);
   }, []);
 
@@ -961,9 +964,17 @@ export default function MapPage() {
                 <div className="mt-2">
                   <div className="flex items-start justify-between pr-8 mb-3">
                     <div>
-                      <h3 className="text-xl font-bold text-slate-900 leading-tight">{currentSelectedDevice.name}</h3>
+                      <h3 className="text-xl font-bold text-slate-900 leading-tight flex items-center gap-2">
+                        {currentSelectedDevice.name}
+                        {currentSelectedDevice.status === 'online' && (
+                          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200">
+                            {isMoving ? <Loader2 size={12} className="animate-spin text-emerald-600" /> : <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>}
+                            EN VIVO
+                          </span>
+                        )}
+                      </h3>
                       <p className="text-xs font-medium text-slate-500 mt-1">
-                        Última señal: {formatRelativeTime(pos.serverTime)}
+                        Última señal: <strong className="text-slate-700">{formatRelativeTime(pos.serverTime, nowTick)}</strong>
                       </p>
                     </div>
                   </div>
