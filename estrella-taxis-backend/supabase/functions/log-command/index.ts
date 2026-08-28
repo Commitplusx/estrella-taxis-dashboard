@@ -1,7 +1,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 // Configuración YCloud
-const YCLOUD_API_KEY = Deno.env.get('YCLOUD_API_KEY') || '560d268d8ef5ed573fbe804bc684534f';
+const YCLOUD_API_KEY = Deno.env.get('YCLOUD_API_KEY') || '14fcecd949b8d1338c2fcfaa65245802';
 const YCLOUD_SENDER = Deno.env.get('YCLOUD_SENDER') || '+529631367971';
 const ADMIN_PHONE = '+529631539156';
 
