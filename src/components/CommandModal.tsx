@@ -37,6 +37,23 @@ export function CommandModal({ device, onClose }: { device: TraccarDevice; onClo
       }
       
       toast.success('Comando enviado con éxito');
+      
+      // Registrar log y alerta de WhatsApp en Supabase
+      try {
+        const userEmail = JSON.parse(localStorage.getItem('sb-knghdwpxheenkpuajkxl-auth-token') || '{}')?.user?.email || 'Admin';
+        await fetch('https://knghdwpxheenkpuajkxl.supabase.co/functions/v1/log-command', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            deviceName: device.name,
+            commandType: type,
+            userEmail: userEmail
+          })
+        });
+      } catch (logErr) {
+        console.error('Error enviando log:', logErr);
+      }
+
       onClose();
       
     } catch (e: any) {
