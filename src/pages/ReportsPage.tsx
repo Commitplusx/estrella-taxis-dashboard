@@ -38,8 +38,15 @@ interface RoutePosition {
   id: number; deviceId: number; latitude: number; longitude: number;
   speed: number; course: number; fixTime: string; attributes?: any;
 }
+interface AuditLog {
+  id: string;
+  created_at: string;
+  device_name: string;
+  command_type: string;
+  user_email: string;
+}
 
-type TabType = 'trips' | 'stops' | 'events' | 'summary' | 'route';
+type TabType = 'trips' | 'stops' | 'events' | 'summary' | 'route' | 'audit';
 
 // â”€â”€â”€ Date Presets â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function getPreset(preset: string): { from: string; to: string } {
@@ -427,6 +434,7 @@ export default function ReportsPage() {
   const [events, setEvents] = useState<ReportEvent[]>([]);
   const [summary, setSummary] = useState<Summary[]>([]);
   const [route, setRoute] = useState<RoutePosition[]>([]);
+  const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
 
   // Map for route tab
   const [mapsLoaded, setMapsLoaded] = useState(false);
@@ -575,6 +583,24 @@ export default function ReportsPage() {
           if (activeTab === 'route' && googleMapRef.current) drawRoute(data);
           successCount++;
         }
+      } else if (activeTab === 'audit') {
+        const toLocalIso = (localStr: string) => {
+          const [datePart, timePart] = localStr.split('T');
+          const [year, month, day] = datePart.split('-').map(Number);
+          const [hour, minute] = (timePart || '00:00').split(':').map(Number);
+          return new Date(year, month - 1, day, hour, minute, 0, 0).toISOString();
+        };
+        const { data, error } = await supabase
+          .from('command_logs')
+          .select('*')
+          .gte('created_at', toLocalIso(from))
+          .lte('created_at', toLocalIso(to))
+          .order('created_at', { ascending: false });
+        
+        if (!error && data) {
+          setAuditLogs(data);
+          successCount++;
+        }
       }
 
       if (successCount > 0) {
@@ -662,6 +688,7 @@ export default function ReportsPage() {
     { id: 'events' as TabType, label: 'Eventos', icon: <Zap size={15} /> },
     { id: 'summary' as TabType, label: 'Resumen', icon: <BarChart3 size={15} /> },
     { id: 'route' as TabType, label: 'Ruta en Mapa', icon: <MapIcon size={15} /> },
+    { id: 'audit' as TabType, label: 'Auditoría', icon: <Layers size={15} /> },
   ];
 
   return (
@@ -1035,6 +1062,7 @@ export default function ReportsPage() {
         )}
 
         {/* ────────────────────────────────────────────────────────── */}
+        {/* ────────────────────────────────────────────────────────── */}
         <div className={activeTab === 'route' ? 'flex flex-col animate-slide-up' : 'hidden'}>
           {route.length > 0 && (
             <div className="px-4 py-2 border-b border-gray-100 shrink-0 bg-gray-50/50">
@@ -1058,6 +1086,47 @@ export default function ReportsPage() {
             )}
           </div>
         </div>
+
+        {/* ────────────────────────────────────────────────────────── */}
+        {activeTab === 'audit' && (
+          <div key={`audit-${auditLogs.length}`} className="flex flex-col animate-slide-up">
+            {auditLogs.length > 0 && (
+              <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between shrink-0 bg-gray-50/50">
+                <span className="text-sm font-bold text-gray-700">{auditLogs.length} registro{auditLogs.length !== 1 ? 's' : ''} de auditoría</span>
+              </div>
+            )}
+            <div className="w-full">
+              {loading && <div className="flex items-center justify-center h-40 text-gray-400 text-sm"><RefreshCw size={20} className="animate-spin mr-2" />Cargando auditoría...</div>}
+              {!loading && auditLogs.length === 0 && <div className="flex flex-col items-center justify-center h-40 text-gray-400 gap-2"><Layers size={32} className="opacity-30" /><p className="text-sm">Selecciona un período y genera el reporte</p></div>}
+              {!loading && auditLogs.length > 0 && (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left">
+                    <thead className="bg-gray-50 border-b border-gray-100 sticky top-0">
+                      <tr>{['Usuario', 'Taxi', 'Comando', 'Fecha/Hora'].map(h => (
+                        <th key={h} className="px-4 py-3 text-xs font-bold text-gray-500 uppercase tracking-wider whitespace-nowrap">{h}</th>
+                      ))}</tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {auditLogs.map((log, i) => (
+                        <tr key={i} className="hover:bg-gray-50 transition">
+                          <td className="px-4 py-3 text-sm font-bold text-gray-900">{log.user_email}</td>
+                          <td className="px-4 py-3 text-sm font-semibold text-blue-600">{log.device_name}</td>
+                          <td className="px-4 py-3 text-sm">
+                            <span className={`px-2 py-1 rounded-md text-xs font-bold ${log.command_type === 'engineStop' ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-green-50 text-green-700 border border-green-200'}`}>
+                              {log.command_type === 'engineStop' ? '⛔ Apagar Motor' : '⚡ Reanudar Corriente'}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-xs text-gray-600 whitespace-nowrap">{fmtTime(log.created_at)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
       </div>
     </div>
   );
