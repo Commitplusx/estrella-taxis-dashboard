@@ -240,15 +240,15 @@ export default function Landing() {
         <div className={`md:hidden bg-white border-b border-stone-200 overflow-hidden transition-all duration-300 ease-in-out ${mobileMenuOpen ? 'max-h-[400px] opacity-100 py-4 px-6' : 'max-h-0 opacity-0 py-0 px-6'}`}>
           <div className="space-y-3">
             {[['#control', '¿Qué controlas?'], ['#how-it-works', 'Cómo se instala'], ['#pricing', 'Planes'], ['#faq', 'Preguntas']].map(([href, label]) => (
-              <a key={href} href={href} onClick={() => setMobileMenuOpen(false)} className="block py-2 font-bold text-slate-600 hover:text-slate-900 transition-all hover:translate-x-1 duration-200">{label}</a>
+              <a key={href} href={href} onClick={() => setMobileMenuOpen(false)} className="block py-2 font-bold text-zinc-600 hover:text-zinc-950 transition-all hover:translate-x-1 duration-200">{label}</a>
             ))}
-            <div className="border-t border-stone-100 pt-3 flex flex-col gap-2">
+            <div className="border-t border-zinc-100 pt-3 flex flex-col gap-2">
               {user ? (
-                <button onClick={() => { setMobileMenuOpen(false); navigate('/map'); }} className="w-full bg-slate-900 text-white py-3 rounded-xl font-bold">Mis taxis</button>
+                <button onClick={() => { setMobileMenuOpen(false); navigate('/map'); }} className="w-full bg-zinc-950 hover:bg-zinc-800 text-white py-3 rounded-xl font-bold">Mis taxis</button>
               ) : (
                 <>
-                  <button onClick={() => { setMobileMenuOpen(false); navigate('/login'); }} className="w-full border border-stone-200 text-slate-700 py-3 rounded-xl font-bold">Entrar</button>
-                  <button onClick={() => { setMobileMenuOpen(false); handleCta('Contratación Móvil'); }} className="w-full bg-amber-500 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2"><MessageCircle size={16} /> Quiero cotizar</button>
+                  <button onClick={() => { setMobileMenuOpen(false); navigate('/login'); }} className="w-full border border-zinc-200 hover:border-zinc-300 text-zinc-700 py-3 rounded-xl font-bold">Entrar</button>
+                  <button onClick={() => { setMobileMenuOpen(false); handleCta('Contratación Móvil'); }} className="w-full bg-yellow-400 hover:bg-yellow-500 text-zinc-950 py-3 rounded-xl font-bold flex items-center justify-center gap-2"><MessageCircle size={16} /> Quiero cotizar</button>
                 </>
               )}
             </div>
@@ -297,18 +297,18 @@ export default function Landing() {
                 </button>
               </div>
 
-              <div className="grid grid-cols-3 gap-3 pt-4 max-w-[400px] mx-auto lg:mx-0 border-t border-zinc-100">
+              <div className="flex items-center justify-between sm:grid sm:grid-cols-3 gap-2 sm:gap-3 pt-4 sm:pt-5 max-w-[400px] mx-auto lg:mx-0 border-t border-zinc-100">
                 <div className="text-center lg:text-left">
-                  <h3 className="text-xl lg:text-2xl font-extrabold text-zinc-900">24/7</h3>
-                  <p className="text-zinc-400 text-[9px] sm:text-[10px] font-bold uppercase tracking-wider mt-0.5">Siempre activo</p>
+                  <h3 className="text-lg sm:text-xl lg:text-2xl font-extrabold text-zinc-900">24/7</h3>
+                  <p className="text-zinc-400 text-[8px] sm:text-[10px] font-bold uppercase tracking-wider mt-0.5">Siempre activo</p>
                 </div>
                 <div className="text-center lg:text-left">
-                  <h3 className="text-xl lg:text-2xl font-extrabold text-zinc-900">45 min</h3>
-                  <p className="text-zinc-400 text-[9px] sm:text-[10px] font-bold uppercase tracking-wider mt-0.5">Por vehículo</p>
+                  <h3 className="text-lg sm:text-xl lg:text-2xl font-extrabold text-zinc-900">45 min</h3>
+                  <p className="text-zinc-400 text-[8px] sm:text-[10px] font-bold uppercase tracking-wider mt-0.5">Por vehículo</p>
                 </div>
                 <div className="text-center lg:text-left">
-                  <h3 className="text-xl lg:text-2xl font-extrabold text-zinc-900">Oculto</h3>
-                  <p className="text-zinc-400 text-[9px] sm:text-[10px] font-bold uppercase tracking-wider mt-0.5">100% discreto</p>
+                  <h3 className="text-lg sm:text-xl lg:text-2xl font-extrabold text-zinc-900">Oculto</h3>
+                  <p className="text-zinc-400 text-[8px] sm:text-[10px] font-bold uppercase tracking-wider mt-0.5">100% discreto</p>
                 </div>
               </div>
             </ScrollReveal>
@@ -346,46 +346,35 @@ export default function Landing() {
           </div>
         </ScrollReveal>
 
-        <div className="grid md:grid-cols-2 gap-6">
-          <ScrollReveal animation="slide-in-left">
-            <div className="bg-red-50 border border-red-100 rounded-3xl p-6 sm:p-8 space-y-4">
-              <div className="flex items-center gap-2 mb-2">
-                <span className="px-3 py-1 bg-red-100 text-red-600 text-xs font-black rounded-full uppercase tracking-wider">Antes</span>
-              </div>
-              {[
-                'Llamas al chofer y no contesta',
-                'Dice que no hubo trabajo pero el carro anduvo',
-                'No sabes si salió a carretera',
-                'Si roban el taxi, no puedes rastrearlo',
-                'Confías en la palabra del chofer',
-              ].map((item, i) => (
-                <div key={i} className="flex items-start gap-3">
-                  <span className="w-5 h-5 rounded-full bg-red-100 text-red-500 flex items-center justify-center flex-shrink-0 mt-0.5 text-xs font-bold">✕</span>
-                  <p className="text-sm text-red-800 font-medium">{item}</p>
+        <div className="flex flex-col gap-4 max-w-4xl mx-auto">
+          {[
+            { antes: 'Llamas al chofer y no contesta', ahora: 'Ves la ubicación exacta en tiempo real' },
+            { antes: 'Dice que no hubo trabajo pero el carro anduvo', ahora: 'El historial de rutas no miente' },
+            { antes: 'No sabes si salió a carretera', ahora: 'Alerta automática si sale de la ciudad' },
+            { antes: 'Si roban el taxi, no puedes rastrearlo', ahora: 'Le cortas la corriente desde el celular' },
+            { antes: 'Confías en la palabra del chofer', ahora: 'Los datos del GPS son tu respaldo' },
+          ].map((item, i) => (
+            <ScrollReveal key={i} animation="slide-up" delay={i * 100}>
+              <div className="flex flex-col sm:flex-row rounded-3xl overflow-hidden border border-zinc-100 shadow-sm bg-white">
+                {/* Antes */}
+                <div className="flex-1 bg-red-50/50 p-5 sm:p-6 flex items-start gap-3 border-b sm:border-b-0 sm:border-r border-zinc-100">
+                  <span className="w-5 h-5 rounded-full bg-red-100 text-red-500 flex items-center justify-center flex-shrink-0 text-xs font-bold mt-0.5">✕</span>
+                  <div>
+                    <span className="block text-[10px] font-black text-red-400 uppercase tracking-widest mb-1">Antes</span>
+                    <p className="text-sm text-red-900 font-medium leading-snug">{item.antes}</p>
+                  </div>
                 </div>
-              ))}
-            </div>
-          </ScrollReveal>
-
-          <ScrollReveal animation="slide-in-right" delay={100}>
-            <div className="bg-emerald-50 border border-emerald-100 rounded-3xl p-6 sm:p-8 space-y-4">
-              <div className="flex items-center gap-2 mb-2">
-                <span className="px-3 py-1 bg-emerald-100 text-emerald-700 text-xs font-black rounded-full uppercase tracking-wider">Ahora</span>
-              </div>
-              {[
-                'Ves la ubicación exacta en tiempo real',
-                'El historial de rutas no miente',
-                'Alerta automática si sale de la ciudad',
-                'Le cortas la corriente desde el celular',
-                'Los datos del GPS son tu respaldo',
-              ].map((item, i) => (
-                <div key={i} className="flex items-start gap-3">
-                  <span className="w-5 h-5 rounded-full bg-emerald-200 text-emerald-700 flex items-center justify-center flex-shrink-0 mt-0.5 text-xs font-bold">✓</span>
-                  <p className="text-sm text-emerald-900 font-medium">{item}</p>
+                {/* Ahora */}
+                <div className="flex-1 bg-emerald-50/50 p-5 sm:p-6 flex items-start gap-3">
+                  <span className="w-5 h-5 rounded-full bg-emerald-200 text-emerald-700 flex items-center justify-center flex-shrink-0 text-xs font-bold mt-0.5">✓</span>
+                  <div>
+                    <span className="block text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-1">Ahora</span>
+                    <p className="text-sm text-emerald-950 font-medium leading-snug">{item.ahora}</p>
+                  </div>
                 </div>
-              ))}
-            </div>
-          </ScrollReveal>
+              </div>
+            </ScrollReveal>
+          ))}
         </div>
       </section>
 
@@ -466,14 +455,19 @@ export default function Landing() {
               </div>
             </ScrollReveal>
 
-            <div className="grid md:grid-cols-3 gap-8 items-start">
+            <div className="grid md:grid-cols-3 gap-6 md:gap-8 items-start">
               {paquetes.map((p, i) => (
                 <ScrollReveal key={p.id} animation="slide-up" delay={i * 100} className="h-full">
-                  <div className="bg-white rounded-[2rem] border-2 border-zinc-100 hover:border-zinc-300 transition-all p-8 shadow-sm flex flex-col h-full relative group">
+                  <div className="bg-white rounded-[2rem] border-2 border-zinc-100 hover:border-zinc-300 transition-all p-6 sm:p-8 shadow-sm flex flex-col h-full relative group">
                     {/* Decoración superior */}
                     <div className="absolute top-0 inset-x-0 h-1 bg-zinc-100 group-hover:bg-yellow-400 transition-colors rounded-t-[2rem]" />
 
-                    <h3 className="text-lg font-black text-zinc-950">{p.nombre}</h3>
+                    <h3 className="text-lg font-black text-zinc-950 flex justify-between items-center">
+                      {p.nombre}
+                      {p.mesGratis && (
+                        <span className="text-[10px] bg-green-100 text-green-700 px-2 py-1 rounded-full uppercase tracking-wider font-bold">1er mes gratis</span>
+                      )}
+                    </h3>
                     <div className="mt-4 mb-6 flex items-baseline gap-2">
                       <span className="text-4xl font-black text-zinc-950">${p.precio_mensual}</span>
                       <span className="text-zinc-500 text-sm font-bold uppercase tracking-wide">/ mes</span>
@@ -508,6 +502,23 @@ export default function Landing() {
                 </ScrollReveal>
               ))}
             </div>
+
+            <ScrollReveal animation="fade-in" delay={300}>
+              <div className="mt-10 text-center">
+                <div className="inline-flex items-start gap-3 bg-zinc-50 border border-zinc-200 text-zinc-600 px-6 py-4 rounded-2xl text-sm font-medium shadow-sm max-w-2xl text-left sm:text-center sm:items-center">
+                  <div className="bg-yellow-100 text-yellow-600 p-1.5 rounded-full flex-shrink-0 mt-1 sm:mt-0">
+                    <AlertTriangle size={18} strokeWidth={2.5} />
+                  </div>
+                  <p className="leading-relaxed">
+                    <strong>Instalación y Equipo GPS:</strong> Pago único de <strong>$2,000 MXN</strong> (opción a pagarlo a <strong>4 meses</strong>). Incluye el equipo GPS. 
+                    <br className="hidden sm:block" />
+                    <span className="text-zinc-500 text-xs mt-1 block">
+                      <strong>Nota:</strong> Solo el plan Básico incluye la primera mensualidad de regalo. <strong>Sin plazos forzosos, puedes cancelar el servicio cuando lo desees.</strong>
+                    </span>
+                  </p>
+                </div>
+              </div>
+            </ScrollReveal>
           </div>
         </section>
       )}
