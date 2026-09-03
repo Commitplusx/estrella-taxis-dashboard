@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { supabase } from '../lib/supabase';
 import {
   Shield,
   Clock,
@@ -73,11 +74,24 @@ export default function Landing() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [activeFaq, setActiveFaq] = useState<number | null>(null);
   const [isScrolled, setIsScrolled] = useState(false);
+  const [paquetes, setPaquetes] = useState<any[]>([]);
 
   useEffect(() => {
     const handleScroll = () => setIsScrolled(window.scrollY > 20);
-    window.addEventListener('scroll', handleScroll);
+    window.addEventListener('scroll', handleScroll, { passive: true });
     return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  useEffect(() => {
+    const fetchPaquetes = async () => {
+      const { data } = await supabase
+        .from('paquetes')
+        .select('*')
+        .eq('activo', true)
+        .order('precio_mensual', { ascending: true });
+      if (data) setPaquetes(data);
+    };
+    fetchPaquetes();
   }, []);
 
   // Live mockup animation
@@ -91,7 +105,7 @@ export default function Landing() {
   const [speed, setSpeed] = useState(42);
   const [seconds, setSeconds] = useState(3);
   const [locFade, setLocFade] = useState(true);
-  
+
   // Interactive mockup state
   const [isEngineCut, setIsEngineCut] = useState(false);
   const [toastMsg, setToastMsg] = useState('');
@@ -188,7 +202,7 @@ export default function Landing() {
               {[
                 { href: '#control', label: '¿Qué controlas?' },
                 { href: '#how-it-works', label: 'Cómo se instala' },
-                { href: '#testimonios', label: 'Clientes' },
+                { href: '#pricing', label: 'Planes' },
                 { href: '#faq', label: 'Preguntas' },
               ].map(item => (
                 <a key={item.href} href={item.href} className="relative group hover:text-zinc-900 transition-colors duration-300 py-1">
@@ -225,7 +239,7 @@ export default function Landing() {
 
         <div className={`md:hidden bg-white border-b border-stone-200 overflow-hidden transition-all duration-300 ease-in-out ${mobileMenuOpen ? 'max-h-[400px] opacity-100 py-4 px-6' : 'max-h-0 opacity-0 py-0 px-6'}`}>
           <div className="space-y-3">
-            {[['#control', '¿Qué controlas?'], ['#how-it-works', 'Cómo se instala'], ['#testimonios', 'Clientes'], ['#faq', 'Preguntas']].map(([href, label]) => (
+            {[['#control', '¿Qué controlas?'], ['#how-it-works', 'Cómo se instala'], ['#pricing', 'Planes'], ['#faq', 'Preguntas']].map(([href, label]) => (
               <a key={href} href={href} onClick={() => setMobileMenuOpen(false)} className="block py-2 font-bold text-slate-600 hover:text-slate-900 transition-all hover:translate-x-1 duration-200">{label}</a>
             ))}
             <div className="border-t border-stone-100 pt-3 flex flex-col gap-2">
@@ -244,14 +258,12 @@ export default function Landing() {
 
       {/* ─── HERO ─── */}
       <section className="relative bg-white pt-2 pb-8 sm:pt-4 sm:pb-12 lg:pt-6 lg:pb-12 overflow-hidden border-b border-zinc-100">
-        
-        {/* Subtle dot pattern instead of glowing orbs */}
+
         <div className="absolute inset-0 opacity-[0.03] pointer-events-none" style={{ backgroundImage: 'radial-gradient(#000 1px, transparent 1px)', backgroundSize: '24px 24px' }} />
 
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
           <div className="grid lg:grid-cols-2 xl:grid-cols-12 gap-8 lg:gap-10 xl:gap-12 items-center">
 
-            {/* Text */}
             <ScrollReveal animation="slide-up" className="xl:col-span-7 space-y-4 sm:space-y-5 text-center lg:text-left">
               <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-zinc-100 text-zinc-900 border border-zinc-200 text-[11px] font-bold uppercase tracking-wider">
                 <span className="w-1.5 h-1.5 rounded-full bg-yellow-400 flex-shrink-0" />
@@ -262,7 +274,7 @@ export default function Landing() {
                 Tus taxis, siempre en{' '}
                 <span className="relative inline-block mt-1 sm:mt-0">
                   la palma de tu mano.
-                  <svg className="absolute w-full h-2.5 -bottom-1 left-0 text-yellow-400 -z-10" viewBox="0 0 100 10" preserveAspectRatio="none"><path d="M0 5 Q 50 10 100 5" stroke="currentColor" strokeWidth="8" fill="transparent"/></svg>
+                  <svg className="absolute w-full h-2.5 -bottom-1 left-0 text-yellow-400 -z-10" viewBox="0 0 100 10" preserveAspectRatio="none"><path d="M0 5 Q 50 10 100 5" stroke="currentColor" strokeWidth="8" fill="transparent" /></svg>
                 </span>
               </h1>
 
@@ -335,7 +347,6 @@ export default function Landing() {
         </ScrollReveal>
 
         <div className="grid md:grid-cols-2 gap-6">
-          {/* Antes */}
           <ScrollReveal animation="slide-in-left">
             <div className="bg-red-50 border border-red-100 rounded-3xl p-6 sm:p-8 space-y-4">
               <div className="flex items-center gap-2 mb-2">
@@ -356,7 +367,6 @@ export default function Landing() {
             </div>
           </ScrollReveal>
 
-          {/* Ahora */}
           <ScrollReveal animation="slide-in-right" delay={100}>
             <div className="bg-emerald-50 border border-emerald-100 rounded-3xl p-6 sm:p-8 space-y-4">
               <div className="flex items-center gap-2 mb-2">
@@ -414,9 +424,8 @@ export default function Landing() {
 
       {/* ─── CÓMO FUNCIONA ─── */}
       <section id="how-it-works" className="bg-zinc-950 text-white py-20 sm:py-28 relative overflow-hidden scroll-mt-20 sm:scroll-mt-24">
-        {/* Abstract subtle grid lines */}
         <div className="absolute inset-0 opacity-10 pointer-events-none" style={{ backgroundImage: 'linear-gradient(#fff 1px, transparent 1px), linear-gradient(90deg, #fff 1px, transparent 1px)', backgroundSize: '40px 40px' }} />
-        
+
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
           <ScrollReveal animation="fade-in">
             <div className="text-center max-w-3xl mx-auto mb-16">
@@ -445,6 +454,64 @@ export default function Landing() {
         </div>
       </section>
 
+      {/* ─── PRECIOS / PAQUETES ─── */}
+      {paquetes.length > 0 && (
+        <section id="pricing" className="bg-white py-20 sm:py-28 relative overflow-hidden border-b border-zinc-100 scroll-mt-20">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
+            <ScrollReveal animation="fade-in">
+              <div className="text-center max-w-3xl mx-auto mb-16">
+                <p className="text-xs font-extrabold text-yellow-400 uppercase tracking-widest">Precios Claros</p>
+                <h2 className="text-2xl sm:text-4xl font-black text-zinc-950 mt-3">Planes hechos a tu medida</h2>
+                <p className="text-zinc-500 text-sm sm:text-base mt-4 max-w-xl mx-auto font-medium">Elige el paquete que mejor se adapte al tamaño de tu flota y el nivel de control que buscas. Sin letras chiquitas.</p>
+              </div>
+            </ScrollReveal>
+
+            <div className="grid md:grid-cols-3 gap-8 items-start">
+              {paquetes.map((p, i) => (
+                <ScrollReveal key={p.id} animation="slide-up" delay={i * 100} className="h-full">
+                  <div className="bg-white rounded-[2rem] border-2 border-zinc-100 hover:border-zinc-300 transition-all p-8 shadow-sm flex flex-col h-full relative group">
+                    {/* Decoración superior */}
+                    <div className="absolute top-0 inset-x-0 h-1 bg-zinc-100 group-hover:bg-yellow-400 transition-colors rounded-t-[2rem]" />
+
+                    <h3 className="text-lg font-black text-zinc-950">{p.nombre}</h3>
+                    <div className="mt-4 mb-6 flex items-baseline gap-2">
+                      <span className="text-4xl font-black text-zinc-950">${p.precio_mensual}</span>
+                      <span className="text-zinc-500 text-sm font-bold uppercase tracking-wide">/ mes</span>
+                    </div>
+
+                    <div className="flex-1 space-y-4 mb-8">
+                      {p.features?.map((f: any) => (
+                        <div key={f.id} className="flex items-start gap-3">
+                          {f.incluido ? (
+                            <div className="mt-0.5 p-1 bg-zinc-950 text-yellow-400 rounded-full flex-shrink-0">
+                              <Check size={12} strokeWidth={3} />
+                            </div>
+                          ) : (
+                            <div className="mt-0.5 p-1 bg-zinc-100 text-zinc-400 rounded-full flex-shrink-0">
+                              <X size={12} strokeWidth={3} />
+                            </div>
+                          )}
+                          <span className={`text-sm font-medium leading-tight ${f.incluido ? 'text-zinc-700' : 'text-zinc-400 line-through'}`}>
+                            {f.label}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+
+                    <button
+                      onClick={() => handleCta(`Contratar ${p.nombre}`)}
+                      className="w-full bg-zinc-100 hover:bg-zinc-950 hover:text-white text-zinc-950 border border-zinc-200 hover:border-zinc-950 py-3.5 rounded-xl font-bold transition-all"
+                    >
+                      Elegir este plan
+                    </button>
+                  </div>
+                </ScrollReveal>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
+
       {/* ─── TESTIMONIALES ─── */}
       <section id="testimonios" className="py-20 sm:py-28 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 scroll-mt-20 sm:scroll-mt-24">
         <ScrollReveal animation="fade-in">
@@ -463,7 +530,7 @@ export default function Landing() {
               <div className="bg-white rounded-3xl border border-stone-100 shadow-sm hover:shadow-xl hover:shadow-stone-200/50 hover:-translate-y-1 transition-all p-6 sm:p-7 h-full flex flex-col">
                 {/* Stars */}
                 <div className="flex gap-1 mb-4">
-                  {[1,2,3,4,5].map(s => <Star key={s} size={14} className="text-amber-400" fill="currentColor" />)}
+                  {[1, 2, 3, 4, 5].map(s => <Star key={s} size={14} className="text-amber-400" fill="currentColor" />)}
                 </div>
                 {/* Quote */}
                 <p className="text-slate-700 text-sm leading-relaxed font-medium flex-1 mb-6">
