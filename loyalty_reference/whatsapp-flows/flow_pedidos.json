@@ -1,0 +1,286 @@
+{
+  "version": "8.0",
+  "data_api_version": "3.0",
+  "routing_model": {
+    "BIENVENIDA":          ["ELIGE_RESTAURANTE"],
+    "ELIGE_RESTAURANTE":   ["ELIGE_PLATILLOS"],
+    "ELIGE_PLATILLOS":     ["TU_CARRITO"],
+    "TU_CARRITO":          []
+  },
+  "screens": [
+
+    {
+      "id": "BIENVENIDA",
+      "title": "🌟 Estrella Eats",
+      "terminal": false,
+      "data": {},
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "TextHeading",
+            "text": "🌟 Bienvenido a Estrella Eats"
+          },
+          {
+            "type": "TextSubheading",
+            "text": "La mejor selección gastronómica de la ciudad, directo a tu puerta. 🛵"
+          },
+          {
+            "type": "TextBody",
+            "text": "Apoyamos el comercio local con entregas rápidas y seguras. Disfruta de tus platillos favoritos sin salir de casa.\n\n✔️ Pago contra entrega (Efectivo o Transferencia)\n✔️ Costo de envío calculado exactamente para tu zona."
+          },
+          {
+            "type": "TextCaption",
+            "text": "⏱️ Tiempo estimado: 30-45 minutos"
+          },
+          {
+            "type": "Footer",
+            "label": "Ver restaurantes 🍔",
+            "on-click-action": {
+              "name": "data_exchange",
+              "payload": {
+                "accion": "FETCH_RESTAURANTES"
+              }
+            }
+          }
+        ]
+      }
+    },
+
+    {
+      "id": "ELIGE_RESTAURANTE",
+      "title": "Nuestros Aliados",
+      "terminal": false,
+      "data": {
+        "restaurantes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id":          { "type": "string" },
+              "title":       { "type": "string" },
+              "description": { "type": "string" },
+              "metadata":    { "type": "string" }
+            }
+          },
+          "__example__": []
+        }
+      },
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "TextHeading",
+            "text": "¿Qué se te antoja hoy? 🤤"
+          },
+          {
+            "type": "TextBody",
+            "text": "Elige tu restaurante favorito para explorar su menú completo."
+          },
+          {
+            "type": "RadioButtonsGroup",
+            "name": "restaurante_id",
+            "label": "Restaurantes Disponibles:",
+            "required": true,
+            "data-source": "${data.restaurantes}"
+          },
+          {
+            "type": "Footer",
+            "label": "Ver Menú Completo 📖",
+            "on-click-action": {
+              "name": "data_exchange",
+              "payload": {
+                "accion": "FETCH_MENU",
+                "restaurante_id": "${form.restaurante_id}"
+              }
+            }
+          }
+        ]
+      }
+    },
+
+    {
+      "id": "ELIGE_PLATILLOS",
+      "title": "Arma tu Pedido",
+      "terminal": false,
+      "data": {
+        "restaurante_id":     { "type": "string", "__example__": "rest_1" },
+        "restaurante_nombre": { "type": "string", "__example__": "La Hamburguesería" },
+        "platos_fuertes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id":          { "type": "string" },
+              "title":       { "type": "string" },
+              "description": { "type": "string" },
+              "metadata":    { "type": "string" }
+            }
+          },
+          "__example__": []
+        },
+        "entradas_y_extras": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id":          { "type": "string" },
+              "title":       { "type": "string" },
+              "description": { "type": "string" },
+              "metadata":    { "type": "string" }
+            }
+          },
+          "__example__": []
+        },
+        "bebidas": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id":          { "type": "string" },
+              "title":       { "type": "string" },
+              "description": { "type": "string" },
+              "metadata":    { "type": "string" }
+            }
+          },
+          "__example__": []
+        }
+      },
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "TextHeading",
+            "text": "Arma tu Pedido 🍽️"
+          },
+          {
+            "type": "TextBody",
+            "text": "Selecciona los platillos que desees. Puedes elegir múltiples opciones de cada categoría."
+          },
+          {
+            "type": "TextSubheading",
+            "text": "🔥 Platos Fuertes"
+          },
+          {
+            "type": "CheckboxGroup",
+            "name": "items_fuertes",
+            "label": "Principales:",
+            "required": false,
+            "data-source": "${data.platos_fuertes}"
+          },
+          {
+            "type": "TextSubheading",
+            "text": "🍟 Entradas y Extras"
+          },
+          {
+            "type": "CheckboxGroup",
+            "name": "items_extras",
+            "label": "Para acompañar:",
+            "required": false,
+            "data-source": "${data.entradas_y_extras}"
+          },
+          {
+            "type": "TextSubheading",
+            "text": "🥤 Bebidas"
+          },
+          {
+            "type": "CheckboxGroup",
+            "name": "items_bebidas",
+            "label": "Refrescantes:",
+            "required": false,
+            "data-source": "${data.bebidas}"
+          },
+          {
+            "type": "TextInput",
+            "name": "notas_cocina",
+            "label": "Instrucciones Especiales (Opcional)",
+            "input-type": "text"
+          },
+          {
+            "type": "TextCaption",
+            "text": "Ej: 'Sin cebolla', 'Término medio', 'Refresco de dieta'"
+          },
+          {
+            "type": "Footer",
+            "label": "Confirmar y ver Total 🛒",
+            "on-click-action": {
+              "name": "data_exchange",
+              "payload": {
+                "accion": "FETCH_CARRITO",
+                "restaurante_id": "${data.restaurante_id}",
+                "restaurante_nombre": "${data.restaurante_nombre}",
+                "items_fuertes": "${form.items_fuertes}",
+                "items_extras": "${form.items_extras}",
+                "items_bebidas": "${form.items_bebidas}",
+                "notas_cocina": "${form.notas_cocina}"
+              }
+            }
+          }
+        ]
+      }
+    },
+
+    {
+      "id": "TU_CARRITO",
+      "title": "🛒 Resumen de tu Orden",
+      "terminal": true,
+      "data": {
+        "restaurante_id":      { "type": "string", "__example__": "rest_1" },
+        "restaurante_nombre":  { "type": "string", "__example__": "La Hamburguesería" },
+        "resumen_texto":  { "type": "string", "__example__": "Resumen del pedido" },
+        "total_carrito":  { "type": "number", "__example__": 0 },
+        "notas_cocina":   { "type": "string", "__example__": "" }
+      },
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "TextHeading",
+            "text": "Revisa tu orden cuidadosamente 👀"
+          },
+          {
+            "type": "TextBody",
+            "text": "${data.resumen_texto}"
+          },
+          {
+            "type": "TextCaption",
+            "text": "⚠️ El costo final de envío se calculará en el siguiente paso cuando nos compartas tu ubicación GPS."
+          },
+          {
+            "type": "TextSubheading",
+            "text": "¿Tienes un cupón? 🎁"
+          },
+          {
+            "type": "TextInput",
+            "name": "cupon_codigo",
+            "label": "Código de descuento (Opcional)",
+            "input-type": "text"
+          },
+          {
+            "type": "OptIn",
+            "name": "acepta_pedido",
+            "label": "Sí, mi pedido está correcto y quiero confirmar ✅",
+            "required": true
+          },
+          {
+            "type": "Footer",
+            "label": "Continuar al Pago →",
+            "on-click-action": {
+              "name": "complete",
+              "payload": {
+                "accion": "NUEVO_PEDIDO_FLOW",
+                "restaurante_id": "${data.restaurante_id}",
+                "restaurante_nombre": "${data.restaurante_nombre}",
+                "resumen_pedido": "${data.resumen_texto}",
+                "subtotal": "${data.total_carrito}",
+                "notas": "${data.notas_cocina}",
+                "cupon_codigo": "${form.cupon_codigo}"
+              }
+            }
+          }
+        ]
+      }
+    }
+
+  ]
+}

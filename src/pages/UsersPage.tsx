@@ -1,8 +1,101 @@
 import React, { useEffect, useState } from 'react';
 import { api, type TraccarUser, type TraccarDevice } from '../lib/traccarApi';
 import { supabase } from '../lib/supabase';
-import { Users, Plus, Trash2, Link, X, Check, Shield, ChevronRight, ChevronDown, Eye, EyeOff, Layers, Search, Filter, Camera } from 'lucide-react';
+import { Users, Plus, Trash2, Link, X, Check, Shield, ChevronRight, ChevronDown, Eye, EyeOff, Layers, Search, Filter, Camera, Bot, Building2 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { useAuth } from '../context/AuthContext';
+
+// ─── Tipos Supabase ────────────────────────────────────────────────────────────
+interface Empresa {
+  id: string;
+  nombre_empresa: string;
+  nombre_bot: string;
+  tipo_negocio: string;
+}
+
+interface Perfil {
+  traccar_user_id: number;
+  empresa_id: string | null;
+  rol: string;
+  empresa?: Empresa;
+}
+
+// ─── Modal: Vincular Empresa ───────────────────────────────────────────────────
+function VincularEmpresaModal({ user, perfil, onClose, onSaved }: { user: TraccarUser; perfil: Perfil | null; onClose: () => void; onSaved: (p: Perfil) => void }) {
+  const [empresas, setEmpresas] = useState<Empresa[]>([]);
+  const [selectedEmpresaId, setSelectedEmpresaId] = useState<string>(perfil?.empresa_id || '');
+  const [rol, setRol] = useState<string>(perfil?.rol || 'admin_empresa');
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    supabase.from('empresas').select('id, nombre_empresa, nombre_bot, tipo_negocio').eq('activo', true).then(({ data }) => {
+      setEmpresas(data || []);
+    });
+  }, []);
+
+  const handleSave = async () => {
+    setSaving(true);
+    const payload = { traccar_user_id: user.id, empresa_id: selectedEmpresaId || null, rol };
+    const { data, error } = await supabase
+      .from('perfiles')
+      .upsert(payload, { onConflict: 'traccar_user_id' })
+      .select('*, empresa:empresas(id, nombre_empresa, nombre_bot, tipo_negocio)')
+      .maybeSingle();
+    setSaving(false);
+    if (error) { toast.error('Error al guardar perfil.'); return; }
+    toast.success('Perfil vinculado ✅');
+    onSaved(data as Perfil);
+    onClose();
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+          <div>
+            <h2 className="text-base font-bold text-gray-900">Vincular Empresa</h2>
+            <p className="text-xs text-gray-400 mt-0.5">{user.name} — {user.email}</p>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X size={18} /></button>
+        </div>
+        <div className="p-6 space-y-4">
+          <div>
+            <label className="text-xs font-semibold text-gray-500 mb-1.5 block">Empresa (Tenant)</label>
+            <select value={selectedEmpresaId} onChange={e => setSelectedEmpresaId(e.target.value)}
+              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300">
+              <option value="">Sin empresa asignada</option>
+              {empresas.map(e => (
+                <option key={e.id} value={e.id}>{e.nombre_empresa} — Bot: {e.nombre_bot}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="text-xs font-semibold text-gray-500 mb-1.5 block">Rol en el Sistema</label>
+            <select value={rol} onChange={e => setRol(e.target.value)}
+              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300">
+              <option value="superadmin">Superadmin (Acceso total — tú)</option>
+              <option value="admin_empresa">Admin Empresa (Ve solo su empresa)</option>
+              <option value="operador">Operador (Solo despacho)</option>
+            </select>
+          </div>
+          {selectedEmpresaId && (
+            <div className="bg-indigo-50 rounded-xl px-4 py-3 text-xs text-indigo-700 font-medium flex items-center gap-2">
+              <Bot size={12} />
+              Este usuario verá solo los datos de {empresas.find(e => e.id === selectedEmpresaId)?.nombre_empresa}.
+            </div>
+          )}
+        </div>
+        <div className="px-6 pb-6 flex gap-3">
+          <button onClick={onClose} className="flex-1 border border-gray-200 text-gray-600 py-2.5 rounded-xl text-sm font-semibold hover:bg-gray-50 transition">Cancelar</button>
+          <button onClick={handleSave} disabled={saving} className="flex-1 bg-indigo-600 text-white py-2.5 rounded-xl text-sm font-semibold hover:bg-indigo-700 transition disabled:opacity-50">
+            {saving ? 'Guardando...' : 'Guardar Vínculo'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // ─── Modal: Crear Usuario ──────────────────────────────────────────────────────
 function CreateUserModal({ onClose, onCreated }: { onClose: () => void; onCreated: (u: TraccarUser) => void }) {
@@ -282,12 +375,15 @@ function AssignDevicesModal({ user, onClose }: { user: TraccarUser; onClose: () 
 
 // ─── Página principal de Usuarios ─────────────────────────────────────────────
 export default function UsersPage() {
+  const { userRole, empresaId } = useAuth();
   const [users, setUsers] = useState<TraccarUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
   const [assigningUser, setAssigningUser] = useState<TraccarUser | null>(null);
   const [expandedUser, setExpandedUser] = useState<number | null>(null);
   const [deviceCounts, setDeviceCounts] = useState<Record<number, number>>({});
+  const [perfiles, setPerfiles] = useState<Record<number, Perfil>>({});
+  const [vinculandoUser, setVinculandoUser] = useState<TraccarUser | null>(null);
 
   // Filtros
   const [searchQuery, setSearchQuery] = useState('');
@@ -301,6 +397,18 @@ export default function UsersPage() {
     api.getUsers()
       .then(setUsers)
       .finally(() => setLoading(false));
+
+    // Cargar perfiles desde Supabase para mostrar las empresas vinculadas
+    supabase
+      .from('perfiles')
+      .select('*, empresa:empresas(id, nombre_empresa, nombre_bot, tipo_negocio)')
+      .then(({ data }) => {
+        if (data) {
+          const map: Record<number, Perfil> = {};
+          (data as Perfil[]).forEach(p => { map[p.traccar_user_id] = p; });
+          setPerfiles(map);
+        }
+      });
   }, []);
 
   const loadDeviceCount = async (userId: number) => {
@@ -310,6 +418,11 @@ export default function UsersPage() {
   };
 
   const filteredUsers = users.filter(u => {
+    // 1. RBAC: Si es admin_empresa, solo puede ver usuarios de su empresa
+    if (userRole === 'admin_empresa') {
+      if (perfiles[u.id]?.empresa_id !== empresaId) return false;
+    }
+
     const q = searchQuery.toLowerCase();
     const matchesSearch = u.name?.toLowerCase().includes(q) || (u.email || '').toLowerCase().includes(q);
     const matchesRole = roleFilter === 'all' || (roleFilter === 'admin' && u.administrator) || (roleFilter === 'user' && !u.administrator);
@@ -373,12 +486,14 @@ export default function UsersPage() {
           <h1 className="text-2xl font-bold text-gray-900">Usuarios</h1>
           <p className="text-sm text-gray-500 mt-0.5">{users.length} usuario{users.length !== 1 ? 's' : ''} registrado{users.length !== 1 ? 's' : ''}</p>
         </div>
-        <button
-          onClick={() => setShowCreate(true)}
-          className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-semibold transition shadow-sm self-start sm:self-auto"
-        >
-          <Plus size={16} /> Nuevo Usuario
-        </button>
+        {userRole === 'superadmin' && (
+          <button
+            onClick={() => setShowCreate(true)}
+            className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-semibold transition shadow-sm self-start sm:self-auto"
+          >
+            <Plus size={16} /> Nuevo Usuario
+          </button>
+        )}
       </div>
 
       {/* Métricas Top (Enterprise Style) */}
@@ -557,6 +672,12 @@ export default function UsersPage() {
                             Activo
                           </span>
                         )}
+
+                        {perfiles[user.id]?.empresa?.paquete && (
+                          <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-100 px-2 py-1 rounded-md">
+                            {perfiles[user.id].empresa.paquete.nombre}
+                          </span>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -583,7 +704,7 @@ export default function UsersPage() {
                         >
                           <Layers size={16} />
                         </button>
-                        {!user.administrator && (
+                        {userRole === 'superadmin' && !user.administrator && (
                           <button
                             onClick={(e) => { e.stopPropagation(); handleDelete(user.id); }}
                             className="p-2 text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition-colors"
@@ -686,6 +807,12 @@ export default function UsersPage() {
                               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Activo
                             </span>
                           )}
+
+                          {perfiles[user.id]?.empresa?.paquete && (
+                            <span className="inline-flex items-center gap-1.5 px-2 py-1 mt-1 rounded-md text-[11px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-100">
+                              {perfiles[user.id].empresa.paquete.nombre}
+                            </span>
+                          )}
                         </div>
                       </td>
 
@@ -712,7 +839,17 @@ export default function UsersPage() {
                             <Layers size={14} /> Configurar Permisos
                           </button>
                           
-                          {!user.administrator && (
+                          {userRole === 'superadmin' && (
+                            <button
+                              onClick={() => setVinculandoUser(user)}
+                              className="p-2 text-indigo-400 hover:text-indigo-600 hover:bg-indigo-50 border border-transparent hover:border-indigo-100 transition-all rounded-lg opacity-0 group-hover:opacity-100"
+                              title="Vincular empresa"
+                            >
+                              <Bot size={16} />
+                            </button>
+                          )}
+
+                          {userRole === 'superadmin' && !user.administrator && (
                             <button
                               onClick={() => handleDelete(user.id)}
                               className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 border border-transparent hover:border-red-100 transition-all rounded-lg opacity-0 group-hover:opacity-100"
@@ -734,6 +871,17 @@ export default function UsersPage() {
 
       {showCreate && <CreateUserModal onClose={() => setShowCreate(false)} onCreated={handleCreated} />}
       {assigningUser && <AssignDevicesModal user={assigningUser} onClose={() => { setAssigningUser(null); setDeviceCounts({}); }} />}
+      {vinculandoUser && (
+        <VincularEmpresaModal
+          user={vinculandoUser}
+          perfil={perfiles[vinculandoUser.id] || null}
+          onClose={() => setVinculandoUser(null)}
+          onSaved={(p) => {
+            setPerfiles(prev => ({ ...prev, [p.traccar_user_id]: p }));
+            setVinculandoUser(null);
+          }}
+        />
+      )}
     </div>
   );
 }

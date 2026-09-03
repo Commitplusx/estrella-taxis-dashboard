@@ -1,14 +1,33 @@
 import React, { useState, useEffect } from 'react';
-import { User, Plus, Trash2, Edit2, X, Save, Hash, Phone, Link, Check } from 'lucide-react';
+import { User, Plus, Trash2, Edit2, X, Save, Hash, Phone, Link, Check, BarChart3 } from 'lucide-react';
 import { useCachedFetch } from '../hooks/useCachedFetch';
 import { dataCache } from '../lib/cache';
 import { api, type TraccarDevice } from '../lib/traccarApi';
+import { supabase } from '../lib/supabase';
+import { useAuth } from '../context/AuthContext';
 
 interface TraccarDriver {
   id?: number;
   name: string;
   uniqueId: string;
   attributes?: Record<string, any>;
+}
+
+// ─── Score Badge ──────────────────────────────────────────────────────────────
+function ScoreBadge({ score, label, km }: { score: number; label: string; km?: number }) {
+  const color =
+    score >= 85 ? 'bg-emerald-100 text-emerald-700 border-emerald-200' :
+    score >= 70 ? 'bg-blue-100 text-blue-700 border-blue-200' :
+    score >= 50 ? 'bg-amber-100 text-amber-700 border-amber-200' :
+                  'bg-red-100 text-red-700 border-red-200';
+  return (
+    <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-bold ${color}`}>
+      <BarChart3 size={10} />
+      <span>{score}</span>
+      <span className="font-normal opacity-70">{label}</span>
+      {km !== undefined && <span className="font-normal opacity-60">· {km.toFixed(1)}km</span>}
+    </div>
+  );
 }
 
 // ─── Modal para Crear/Editar Conductor ────────────────────────────────────────
@@ -278,10 +297,30 @@ function AssignTaxisModal({ driver, onClose }: { driver: TraccarDriver; onClose:
 export default function DriversPage() {
   const { data, loading, refetch } = useCachedFetch<TraccarDriver[]>('/api/drivers', { ttlMs: 60_000 });
   const drivers = data ?? [];
+  const { empresaId } = useAuth();
   const [search, setSearch] = useState('');
   const [modal, setModal] = useState<{ open: boolean; driver?: TraccarDriver }>({ open: false });
   const [assigningDriver, setAssigningDriver] = useState<TraccarDriver | null>(null);
   const [expandedDriver, setExpandedDriver] = useState<number | null>(null);
+  // scores: Map de uniqueId → score del día de hoy
+  const [scores, setScores] = useState<Record<string, { score: number; label: string; km: number; idle: number }>>({});
+
+  useEffect(() => {
+    async function fetchScores() {
+      const today = new Date().toISOString().slice(0, 10);
+      const { data: rows } = await supabase
+        .from('driving_scores')
+        .select('device_name, score, score_label, distance_km, idle_minutes')
+        .eq('score_date', today);
+      if (!rows) return;
+      const map: typeof scores = {};
+      for (const r of rows) {
+        map[r.device_name] = { score: r.score, label: r.score_label, km: r.distance_km, idle: r.idle_minutes };
+      }
+      setScores(map);
+    }
+    fetchScores();
+  }, [empresaId]);
 
   const handleDelete = async (id: number) => {
     if (!confirm('¿Eliminar este conductor?')) return;
@@ -377,6 +416,10 @@ export default function DriversPage() {
                     <h3 className="text-sm font-bold text-gray-900 truncate">{driver.name}</h3>
                     <p className="text-xs text-gray-500 font-medium">ID: {driver.uniqueId}</p>
                   </div>
+                  {/* Score badge móvil */}
+                  {scores[driver.name] && (
+                    <ScoreBadge score={scores[driver.name].score} label={scores[driver.name].label} />
+                  )}
                 </div>
 
                 {expandedDriver === driver.id && (
@@ -422,6 +465,7 @@ export default function DriversPage() {
                   <th className="px-5 py-3 text-xs font-bold text-gray-500 uppercase tracking-wider">Conductor</th>
                   <th className="px-5 py-3 text-xs font-bold text-gray-500 uppercase tracking-wider">Identificador</th>
                   <th className="px-5 py-3 text-xs font-bold text-gray-500 uppercase tracking-wider">Teléfono</th>
+                  <th className="px-5 py-3 text-xs font-bold text-gray-500 uppercase tracking-wider">Score Hoy</th>
                   <th className="px-5 py-3 text-xs font-bold text-gray-500 uppercase tracking-wider text-right">Acciones</th>
                 </tr>
               </thead>
@@ -441,6 +485,12 @@ export default function DriversPage() {
                     </td>
                     <td className="px-5 py-4 text-sm text-gray-600">
                       {driver.attributes?.phone || <span className="text-gray-400 italic">No registrado</span>}
+                    </td>
+                    <td className="px-5 py-4">
+                      {scores[driver.name]
+                        ? <ScoreBadge score={scores[driver.name].score} label={scores[driver.name].label} km={scores[driver.name].km} />
+                        : <span className="text-[11px] text-gray-300 font-medium">Sin datos hoy</span>
+                      }
                     </td>
                     <td className="px-5 py-4 text-right">
                       <div className="flex items-center justify-end gap-2">

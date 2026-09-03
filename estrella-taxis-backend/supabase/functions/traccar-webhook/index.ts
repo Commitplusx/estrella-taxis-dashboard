@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3"
+import * as h3 from "https://esm.sh/h3-js@4.1.0"
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -47,14 +48,16 @@ Deno.serve(async (req) => {
       const lng = position.longitude
       const battery = position.attributes?.batteryLevel || null
 
-      console.log(`Upsert taxi ${deviceId}: ${lat}, ${lng}`)
+      const h3Index = h3.latLngToCell(lat, lng, 10)
+      console.log(`Upsert taxi ${deviceId}: ${lat}, ${lng} (H3: ${h3Index})`)
 
       const { error } = await supabaseClient
-        .from("repartidores")
+        .from("taxis")
         .upsert({
           device_id: deviceId,
           lat: lat,
           lng: lng,
+          h3_index: h3Index,
           bateria: battery,
           activo: true
         }, { onConflict: "device_id" })

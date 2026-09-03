@@ -19,6 +19,8 @@ import GeofencesPage from './pages/GeofencesPage';
 import MaintenancePage from './pages/MaintenancePage';
 import SettingsPage from './pages/SettingsPage';
 import DeviceConnectionsPage from './pages/DeviceConnectionsPage';
+import BotPage from './pages/BotPage';
+import PackagesPage from './pages/PackagesPage';
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
@@ -74,6 +76,8 @@ function AppRoutes() {
           <Route path="/maintenance" element={<MaintenancePage />} />
           <Route path="/users" element={<UsersPage />} />
           <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/bot" element={<BotPage />} />
+          <Route path="/packages" element={<PackagesPage />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

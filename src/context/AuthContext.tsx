@@ -1,10 +1,14 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { api, BASE_URL, type TraccarUser } from '../lib/traccarApi';
-
+import { supabase } from '../lib/supabase';
 import { useNativeApp } from '../hooks/useNativeApp';
+
+export type UserRole = 'superadmin' | 'admin_empresa' | 'operador';
 
 type AuthContextType = {
   user: TraccarUser | null;
+  userRole: UserRole | null;
+  empresaId: string | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
@@ -15,10 +19,28 @@ const AuthContext = createContext<AuthContextType>({} as AuthContextType);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<TraccarUser | null>(null);
+  const [userRole, setUserRole] = useState<UserRole | null>(null);
+  const [empresaId, setEmpresaId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   // Hook para integrar notificaciones Push y Auto-Login en la app nativa de Android
   const { postMessage } = useNativeApp(user, setUser);
+
+  const loadRole = async (u: TraccarUser) => {
+    if (u.administrator) {
+      setUserRole('superadmin');
+      setEmpresaId(null);
+      return;
+    }
+    const { data } = await supabase.from('perfiles').select('rol, empresa_id').eq('traccar_user_id', u.id).single();
+    if (data) {
+      setUserRole(data.rol as UserRole);
+      setEmpresaId(data.empresa_id);
+    } else {
+      setUserRole('operador');
+      setEmpresaId(null);
+    }
+  };
 
   // Al arrancar, verificar si ya hay sesión activa o si viene un token en la URL
   useEffect(() => {
@@ -32,15 +54,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           if (!res.ok) throw new Error('Token inválido o expirado');
           const userData = await res.json();
           setUser(userData);
+          await loadRole(userData);
           window.history.replaceState({}, document.title, window.location.pathname);
         })
-        .catch(() => setUser(null))
+        .catch(() => { setUser(null); setUserRole(null); setEmpresaId(null); })
         .finally(() => setLoading(false));
     } else {
       // Flujo normal: verificar sesión existente
       api.getSession()
-        .then(setUser)
-        .catch(() => setUser(null))
+        .then(async (u) => { setUser(u); await loadRole(u); })
+        .catch(() => { setUser(null); setUserRole(null); setEmpresaId(null); })
         .finally(() => setLoading(false));
     }
   }, []);
@@ -48,6 +71,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const login = async (email: string, password: string) => {
     const loggedUser = await api.login(email, password);
     setUser(loggedUser);
+    await loadRole(loggedUser);
     
     // Si estamos dentro de la app Android, generar un token para que se guarde localmente (Auto-login)
     // @ts-ignore
@@ -78,6 +102,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.error('Error during logout:', e);
     } finally {
       setUser(null);
+      setUserRole(null);
+      setEmpresaId(null);
       // Opcional: recargar la página para limpiar estados residuales
       window.location.href = '/login';
     }
@@ -89,7 +115,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout, resetPassword }}>
+    <AuthContext.Provider value={{ user, userRole, empresaId, loading, login, logout, resetPassword }}>
       {children}
     </AuthContext.Provider>
   );

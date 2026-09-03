@@ -423,3 +423,22 @@ entrypoint = "./functions/log-command/index.ts"
 # Specifies static files to be bundled with the function. Supports glob patterns.
 # For example, if you want to serve static HTML pages in your function:
 # static_files = [ "./functions/log-command/*.html" ]
+
+[functions.calculate-driving-scores]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/calculate-driving-scores/index.ts"
+
+[functions.calculate-driving-scores.schedule]
+cron = "05 06 * * *"
+
+[functions.generate-fillers]
+enabled = true
+verify_jwt = false
+import_map = "./functions/generate-fillers/deno.json"
+# Uncomment to specify a custom file path to the entrypoint.
+# Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
+entrypoint = "./functions/generate-fillers/index.ts"
+# Specifies static files to be bundled with the function. Supports glob patterns.
+# For example, if you want to serve static HTML pages in your function:
+# static_files = [ "./functions/generate-fillers/*.html" ]

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { NavLink, useLocation } from 'react-router-dom';
-import { Map, Users, BarChart3, Settings, Car, LogOut, Shield, Bell, Play, Layers, UserCheck, Hexagon, ChevronRight, Wrench, X, Activity } from 'lucide-react';
+import { NavLink, useLocation, useNavigate } from 'react-router-dom';
+import { Map, Users, BarChart3, Settings, Car, LogOut, Shield, Bell, Play, Layers, UserCheck, Hexagon, ChevronRight, Wrench, X, Activity, Bot, Package } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 interface SidebarProps {
@@ -10,7 +10,7 @@ interface SidebarProps {
 
 
 export default function Sidebar({ onClose }: SidebarProps) {
-  const { user, logout } = useAuth();
+  const { user, userRole, logout } = useAuth();
 
   const mainItems = [
     { to: '/map', icon: <Map size={18} />, label: 'Mapa en Vivo' },
@@ -30,10 +30,12 @@ export default function Sidebar({ onClose }: SidebarProps) {
   const adminItems = [
     { to: '/groups', icon: <Layers size={16} />, label: 'Grupos', always: true },
     { to: '/drivers', icon: <UserCheck size={16} />, label: 'Conductores', always: true },
-    { to: '/users', icon: <Users size={16} />, label: 'Usuarios', always: false, adminOnly: true },
-    { to: '/settings', icon: <Settings size={16} />, label: 'Configuración', always: false, adminOnly: true },
-  ].filter(item => item.always || (item.adminOnly && user?.administrator));
+    { to: '/bot', icon: <Bot size={16} />, label: 'Bot de Voz', roles: ['superadmin', 'admin_empresa'] },
+    { to: '/users', icon: <Users size={16} />, label: 'Usuarios', roles: ['superadmin', 'admin_empresa'] },
+    { to: '/packages', icon: <Package size={16} />, label: 'Planes', roles: ['superadmin'] },
+  ].filter(item => item.always || (item.roles && userRole && item.roles.includes(userRole)));
 
+  const navigate = useNavigate();
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({
     tools: window.innerWidth > 768,
@@ -154,25 +156,43 @@ export default function Sidebar({ onClose }: SidebarProps) {
 
       {/* Footer Usuario */}
       <div className="p-4 border-t border-gray-100">
-        <div 
-          onClick={handleLogout}
-          className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl cursor-pointer hover:bg-red-50 hover:text-red-600 transition group"
-        >
-          <div className="w-10 h-10 rounded-full bg-primary text-white flex items-center justify-center font-bold shadow-sm group-hover:bg-red-500 transition-colors">
-            {user?.name?.charAt(0)?.toUpperCase() || 'A'}
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold text-gray-800 truncate group-hover:text-red-600">{user?.name || 'Usuario'}</p>
-            <p className="text-xs text-gray-500 truncate group-hover:text-red-400">{user?.administrator ? 'Super Administrador' : 'Operador'}</p>
-          </div>
-          {isLoggingOut ? (
-            <svg className="animate-spin h-4 w-4 text-red-500" viewBox="0 0 24 24" fill="none">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-            </svg>
-          ) : (
-            <LogOut size={18} className="text-gray-400 group-hover:text-red-500 transition" />
-          )}
+        <div className="flex items-center gap-2">
+
+          {/* Clickable profile — goes to /settings */}
+          <button
+            onClick={() => { navigate('/settings'); onClose?.(); }}
+            className="flex-1 flex items-center gap-3 p-2.5 rounded-xl hover:bg-gray-50 transition group text-left min-w-0"
+          >
+            <div className="relative w-9 h-9 flex-shrink-0">
+              <div className="w-9 h-9 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-sm shadow-sm">
+                {user?.name?.charAt(0)?.toUpperCase() || 'A'}
+              </div>
+              {/* Online dot */}
+              <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-emerald-400 border-2 border-white rounded-full" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-gray-800 truncate group-hover:text-blue-600 transition-colors">
+                {user?.name || 'Usuario'}
+              </p>
+              <p className="text-[10px] font-medium text-gray-400 truncate capitalize">
+                {userRole === 'superadmin' ? 'Super Administrador' : userRole === 'admin_empresa' ? 'Admin de Empresa' : 'Operador'}
+              </p>
+            </div>
+          </button>
+
+          {/* Logout button */}
+          <button
+            onClick={handleLogout}
+            disabled={isLoggingOut}
+            title="Cerrar sesión"
+            className="flex-shrink-0 w-9 h-9 rounded-xl flex items-center justify-center text-gray-400 hover:bg-red-50 hover:text-red-500 transition disabled:opacity-50"
+          >
+            {isLoggingOut
+              ? <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
+              : <LogOut size={17} />
+            }
+          </button>
+
         </div>
       </div>
     </aside>

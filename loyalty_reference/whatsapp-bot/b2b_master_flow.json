@@ -1,0 +1,262 @@
+{
+  "version": "7.3",
+  "data_api_version": "3.0",
+  "routing_model": {
+    "SCREEN_MAIN": [
+      "SCREEN_LEALTAD",
+      "SCREEN_MOTO",
+      "SCREEN_PROMO",
+      "SCREEN_REPORTE"
+    ],
+    "SCREEN_LEALTAD": [],
+    "SCREEN_MOTO": [],
+    "SCREEN_PROMO": [],
+    "SCREEN_REPORTE": []
+  },
+  "screens": [
+    {
+      "id": "SCREEN_MAIN",
+      "title": "Portal de Aliados",
+      "data": {},
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "Form",
+            "name": "form",
+            "children": [
+              {
+                "type": "TextHeading",
+                "text": "Portal B2B"
+              },
+              {
+                "type": "Dropdown",
+                "name": "accion",
+                "label": "Acción a realizar",
+                "required": true,
+                "data-source": [
+                  { "id": "afiliar_sumar", "title": "Afiliar / Sumar Puntos" },
+                  { "id": "canjear", "title": "Canjear Puntos" },
+                  { "id": "regalar", "title": "Regalar Envío" },
+                  { "id": "info", "title": "Ver Perfil VIP" },
+                  { "id": "moto", "title": "Solicitar Moto" },
+                  { "id": "promo", "title": "Enviar Promo VIP" },
+                  { "id": "resumen", "title": "Ver Mi Resumen" },
+                  { "id": "historial", "title": "Ver Historial" }
+                ]
+              },
+              {
+                "type": "Footer",
+                "label": "Siguiente",
+                "on-click-action": {
+                  "name": "data_exchange",
+                  "payload": {
+                    "accion": "${form.accion}"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "SCREEN_LEALTAD",
+      "title": "Gestión de Cliente",
+      "data": {
+        "accion": { "type": "string", "__example__": "afiliar_sumar" },
+        "accion_text": { "type": "string", "__example__": "Afiliar / Sumar Puntos" },
+        "show_puntos": { "type": "boolean", "__example__": true }
+      },
+      "terminal": true,
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "Form",
+            "name": "form",
+            "children": [
+              {
+                "type": "TextHeading",
+                "text": "${data.accion_text}"
+              },
+              {
+                "type": "TextInput",
+                "name": "telefono",
+                "label": "Teléfono a 10 núms",
+                "input-type": "number",
+                "required": true,
+                "max-chars": 10
+              },
+              {
+                "type": "TextInput",
+                "name": "puntos",
+                "label": "Puntos (Ej. 1)",
+                "input-type": "number",
+                "required": false,
+                "visible": "${data.show_puntos}"
+              },
+              {
+                "type": "Footer",
+                "label": "Confirmar",
+                "on-click-action": {
+                  "name": "complete",
+                  "payload": {
+                    "accion": "${data.accion}",
+                    "telefono": "${form.telefono}",
+                    "puntos": "${form.puntos}"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "SCREEN_MOTO",
+      "title": "Solicitar Moto",
+      "data": {
+        "accion": { "type": "string", "__example__": "moto" }
+      },
+      "terminal": true,
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "Form",
+            "name": "form",
+            "children": [
+              {
+                "type": "TextInput",
+                "name": "origen",
+                "label": "Calle de recolección",
+                "input-type": "text",
+                "required": true
+              },
+              {
+                "type": "TextInput",
+                "name": "destino",
+                "label": "Calle de entrega",
+                "input-type": "text",
+                "required": true
+              },
+              {
+                "type": "TextArea",
+                "name": "detalles",
+                "label": "Detalles del pedido",
+                "required": true
+              },
+              {
+                "type": "Footer",
+                "label": "Pedir Moto",
+                "on-click-action": {
+                  "name": "complete",
+                  "payload": {
+                    "accion": "${data.accion}",
+                    "moto_origen": "${form.origen}",
+                    "moto_destino": "${form.destino}",
+                    "moto_detalles": "${form.detalles}"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "SCREEN_PROMO",
+      "title": "Enviar Promo VIP",
+      "data": {
+        "accion": { "type": "string", "__example__": "promo" }
+      },
+      "terminal": true,
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "Form",
+            "name": "form",
+            "children": [
+              {
+                "type": "TextInput",
+                "name": "titulo",
+                "label": "Título de promo",
+                "input-type": "text",
+                "required": true
+              },
+              {
+                "type": "TextArea",
+                "name": "cuerpo",
+                "label": "Cuerpo del mensaje",
+                "required": true
+              },
+              {
+                "type": "Footer",
+                "label": "Enviar Promo",
+                "on-click-action": {
+                  "name": "complete",
+                  "payload": {
+                    "accion": "${data.accion}",
+                    "promo_titulo": "${form.titulo}",
+                    "promo_cuerpo": "${form.cuerpo}"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "SCREEN_REPORTE",
+      "title": "Generar Reporte",
+      "data": {
+        "accion": { "type": "string", "__example__": "resumen" },
+        "accion_text": { "type": "string", "__example__": "Resumen del Día" },
+        "show_telefono": { "type": "boolean", "__example__": false }
+      },
+      "terminal": true,
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "Form",
+            "name": "form",
+            "children": [
+              {
+                "type": "TextHeading",
+                "text": "${data.accion_text}"
+              },
+              {
+                "type": "TextInput",
+                "name": "telefono",
+                "label": "Teléfono a 10 núms",
+                "input-type": "number",
+                "required": false,
+                "max-chars": 10,
+                "visible": "${data.show_telefono}"
+              },
+              {
+                "type": "TextBody",
+                "text": "Toca el botón de abajo para generar tu reporte. Te lo enviaremos por WhatsApp inmediatamente."
+              },
+              {
+                "type": "Footer",
+                "label": "Generar Reporte",
+                "on-click-action": {
+                  "name": "complete",
+                  "payload": {
+                    "accion": "${data.accion}",
+                    "telefono": "${form.telefono}"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}
