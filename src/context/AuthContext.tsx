@@ -5,10 +5,28 @@ import { useNativeApp } from '../hooks/useNativeApp';
 
 export type UserRole = 'superadmin' | 'admin_empresa' | 'operador';
 
+export interface PermisosSistema {
+  reporte_pdf: boolean;
+  score_diario: boolean;
+  enrutamiento_vectorial: boolean;
+  mapa_calor: boolean;
+  [key: string]: boolean;
+}
+
+export interface Paquete {
+  id: string;
+  nombre: string;
+  precio_mensual: number;
+  incluye_bot: boolean;
+  incluye_whatsapp: boolean;
+  permisos_sistema: PermisosSistema;
+}
+
 type AuthContextType = {
   user: TraccarUser | null;
   userRole: UserRole | null;
   empresaId: string | null;
+  paqueteActual: Paquete | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
@@ -21,6 +39,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<TraccarUser | null>(null);
   const [userRole, setUserRole] = useState<UserRole | null>(null);
   const [empresaId, setEmpresaId] = useState<string | null>(null);
+  const [paqueteActual, setPaqueteActual] = useState<Paquete | null>(null);
   const [loading, setLoading] = useState(true);
 
   // Hook para integrar notificaciones Push y Auto-Login en la app nativa de Android
@@ -30,15 +49,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (u.administrator) {
       setUserRole('superadmin');
       setEmpresaId(null);
+      setPaqueteActual(null);
       return;
     }
     const { data } = await supabase.from('perfiles').select('rol, empresa_id').eq('traccar_user_id', u.id).single();
     if (data) {
       setUserRole(data.rol as UserRole);
       setEmpresaId(data.empresa_id);
+      if (data.empresa_id) {
+        const { data: empresa } = await supabase.from('empresas').select('*, paquete:paquetes(*)').eq('id', data.empresa_id).single();
+        setPaqueteActual(empresa?.paquete ? (empresa.paquete as Paquete) : null);
+      } else {
+        setPaqueteActual(null);
+      }
     } else {
       setUserRole('operador');
       setEmpresaId(null);
+      setPaqueteActual(null);
     }
   };
 
@@ -57,13 +84,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           await loadRole(userData);
           window.history.replaceState({}, document.title, window.location.pathname);
         })
-        .catch(() => { setUser(null); setUserRole(null); setEmpresaId(null); })
+        .catch(() => { setUser(null); setUserRole(null); setEmpresaId(null); setPaqueteActual(null); })
         .finally(() => setLoading(false));
     } else {
       // Flujo normal: verificar sesión existente
       api.getSession()
         .then(async (u) => { setUser(u); await loadRole(u); })
-        .catch(() => { setUser(null); setUserRole(null); setEmpresaId(null); })
+        .catch(() => { setUser(null); setUserRole(null); setEmpresaId(null); setPaqueteActual(null); })
         .finally(() => setLoading(false));
     }
   }, []);
@@ -104,6 +131,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(null);
       setUserRole(null);
       setEmpresaId(null);
+      setPaqueteActual(null);
       // Opcional: recargar la página para limpiar estados residuales
       window.location.href = '/login';
     }
@@ -115,7 +143,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, userRole, empresaId, loading, login, logout, resetPassword }}>
+    <AuthContext.Provider value={{ user, userRole, empresaId, paqueteActual, loading, login, logout, resetPassword }}>
       {children}
     </AuthContext.Provider>
   );

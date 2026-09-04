@@ -3,11 +3,12 @@ import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { Map, Users, BarChart3, Settings, Car, LogOut, Shield, Bell, Play, Layers, UserCheck, Hexagon, ChevronRight, Wrench, X, Activity, Bot, Package } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
+import { RequireFeature } from './RequireFeature';
+import { type Feature } from '../hooks/useFeature';
+
 interface SidebarProps {
   onClose?: () => void;
 }
-
-
 
 export default function Sidebar({ onClose }: SidebarProps) {
   const { user, userRole, logout } = useAuth();
@@ -18,19 +19,19 @@ export default function Sidebar({ onClose }: SidebarProps) {
     { to: '/devices', icon: <Car size={18} />, label: 'Mis Taxis' },
   ];
 
-  const toolsItems = [
+  const toolsItems: { to: string; icon: React.ReactNode; label: string; feature?: Feature }[] = [
     { to: '/connections', icon: <Activity size={16} />, label: 'Conexiones' },
-    { to: '/reports', icon: <BarChart3 size={16} />, label: 'Reportes' },
+    { to: '/reports', icon: <BarChart3 size={16} />, label: 'Reportes', feature: 'reporte_pdf' },
     { to: '/replay', icon: <Play size={16} />, label: 'Repetición Ruta' },
     { to: '/geofences', icon: <Hexagon size={16} />, label: 'Geocercas' },
     { to: '/maintenance', icon: <Wrench size={16} />, label: 'Mantenimientos' },
     { to: '/notifications', icon: <Bell size={16} />, label: 'Notificaciones' },
   ];
 
-  const adminItems = [
+  const adminItems: { to: string; icon: React.ReactNode; label: string; always?: boolean; roles?: string[]; feature?: Feature }[] = [
     { to: '/groups', icon: <Layers size={16} />, label: 'Grupos', always: true },
     { to: '/drivers', icon: <UserCheck size={16} />, label: 'Conductores', always: true },
-    { to: '/bot', icon: <Bot size={16} />, label: 'Bot de Voz', roles: ['superadmin', 'admin_empresa'] },
+    { to: '/bot', icon: <Bot size={16} />, label: 'Bot de Voz', roles: ['superadmin', 'admin_empresa'], feature: 'bot_voz' },
     { to: '/users', icon: <Users size={16} />, label: 'Usuarios', roles: ['superadmin', 'admin_empresa'] },
     { to: '/packages', icon: <Package size={16} />, label: 'Planes', roles: ['superadmin'] },
   ].filter(item => item.always || (item.roles && userRole && item.roles.includes(userRole)));
@@ -102,7 +103,7 @@ export default function Sidebar({ onClose }: SidebarProps) {
             {toolsItems.map((item, index) => {
               const isOpen = openSections.tools;
               const delay = isOpen ? index * 60 : (toolsItems.length - 1 - index) * 30;
-              return (
+              const content = (
                 <NavLink
                   key={item.to}
                   to={item.to}
@@ -114,6 +115,12 @@ export default function Sidebar({ onClose }: SidebarProps) {
                   <span className="font-medium">{item.label}</span>
                 </NavLink>
               );
+
+              return item.feature ? (
+                <RequireFeature key={item.to} feature={item.feature}>
+                  {content}
+                </RequireFeature>
+              ) : content;
             })}
           </div>
         </div>
@@ -135,7 +142,7 @@ export default function Sidebar({ onClose }: SidebarProps) {
                 {adminItems.map((item, index) => {
                   const isOpen = openSections.admin;
                   const delay = isOpen ? index * 60 : (adminItems.length - 1 - index) * 30;
-                  return (
+                  const content = (
                     <NavLink
                       key={item.to}
                       to={item.to}
@@ -147,6 +154,12 @@ export default function Sidebar({ onClose }: SidebarProps) {
                       <span className="font-medium">{item.label}</span>
                     </NavLink>
                   );
+
+                  return item.feature ? (
+                    <RequireFeature key={item.to} feature={item.feature}>
+                      {content}
+                    </RequireFeature>
+                  ) : content;
                 })}
               </div>
             </div>

@@ -597,18 +597,37 @@ serve(async (req) => {
         // ── Lookup del Tenant (Multi-Tenant) ───────────────────────────────────
         // Buscar la empresa por el número de Telnyx al que llamaron.
         // Si no existe fila → empresa=null → se usan los defaults (sin romper nada).
-        let empresa: Empresa | null = null;
+        let empresa: (Empresa & { paquete?: any }) | null = null;
         if (calledTo) {
           const { data: emp } = await supabase
             .from('empresas')
-            .select('*')
+            .select('*, paquete:paquetes(incluye_bot)')
             .eq('telefono_telnyx', calledTo)
             .eq('activo', true)
             .maybeSingle();
           empresa = emp;
-          console.log(empresa 
-            ? `[TENANT] ${empresa.nombre_empresa} (${empresa.tipo_negocio})` 
-            : `[TENANT] Sin registro para ${calledTo}, usando defaults de Pompeyo.`);
+          
+          if (empresa) {
+            console.log(`[TENANT] ${empresa.nombre_empresa} (${empresa.tipo_negocio})`);
+            
+            // ── GATEKEEPING: ¿El Plan incluye Bot de Voz? ──
+            const paqueteObj = Array.isArray(empresa.paquete) ? empresa.paquete[0] : empresa.paquete;
+            const incluyeBot = paqueteObj?.incluye_bot === true;
+
+            if (!incluyeBot) {
+              console.warn(`[GATEKEEPING] El plan de ${empresa.nombre_empresa} no incluye Bot de Voz. Transfiriendo directo a humano...`);
+              if (empresa.dispatcher_phone) {
+                await telnyxAction(callControlId, 'transfer', {
+                  to: empresa.dispatcher_phone.startsWith('+') ? empresa.dispatcher_phone : `+52${empresa.dispatcher_phone}`
+                });
+              } else {
+                await telnyxAction(callControlId, 'hangup');
+              }
+              break; // Romper el flujo, no contestar con IA
+            }
+          } else {
+            console.log(`[TENANT] Sin registro para ${calledTo}, usando defaults de Pompeyo.`);
+          }
         }
         
         // Silent garbage collection: Limpiar llamadas de hace más de 24 horas para no saturar la BD
@@ -834,10 +853,25 @@ serve(async (req) => {
               .eq('call_control_id', callControlId)
               .maybeSingle();
             
-            let callEmpresa: { ciudad: string | null; dispatcher_phone: string | null } | null = null;
+            let callEmpresa: { ciudad: string | null; dispatcher_phone: string | null; paquete?: unknown } | null = null;
+            let permisosSistema: Record<string, boolean> = {};
+            
             if (callCtx?.empresa_id) {
-              const { data: emp } = await supabase.from('empresas').select('ciudad, dispatcher_phone').eq('id', callCtx.empresa_id).maybeSingle();
-              callEmpresa = emp;
+              const { data: emp } = await supabase
+                .from('empresas')
+                .select('ciudad, dispatcher_phone, paquete:paquetes(permisos_sistema)')
+                .eq('id', callCtx.empresa_id)
+                .maybeSingle();
+                
+              if (emp) {
+                callEmpresa = emp;
+                if (emp.paquete && typeof emp.paquete === 'object') {
+                  const paqueteObj = Array.isArray(emp.paquete) ? emp.paquete[0] : emp.paquete;
+                  if (paqueteObj && typeof paqueteObj === 'object') {
+                    permisosSistema = (paqueteObj.permisos_sistema as Record<string, boolean>) ?? {};
+                  }
+                }
+              }
             }
 
             const ciudadTenant = callEmpresa?.ciudad || 'San Cristobal de las Casas, Chiapas, Mexico';
@@ -850,8 +884,8 @@ serve(async (req) => {
             } else {
               console.log(`[GEO SUCCESS] Zona: ${locOrigen.nombre_zona} | Precio: ${locOrigen.precio || 'N/A'}`);
               
-              // Buscar taxi más cercano en Traccar
-              const nearestTaxi = await getNearestTaxi(locOrigen.lat, locOrigen.lng);
+              // Buscar taxi más cercano en Traccar, inyectando feature flags del plan
+              const nearestTaxi = await getNearestTaxi(locOrigen.lat, locOrigen.lng, permisosSistema);
               
               // Disparar WhatsApp al despachador
               await dispatchToHuman({

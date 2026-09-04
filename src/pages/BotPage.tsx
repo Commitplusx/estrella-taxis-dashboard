@@ -19,6 +19,7 @@ interface Empresa {
   nombre_bot: string;
   tipo_negocio: string;
   telefono_telnyx: string;
+  telefono_whatsapp: string | null;
   dispatcher_phone: string | null;
   prompt_personalizado: string | null;
   ciudad: string | null;
@@ -43,6 +44,7 @@ const defaultForm = {
   nombre_bot: '',
   tipo_negocio: 'taxi',
   telefono_telnyx: '',
+  telefono_whatsapp: '',
   dispatcher_phone: '',
   ciudad: '',
   prompt_personalizado: '',
@@ -104,6 +106,7 @@ export default function BotPage() {
       nombre_bot: emp.nombre_bot,
       tipo_negocio: emp.tipo_negocio,
       telefono_telnyx: emp.telefono_telnyx,
+      telefono_whatsapp: emp.telefono_whatsapp || '',
       dispatcher_phone: emp.dispatcher_phone || '',
       ciudad: emp.ciudad || '',
       prompt_personalizado: emp.prompt_personalizado || '',
@@ -114,15 +117,39 @@ export default function BotPage() {
   };
 
   const handleSave = async () => {
-    if (!form.nombre_empresa || !form.nombre_bot || !form.telefono_telnyx) {
-      toast.error('Nombre, nombre del bot y teléfono son obligatorios.');
+    const selectedPaquete = paquetes.find(p => p.id === form.paquete_id);
+    const requiresBot = selectedPaquete ? selectedPaquete.incluye_bot : true;
+    const requiresWA = selectedPaquete ? selectedPaquete.incluye_whatsapp : true;
+    const requiresIA = requiresBot || requiresWA;
+
+    if (!form.nombre_empresa) {
+      toast.error('El nombre de la empresa es obligatorio.');
       return;
     }
+
+    if (requiresIA && !form.nombre_bot) {
+      toast.error('El nombre del bot es obligatorio para este plan.');
+      return;
+    }
+
+    if (requiresBot && !form.telefono_telnyx) {
+      toast.error('El teléfono para llamadas (Telnyx) es obligatorio para este plan.');
+      return;
+    }
+
+    if (requiresWA && !form.telefono_whatsapp) {
+      toast.error('El teléfono para WhatsApp es obligatorio para este plan.');
+      return;
+    }
+
     setSaving(true);
     const payload = {
       ...form,
+      nombre_bot: requiresIA ? form.nombre_bot : 'N/A',
+      telefono_telnyx: requiresBot ? form.telefono_telnyx : 'N/A',
+      telefono_whatsapp: requiresWA ? form.telefono_whatsapp : null,
       dispatcher_phone: form.dispatcher_phone || null,
-      prompt_personalizado: form.prompt_personalizado || null,
+      prompt_personalizado: requiresIA ? (form.prompt_personalizado || null) : null,
       ciudad: form.ciudad || null,
       paquete_id: form.paquete_id || null,
     };
@@ -155,115 +182,132 @@ export default function BotPage() {
   };
 
   return (
-    <div className="p-6 max-w-5xl mx-auto">
+    <div className="p-4 sm:p-6 max-w-5xl mx-auto">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-indigo-600 flex items-center justify-center shadow">
-            <Bot size={20} className="text-white" />
-          </div>
-          <div>
-            <h1 className="text-xl font-bold text-gray-900">Bot de Voz (Pompeyo)</h1>
-            <p className="text-sm text-gray-500">Gestión de empresas y configuración multi-tenant</p>
-          </div>
-        </div>
-        {userRole === 'superadmin' && (
-          <button
-            onClick={openCreate}
-            className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-indigo-700 transition shadow"
-          >
-            <Plus size={16} /> Nueva Empresa
-          </button>
-        )}
-      </div>
-
-      {/* Lista de empresas */}
-      {loading ? (
-        <div className="text-center py-16 text-gray-400">Cargando...</div>
-      ) : (
-        <div className="grid gap-4">
-          {empresas.map(emp => (
-            <div key={emp.id} className="bg-white border border-gray-100 rounded-2xl p-5 shadow-sm flex items-start gap-4">
-              {/* Indicador activo */}
-              <button onClick={() => toggleActivo(emp)} className="mt-1 flex-shrink-0">
-                {emp.activo
-                  ? <CheckCircle size={20} className="text-green-500" />
-                  : <Circle size={20} className="text-gray-300" />}
-              </button>
-
-              <div className="flex-1 min-w-0">
-                <div className="flex flex-wrap items-center gap-2 mb-1">
-                  <span className="font-bold text-gray-900">{emp.nombre_empresa}</span>
-                  <span className="text-xs bg-indigo-50 text-indigo-700 font-semibold px-2 py-0.5 rounded-full capitalize">{emp.tipo_negocio}</span>
-                  {emp.paquete && (
-                    <span className="text-xs bg-emerald-50 text-emerald-700 font-semibold px-2 py-0.5 rounded-full border border-emerald-100">
-                      {emp.paquete.nombre}
-                    </span>
-                  )}
-                  {!emp.activo && <span className="text-xs bg-gray-100 text-gray-400 font-medium px-2 py-0.5 rounded-full">Inactivo</span>}
-                </div>
-
-                <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm text-gray-600 mt-2">
-                  <span className="flex items-center gap-1.5"><Bot size={13} className="text-indigo-400" /> {emp.nombre_bot}</span>
-                  <span className="flex items-center gap-1.5"><Phone size={13} className="text-blue-400" /> {emp.telefono_telnyx}</span>
-                  {emp.ciudad && <span className="flex items-center gap-1.5"><MapPin size={13} className="text-rose-400" /> {emp.ciudad}</span>}
-                  {emp.dispatcher_phone && <span className="flex items-center gap-1.5"><Building2 size={13} className="text-amber-400" /> Despachador: {emp.dispatcher_phone}</span>}
-                </div>
-
-                {emp.prompt_personalizado && (
-                  <p className="mt-2 text-xs text-gray-400 bg-gray-50 rounded-lg px-3 py-2 line-clamp-2">{emp.prompt_personalizado}</p>
-                )}
-              </div>
-
-              <div className="flex gap-2 flex-shrink-0">
-                <button onClick={() => setVinculandoEmpresa(emp)} className="p-2 rounded-lg hover:bg-emerald-50 text-emerald-500 transition" title="Vincular Usuarios">
-                  <Users size={15} />
-                </button>
-                <button onClick={() => openEdit(emp)} className="p-2 rounded-lg hover:bg-indigo-50 text-indigo-500 transition" title="Editar">
-                  <Edit2 size={15} />
-                </button>
-                {userRole === 'superadmin' && (
-                  <button onClick={() => handleDelete(emp.id)} className="p-2 rounded-lg hover:bg-red-50 text-red-400 transition" title="Eliminar">
-                    <Trash2 size={15} />
-                  </button>
-                )}
-              </div>
+      {!showForm && (
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-indigo-600 flex items-center justify-center shadow shrink-0">
+              <Bot size={20} className="text-white" />
             </div>
-          ))}
-          {empresas.length === 0 && (
-            <div className="text-center py-16 text-gray-400">
-              <Bot size={40} className="mx-auto mb-3 opacity-20" />
-              <p className="text-sm">No hay empresas configuradas todavía.</p>
+            <div>
+              <h1 className="text-xl font-bold text-gray-900">Empresas y Planes</h1>
+              <p className="text-sm text-gray-500">Gestión de inquilinos y configuración omnicanal</p>
             </div>
+          </div>
+          {userRole === 'superadmin' && (
+            <button
+              onClick={openCreate}
+              className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-indigo-700 transition shadow w-full sm:w-auto justify-center"
+            >
+              <Plus size={16} /> Nueva Empresa
+            </button>
           )}
         </div>
       )}
 
-      {/* Modal de formulario */}
-      {showForm && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg p-6">
-            <h2 className="text-lg font-bold text-gray-900 mb-4">
-              {editing ? `Editar: ${editing.nombre_empresa}` : 'Nueva Empresa'}
-            </h2>
+      {/* Lista de empresas */}
+      {!showForm && (
+        loading ? (
+          <div className="text-center py-16 text-gray-400">Cargando...</div>
+        ) : (
+          <div className="grid gap-4">
+            {empresas.map(emp => (
+              <div key={emp.id} className="bg-white border border-gray-100 rounded-2xl p-5 shadow-sm flex flex-col sm:flex-row items-start gap-4">
+                {/* Indicador activo */}
+                <button onClick={() => toggleActivo(emp)} className="mt-1 flex-shrink-0">
+                  {emp.activo
+                    ? <CheckCircle size={20} className="text-green-500" />
+                    : <Circle size={20} className="text-gray-300" />}
+                </button>
 
-            <div className="space-y-3">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs font-semibold text-gray-500 mb-1 block">Nombre Empresa *</label>
-                  <input className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300" value={form.nombre_empresa} onChange={e => setForm(f => ({...f, nombre_empresa: e.target.value}))} placeholder="Estrella Taxis" />
+                <div className="flex-1 min-w-0">
+                  <div className="flex flex-wrap items-center gap-2 mb-1">
+                    <span className="font-bold text-gray-900">{emp.nombre_empresa}</span>
+                    <span className="text-xs bg-indigo-50 text-indigo-700 font-semibold px-2 py-0.5 rounded-full capitalize">{emp.tipo_negocio}</span>
+                    {emp.paquete && (
+                      <span className="text-xs bg-emerald-50 text-emerald-700 font-semibold px-2 py-0.5 rounded-full border border-emerald-100">
+                        {emp.paquete.nombre}
+                      </span>
+                    )}
+                    {!emp.activo && <span className="text-xs bg-gray-100 text-gray-400 font-medium px-2 py-0.5 rounded-full">Inactivo</span>}
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-sm text-gray-600 mt-2">
+                    <span className="flex items-center gap-1.5"><Bot size={13} className="text-indigo-400 shrink-0" /> Bot: {emp.nombre_bot}</span>
+                    <span className="flex items-center gap-1.5"><Phone size={13} className="text-blue-400 shrink-0" /> Voz: {emp.telefono_telnyx || 'N/A'}</span>
+                    {emp.telefono_whatsapp && <span className="flex items-center gap-1.5"><Phone size={13} className="text-emerald-400 shrink-0" /> WA: {emp.telefono_whatsapp}</span>}
+                    {emp.ciudad && <span className="flex items-center gap-1.5"><MapPin size={13} className="text-rose-400 shrink-0" /> {emp.ciudad}</span>}
+                    {emp.dispatcher_phone && <span className="flex items-center gap-1.5"><Building2 size={13} className="text-amber-400 shrink-0" /> Despachador: {emp.dispatcher_phone}</span>}
+                  </div>
+
+                  {emp.prompt_personalizado && (
+                    <p className="mt-2 text-xs text-gray-400 bg-gray-50 rounded-lg px-3 py-2 line-clamp-2">{emp.prompt_personalizado}</p>
+                  )}
                 </div>
-                <div>
-                  <label className="text-xs font-semibold text-gray-500 mb-1 block">Nombre del Bot *</label>
-                  <input className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300" value={form.nombre_bot} onChange={e => setForm(f => ({...f, nombre_bot: e.target.value}))} placeholder="Pompeyo" />
+
+                <div className="flex gap-2 flex-shrink-0 mt-3 sm:mt-0 w-full sm:w-auto justify-end border-t border-gray-100 sm:border-0 pt-3 sm:pt-0">
+                  <button onClick={() => setVinculandoEmpresa(emp)} className="p-2 rounded-lg hover:bg-emerald-50 text-emerald-500 transition" title="Vincular Usuarios">
+                    <Users size={15} />
+                  </button>
+                  <button onClick={() => openEdit(emp)} className="p-2 rounded-lg hover:bg-indigo-50 text-indigo-500 transition" title="Editar">
+                    <Edit2 size={15} />
+                  </button>
+                  {userRole === 'superadmin' && (
+                    <button onClick={() => handleDelete(emp.id)} className="p-2 rounded-lg hover:bg-red-50 text-red-400 transition" title="Eliminar">
+                      <Trash2 size={15} />
+                    </button>
+                  )}
                 </div>
               </div>
+            ))}
+            {empresas.length === 0 && (
+              <div className="text-center py-16 text-gray-400">
+                <Bot size={40} className="mx-auto mb-3 opacity-20" />
+                <p className="text-sm">No hay empresas configuradas todavía.</p>
+              </div>
+            )}
+          </div>
+        )
+      )}
 
-              <div className="grid grid-cols-2 gap-3">
+      {/* Formulario (Vista Completa) */}
+      {showForm && (() => {
+        const selectedPaquete = paquetes.find(p => p.id === form.paquete_id);
+        const requiresBot = selectedPaquete ? selectedPaquete.incluye_bot : true;
+        const requiresWA = selectedPaquete ? selectedPaquete.incluye_whatsapp : true;
+        const requiresIA = requiresBot || requiresWA;
+        
+        return (
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 w-full p-5 sm:p-8">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl font-bold text-gray-900">
+                {editing ? `Editar Empresa: ${editing.nombre_empresa}` : 'Configurar Nueva Empresa'}
+              </h2>
+              <button onClick={() => setShowForm(false)} className="p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-600 rounded-full transition">
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className={!requiresIA ? "col-span-1 sm:col-span-2" : ""}>
+                  <label className="text-sm font-semibold text-gray-700 mb-1.5 block">Nombre de la Empresa *</label>
+                  <input className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-shadow" value={form.nombre_empresa} onChange={e => setForm(f => ({...f, nombre_empresa: e.target.value}))} placeholder="Ej. Taxis Estrella" />
+                </div>
+                {requiresIA && (
+                  <div>
+                    <label className="text-sm font-semibold text-gray-700 mb-1.5 block">Nombre del Bot IA *</label>
+                    <input className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-shadow" value={form.nombre_bot} onChange={e => setForm(f => ({...f, nombre_bot: e.target.value}))} placeholder="Ej. Pompeyo" />
+                  </div>
+                )}
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="text-xs font-semibold text-gray-500 mb-1 block">Tipo de Negocio</label>
+                  <label className="text-sm font-semibold text-gray-700 mb-1.5 block">Tipo de Negocio</label>
                   <select 
-                    className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300 capitalize" 
+                    className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 capitalize transition-shadow bg-white" 
                     value={form.tipo_negocio} 
                     onChange={e => {
                       const newTipo = e.target.value;
@@ -271,7 +315,6 @@ export default function BotPage() {
                       setForm(f => ({
                         ...f, 
                         tipo_negocio: newTipo,
-                        // Cambiar el prompt automático solo si está vacío o si tiene el default del tipo anterior
                         prompt_personalizado: (!f.prompt_personalizado || f.prompt_personalizado === oldDefault) 
                           ? (PROMPTS_POR_TIPO[newTipo] || '') 
                           : f.prompt_personalizado
@@ -282,67 +325,77 @@ export default function BotPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="text-xs font-semibold text-gray-500 mb-1 block">Ciudad</label>
-                  <input className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300" value={form.ciudad} onChange={e => setForm(f => ({...f, ciudad: e.target.value}))} placeholder="San Cristóbal de las Casas, Chiapas" />
+                  <label className="text-sm font-semibold text-gray-700 mb-1.5 block">Ciudad de Operación</label>
+                  <input className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-shadow" value={form.ciudad} onChange={e => setForm(f => ({...f, ciudad: e.target.value}))} placeholder="San Cristóbal de las Casas" />
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs font-semibold text-gray-500 mb-1 block">Teléfono Telnyx *</label>
-                  <input className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-300" value={form.telefono_telnyx} onChange={e => setForm(f => ({...f, telefono_telnyx: e.target.value}))} placeholder="+15676031156" />
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-gray-500 mb-1 block">WhatsApp Despachador</label>
-                  <input className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-300" value={form.dispatcher_phone} onChange={e => setForm(f => ({...f, dispatcher_phone: e.target.value}))} placeholder="+529611234567" />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {requiresBot && (
+                  <div>
+                    <label className="text-sm font-semibold text-gray-700 mb-1.5 block" title="Número para llamadas de Voz (Telnyx)">Teléfono para Llamadas (Voz) *</label>
+                    <input className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-shadow" value={form.telefono_telnyx} onChange={e => setForm(f => ({...f, telefono_telnyx: e.target.value}))} placeholder="+15676031156" />
+                  </div>
+                )}
+                {requiresWA && (
+                  <div>
+                    <label className="text-sm font-semibold text-gray-700 mb-1.5 block" title="Número de WhatsApp con IA (YCloud)">Teléfono para WhatsApp (IA) *</label>
+                    <input className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-shadow" value={form.telefono_whatsapp} onChange={e => setForm(f => ({...f, telefono_whatsapp: e.target.value}))} placeholder="+529611234567" />
+                  </div>
+                )}
+                <div className={(!requiresBot && !requiresWA) ? "col-span-1 sm:col-span-2" : (requiresBot && requiresWA ? "col-span-1 sm:col-span-2" : "")}>
+                  <label className="text-sm font-semibold text-gray-700 mb-1.5 block">Teléfono del Despachador (WhatsApp Humano)</label>
+                  <input className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-shadow" value={form.dispatcher_phone} onChange={e => setForm(f => ({...f, dispatcher_phone: e.target.value}))} placeholder="+529611234567" />
                 </div>
               </div>
 
-              <div>
-                <label className="text-xs font-semibold text-gray-500 mb-1 block">Paquete Contratado</label>
+              <div className="border-t border-gray-100 pt-4">
+                <label className="text-sm font-semibold text-gray-700 mb-1.5 block">Paquete Contratado</label>
                 <select 
-                  className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300 disabled:bg-gray-100 disabled:text-gray-500" 
+                  className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:bg-gray-50 disabled:text-gray-500 transition-shadow bg-white" 
                   value={form.paquete_id} 
                   onChange={e => setForm(f => ({...f, paquete_id: e.target.value}))}
                   disabled={userRole !== 'superadmin'}
                 >
-                  <option value="">Sin paquete asignado</option>
+                  <option value="">Sin paquete asignado (No recomendado)</option>
                   {paquetes.map(p => (
                     <option key={p.id} value={p.id}>{p.nombre} — ${p.precio_mensual}/mes</option>
                   ))}
                 </select>
-                {userRole !== 'superadmin' && <p className="text-[10px] text-gray-400 mt-1">Solo soporte técnico puede cambiar el paquete.</p>}
+                {userRole !== 'superadmin' && <p className="text-xs text-gray-400 mt-1.5 flex items-center gap-1">🔒 Solo soporte técnico puede cambiar el paquete facturado.</p>}
               </div>
 
-              <div>
-                <label className="text-xs font-semibold text-gray-500 mb-1 block">Instrucciones del Bot (Prompt)</label>
-                <textarea rows={3} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300 resize-none" value={form.prompt_personalizado} onChange={e => setForm(f => ({...f, prompt_personalizado: e.target.value}))} placeholder="Servicio 24/7. Mascotas permitidas. Pago efectivo o tarjeta..." />
-              </div>
+              {requiresIA && (
+                <div>
+                  <label className="text-sm font-semibold text-gray-700 mb-1.5 block">Instrucciones del Bot (Prompt System)</label>
+                  <textarea rows={4} className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none transition-shadow" value={form.prompt_personalizado} onChange={e => setForm(f => ({...f, prompt_personalizado: e.target.value}))} placeholder="Escribe las instrucciones detalladas de cómo debe comportarse la IA..." />
+                </div>
+              )}
 
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-3 bg-gray-50 p-4 rounded-xl border border-gray-100 mt-2">
                 <input 
                   type="checkbox" 
                   id="activo" 
                   checked={form.activo} 
                   onChange={e => setForm(f => ({...f, activo: e.target.checked}))} 
-                  className="rounded"
+                  className="w-4 h-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500"
                   disabled={userRole !== 'superadmin'}
                 />
-                <label htmlFor="activo" className="text-sm text-gray-600">Empresa activa</label>
+                <label htmlFor="activo" className="text-sm font-semibold text-gray-700">Mantener empresa activa en el sistema</label>
               </div>
             </div>
 
-            <div className="flex gap-2 mt-5">
-              <button onClick={() => setShowForm(false)} className="flex-1 border border-gray-200 text-gray-600 px-4 py-2.5 rounded-xl text-sm font-semibold hover:bg-gray-50 transition">
+            <div className="flex flex-col sm:flex-row gap-3 mt-8">
+              <button onClick={() => setShowForm(false)} className="w-full sm:w-1/3 border border-gray-200 text-gray-700 px-4 py-3 rounded-xl text-sm font-bold hover:bg-gray-50 transition">
                 Cancelar
               </button>
-              <button onClick={handleSave} disabled={saving} className="flex-1 bg-indigo-600 text-white px-4 py-2.5 rounded-xl text-sm font-semibold hover:bg-indigo-700 transition disabled:opacity-50 flex items-center justify-center gap-2">
-                <Save size={15} /> {saving ? 'Guardando...' : 'Guardar'}
+              <button onClick={handleSave} disabled={saving} className="w-full sm:w-2/3 bg-indigo-600 text-white px-4 py-3 rounded-xl text-sm font-bold hover:bg-indigo-700 transition disabled:opacity-50 flex items-center justify-center gap-2 shadow-md">
+                <Save size={18} /> {saving ? 'Guardando cambios...' : 'Guardar Empresa'}
               </button>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Modal Vincular Usuarios */}
       {vinculandoEmpresa && (

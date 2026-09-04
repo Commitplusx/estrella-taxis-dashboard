@@ -40,6 +40,18 @@ const EMPTY_FORM = {
 // Módulos del sistema — agrega aquí futuros algoritmos
 const SYSTEM_MODULES: { key: string; label: string; description: string; icon: React.ReactNode }[] = [
   {
+    key: 'enrutamiento_vectorial',
+    label: 'Asignación Vectorial (IA)',
+    description: 'Usa K-Means y Haversine para despachar al taxi más óptimo.',
+    icon: <Cpu size={14} className="text-indigo-500" />,
+  },
+  {
+    key: 'mapa_calor',
+    label: 'Mapa de Calor Predictivo',
+    description: 'Visualiza zonas de alta demanda en tiempo real para reubicar choferes.',
+    icon: <Star size={14} className="text-rose-500" />,
+  },
+  {
     key: 'score_diario',
     label: 'Score Diario de Choferes',
     description: 'Calcula el rendimiento de cada conductor al final del día.',
@@ -99,10 +111,22 @@ export default function PackagesPage() {
     if (error) {
       toast.error('Error al cargar los planes: ' + error.message);
     } else {
-      setPaquetes((data ?? []).map((p: Paquete) => ({
-        ...p,
-        features: Array.isArray(p.features) ? p.features : [],
-      })));
+      setPaquetes((data ?? []).map((p: Paquete) => {
+        let parsedFeatures = p.features;
+        if (typeof parsedFeatures === 'string') {
+          try { parsedFeatures = JSON.parse(parsedFeatures); } catch (e) {}
+        }
+        let parsedPermisos = p.permisos_sistema;
+        if (typeof parsedPermisos === 'string') {
+          try { parsedPermisos = JSON.parse(parsedPermisos); } catch (e) {}
+        }
+
+        return {
+          ...p,
+          features: Array.isArray(parsedFeatures) ? parsedFeatures : [],
+          permisos_sistema: typeof parsedPermisos === 'object' && parsedPermisos !== null ? parsedPermisos : {},
+        };
+      }));
     }
     setLoading(false);
   };

@@ -189,9 +189,37 @@ Cuando la herramienta devuelva el resultado, léelo tal cual al cliente y despí
         const urlObj = new URL(req.url);
         const tenantId = urlObj.searchParams.get('tenantId');
         let empresa: Record<string, unknown> | null = null;
+        let permisosSistema: Record<string, boolean> = {};
+
         if (tenantId) {
-          const { data } = await supabase.from('empresas').select('*').eq('id', tenantId).maybeSingle();
-          if (data) empresa = data as Record<string, unknown>;
+          const { data } = await supabase
+            .from('empresas')
+            .select('*, paquete:paquetes(permisos_sistema, incluye_bot)')
+            .eq('id', tenantId)
+            .maybeSingle();
+
+          if (data) {
+            empresa = data as Record<string, unknown>;
+            
+            // ── GATEKEEPING: Validación estricta del Plan ──
+            const paqueteObj = Array.isArray(data.paquete) ? data.paquete[0] : data.paquete;
+            if (paqueteObj && typeof paqueteObj === 'object') {
+              const incluyeBot = (paqueteObj as Record<string, unknown>).incluye_bot === true;
+              if (!incluyeBot) {
+                console.warn(`[GATEKEEPING] Intento de uso de Vapi (Bot de Voz) en empresa sin plan autorizado. TenantID: ${tenantId}`);
+                return new Response(JSON.stringify({
+                  results: [{
+                    toolCallId: toolCallInfo.toolCall.id,
+                    result: "Tu plan actual no incluye el servicio de despacho automático por bot. Comunícate con soporte."
+                  }]
+                }), {
+                  headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+                  status: 200
+                });
+              }
+              permisosSistema = (paqueteObj.permisos_sistema as Record<string, boolean>) ?? {};
+            }
+          }
         }
 
         // Cada empresa puede estar en una ciudad diferente, usamos la suya o Comitán de respaldo
@@ -206,7 +234,7 @@ Cuando la herramienta devuelva el resultado, léelo tal cual al cliente y despí
         if (locOrigen && locOrigen.lat !== null && locOrigen.lng !== null) {
           console.log(`[TRACCAR] Coordenadas encontradas (Lat: ${locOrigen.lat}, Lng: ${locOrigen.lng}). Conectando a Traccar para buscar unidades...`);
           try {
-            nearestTaxi = await getNearestTaxi(locOrigen.lat, locOrigen.lng);
+            nearestTaxi = await getNearestTaxi(locOrigen.lat, locOrigen.lng, permisosSistema);
             if (nearestTaxi) {
               // distanceKm * 1000 para convertir a metros legibles en el log
               console.log(`[TRACCAR EXITO] Unidad más cercana encontrada: ${nearestTaxi.name} a ${Math.round(nearestTaxi.distanceKm * 1000)} metros.`);

@@ -74,7 +74,7 @@ async function traccarGet<T>(cookie: string, path: string): Promise<T[]> {
 
 import { findOptimalTaxi } from "./algorithms/headingMatcher.ts";
 
-export async function getNearestTaxi(lat: number, lng: number): Promise<{ name: string; distanceKm: number; deviceId: number } | null> {
+export async function getNearestTaxi(lat: number, lng: number, permisos: Record<string, boolean> = {}): Promise<{ name: string; distanceKm: number; deviceId: number } | null> {
   try {
     const cookie = await traccarLogin();
     
@@ -84,20 +84,29 @@ export async function getNearestTaxi(lat: number, lng: number): Promise<{ name: 
       traccarGet<TraccarPosition>(cookie, '/positions')
     ]);
 
-    // Delegamos la lógica al módulo de algoritmo Vectorial
-    const result = findOptimalTaxi(devices, positions, lat, lng, 10);
-    
-    if (result.success) {
-      console.log(`[TRACCAR] Taxi óptimo encontrado en ${result.data.performanceMs}ms: ${result.data.name} a ${result.data.distanceKm.toFixed(2)}km`);
-      return { 
-        name: result.data.name, 
-        distanceKm: result.data.distanceKm, 
-        deviceId: result.data.deviceId 
-      };
+    // ── FEATURE FLAG: Enrutamiento Vectorial ──
+    const usaVectorial = permisos.enrutamiento_vectorial !== false; // Activo por defecto a menos que se apague explícitamente
+
+    if (usaVectorial) {
+      console.log(`[FEATURE FLAGS] Usando Enrutamiento Vectorial (Heading Matcher).`);
+      const result = findOptimalTaxi(devices, positions, lat, lng, 10);
+      
+      if (result.success) {
+        console.log(`[TRACCAR] Taxi óptimo encontrado en ${result.data.performanceMs}ms: ${result.data.name} a ${result.data.distanceKm.toFixed(2)}km`);
+        return { 
+          name: result.data.name, 
+          distanceKm: result.data.distanceKm, 
+          deviceId: result.data.deviceId 
+        };
+      } else {
+        console.warn(`[TRACCAR] No se asignó taxi por Vectorial: ${result.error}`);
+        return null;
+      }
     } else {
-      console.warn(`[TRACCAR] No se asignó taxi: ${result.error}`);
+      console.log(`[FEATURE FLAGS] Enrutamiento vectorial apagado para esta empresa. (Lógica pendiente)`);
       return null;
     }
+    
   } catch (e) {
     console.error('[TRACCAR] Error buscando taxi más cercano:', e);
   }

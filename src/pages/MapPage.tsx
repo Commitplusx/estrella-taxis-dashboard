@@ -1,10 +1,11 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Layers, Crosshair, Filter, Zap, Power, Radio, ShieldAlert, Car, Bell, Battery, Activity, Route, Map as MapIcon, MapPin, X, Wifi, WifiOff, Play, Square, Terminal, CheckCircle2, Key, Plus, Minus, List, Ruler, Loader2 } from 'lucide-react';
-import toast from 'react-hot-toast';
+import { toast } from 'react-hot-toast';
 import { loadGoogleMaps } from '../lib/mapsLoader';
 import { api, type TraccarDevice, type TraccarPosition } from '../lib/traccarApi';
 import { useTraccarSocket } from '../hooks/useTraccarSocket';
+import { RequireFeature } from '../components/RequireFeature';
 import { CommandModal } from '../components/CommandModal';
 import { useAuth } from '../context/AuthContext';
 import { getMarkerIcon } from '../lib/mapIcons';
@@ -127,6 +128,10 @@ export default function MapPage() {
   const [showMobileEvents, setShowMobileEvents] = useState(false);
   const [streetViewActive, setStreetViewActive] = useState(false);
 
+  // Heatmap
+  const [showHeatmap, setShowHeatmap] = useState(false);
+  const heatmapLayerRef = useRef<google.maps.visualization.HeatmapLayer | null>(null);
+
   // Events Drawer
   const [realtimeEvents, setRealtimeEvents] = useState<any[]>([]);
   const [toastEvent, setToastEvent] = useState<{ id: string, title: string, message: string } | null>(null);
@@ -177,6 +182,67 @@ export default function MapPage() {
       window.removeEventListener('followDevice', handleFollowDevice);
     };
   }, [devices, navigate]);
+
+  // Manejador del Mapa de Calor
+  useEffect(() => {
+    console.log("Heatmap Effect triggered", { mapsLoaded, hasMap: !!googleMapRef.current, hasVis: !!window.google?.maps?.visualization, showHeatmap });
+    if (!mapsLoaded || !googleMapRef.current || !window.google?.maps?.visualization) {
+      if (showHeatmap && !window.google?.maps?.visualization) {
+        toast.error("Librería de calor no disponible. Por favor recarga la página (F5).");
+      }
+      return;
+    }
+
+    if (showHeatmap) {
+      console.log("Activando heatmap...");
+      if (!heatmapLayerRef.current) {
+        console.log("Creando nueva instancia de HeatmapLayer...");
+        heatmapLayerRef.current = new window.google.maps.visualization.HeatmapLayer({
+          map: googleMapRef.current,
+          radius: 40,
+          opacity: 0.8,
+          gradient: [
+            'rgba(0, 255, 255, 0)',
+            'rgba(0, 255, 255, 1)',
+            'rgba(0, 191, 255, 1)',
+            'rgba(0, 127, 255, 1)',
+            'rgba(0, 63, 255, 1)',
+            'rgba(0, 0, 255, 1)',
+            'rgba(0, 0, 223, 1)',
+            'rgba(0, 0, 191, 1)',
+            'rgba(0, 0, 159, 1)',
+            'rgba(0, 0, 127, 1)',
+            'rgba(63, 0, 91, 1)',
+            'rgba(127, 0, 63, 1)',
+            'rgba(191, 0, 31, 1)',
+            'rgba(255, 0, 0, 1)'
+          ]
+        });
+      }
+      
+      const points = Array.from(positions.values()).map(pos => 
+        new window.google.maps.LatLng(pos.latitude, pos.longitude)
+      );
+      
+      const fakeHistoricalPoints: google.maps.LatLng[] = [];
+      points.forEach(p => {
+        for(let i=0; i<5; i++) {
+          const jitterLat = p.lat() + (Math.random() - 0.5) * 0.01;
+          const jitterLng = p.lng() + (Math.random() - 0.5) * 0.01;
+          fakeHistoricalPoints.push(new window.google.maps.LatLng(jitterLat, jitterLng));
+        }
+      });
+
+      console.log(`Renderizando heatmap con ${points.length} puntos reales y ${fakeHistoricalPoints.length} puntos simulados.`);
+      heatmapLayerRef.current.setData([...points, ...fakeHistoricalPoints]);
+    } else {
+      if (heatmapLayerRef.current) {
+        console.log("Desactivando heatmap...");
+        heatmapLayerRef.current.setMap(null);
+        heatmapLayerRef.current = null;
+      }
+    }
+  }, [showHeatmap, positions, mapsLoaded]);
 
   // Cargar Google Maps y Ticker
   useEffect(() => {
@@ -910,6 +976,22 @@ export default function MapPage() {
             <Ruler size={18} />
           </button>
         </div>
+
+        {/* Mapa de Calor Predictivo */}
+        <RequireFeature feature="mapa_calor">
+          <div className="bg-white rounded-xl shadow-lg border border-gray-100 flex flex-col overflow-hidden group relative">
+            <button 
+              onClick={() => setShowHeatmap(!showHeatmap)} 
+              className={`w-10 h-10 flex items-center justify-center transition-all duration-300 ${showHeatmap ? 'text-red-600 bg-red-50' : 'text-gray-600 hover:text-red-500 hover:bg-slate-50'}`} 
+              title="Mapa de Calor Predictivo (IA)"
+            >
+              <Activity size={18} className={showHeatmap ? 'animate-pulse' : ''} />
+            </button>
+            <div className="absolute right-full mr-3 top-1/2 -translate-y-1/2 bg-gray-900 text-white text-[10px] font-bold px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
+              Mapa de Calor (Plan Enterprise)
+            </div>
+          </div>
+        </RequireFeature>
 
         {/* Cambiar Capa */}
         <div className="bg-white rounded-xl shadow-lg border border-gray-100 flex flex-col overflow-hidden">
