@@ -19,10 +19,13 @@ const activeCalls = new Map();
 // Cada SPEAK espera a que el anterior termine antes de reproducirse.
 // ─────────────────────────────────────────────────────────────────────────────
 const speakQueues = new Map(); // callControlId → Promise (la última en la cola)
+const pendingSpeaks = new Map(); // callControlId → number (audios pendientes en la cola)
 
 function enqueueSpeak(callControlId, fn) {
   const prev = speakQueues.get(callControlId) || Promise.resolve();
-  const next = prev.then(() => fn()).catch(() => {});
+  const next = prev.then(() => fn()).catch((err) => {
+    console.error(`[ENQUEUE ERROR] ${callControlId}:`, err);
+  });
   speakQueues.set(callControlId, next);
   return next;
 }
@@ -59,6 +62,7 @@ async function streamTextToCall(callControlId, text) {
       const res = await fetch(`https://texttospeech.googleapis.com/v1/text:synthesize?key=${GCP_API_KEY}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        signal: AbortSignal.timeout(4500),
         body: JSON.stringify({
           input: { text: text },
           voice: { languageCode: "es-US", name: "es-US-Chirp3-HD-Aoede" }, // Chirp3 HD - voz más natural de Google
@@ -123,13 +127,21 @@ async function streamTextToCall(callControlId, text) {
       resolve(false);
     }
   }).then((success) => {
-    // Cuando el timer de duración termina, avisamos a Supabase que ya puede escuchar al cliente.
-    console.log(`[VPS] Google Cloud TTS terminó físicamente para ${callControlId}, liberando Supabase...`);
-    fetch('https://knghdwpxheenkpuajkxl.supabase.co/functions/v1/telnyx-voice-bot', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ data: { event_type: "vps.speak.ended", payload: { call_control_id: callControlId } } })
-    }).catch(err => console.error('[VPS -> SUPABASE ALERT ERROR]', err));
+    // Decrementamos el contador de audios pendientes para esta llamada
+    const remaining = Math.max(0, (pendingSpeaks.get(callControlId) || 1) - 1);
+    pendingSpeaks.set(callControlId, remaining);
+
+    if (remaining === 0) {
+      // Cuando la cola física de audios queda en 0, avisamos a Supabase que ya puede escuchar al cliente.
+      console.log(`[VPS] Todos los audios en cola terminaron para ${callControlId}, liberando Supabase...`);
+      fetch('https://knghdwpxheenkpuajkxl.supabase.co/functions/v1/telnyx-voice-bot', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ data: { event_type: "vps.speak.ended", payload: { call_control_id: callControlId } } })
+      }).catch(err => console.error('[VPS -> SUPABASE ALERT ERROR]', err));
+    } else {
+      console.log(`[VPS] Audio terminado pero quedan ${remaining} audios pendientes en cola para ${callControlId}. Micrófono sigue protegido contra eco.`);
+    }
     
     return success;
   });
@@ -165,6 +177,10 @@ app.post('/speak', async (req, res) => {
   }
 
   console.log(`[SPEAK] callControlId=${callControlId} hangupAfter=${hangupAfter}`);
+
+  // Incrementamos contador de audios en cola para esta llamada
+  const currentCount = (pendingSpeaks.get(callControlId) || 0) + 1;
+  pendingSpeaks.set(callControlId, currentCount);
 
   // FIRE AND FORGET con cola: No esperamos, pero garantizamos orden de reproducción.
   enqueueSpeak(callControlId, () => streamTextToCall(callControlId, text)).then((success) => {
@@ -250,6 +266,8 @@ wss.on('connection', (ws, req) => {
           console.log(`[WS STOP] Llamada terminada: ${callControlId}`);
           if (callControlId) {
             activeCalls.delete(callControlId);
+            speakQueues.delete(callControlId);
+            pendingSpeaks.delete(callControlId);
             console.log(`[WS] Llamadas activas restantes: ${activeCalls.size}`);
           }
           break;
@@ -266,6 +284,8 @@ wss.on('connection', (ws, req) => {
   ws.on('close', (code, reason) => {
     if (callControlId) {
       activeCalls.delete(callControlId);
+      speakQueues.delete(callControlId);
+      pendingSpeaks.delete(callControlId);
       console.log(`[WS CLOSED] ${callControlId} | Código: ${code} | Activas: ${activeCalls.size}`);
     }
   });
@@ -286,6 +306,15 @@ setInterval(() => {
     }
   }
 }, 5 * 60 * 1000);
+
+// Protecciones contra caídas del proceso
+process.on('uncaughtException', (err) => {
+  console.error('[UNCAUGHT EXCEPTION]', err);
+});
+
+process.on('unhandledRejection', (reason) => {
+  console.error('[UNHANDLED REJECTION]', reason);
+});
 
 server.listen(PORT, () => {
   console.log(`🚕 Pompeyo Express WebSocket Server corriendo en puerto ${PORT}`);

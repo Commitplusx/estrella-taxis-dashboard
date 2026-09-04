@@ -33,15 +33,30 @@ const TRACCAR_EMAIL = Deno.env.get('TRACCAR_EMAIL')!;
 const TRACCAR_PASSWORD = Deno.env.get('TRACCAR_PASSWORD')!;
 
 async function traccarLogin(): Promise<string> {
+  console.log(`[TRACCAR LOGIN] Intentando login en: ${TRACCAR_BASE}/session`);
+  console.log(`[TRACCAR LOGIN] Email: ${TRACCAR_EMAIL}, Password length: ${TRACCAR_PASSWORD?.length}`);
+
   const res = await fetch(`${TRACCAR_BASE}/session`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: `email=${encodeURIComponent(TRACCAR_EMAIL)}&password=${encodeURIComponent(TRACCAR_PASSWORD)}`,
   });
 
-  if (!res.ok) throw new Error(`Traccar login failed: ${res.status}`);
+  console.log(`[TRACCAR LOGIN] Status: ${res.status} ${res.statusText}`);
+  
+  // Log all headers to debug cookie issue
+  const headersObj: Record<string, string> = {};
+  res.headers.forEach((v, k) => { headersObj[k] = v; });
+  console.log(`[TRACCAR LOGIN] Headers recibidos:`, JSON.stringify(headersObj));
+
+  if (!res.ok) {
+    const body = await res.text();
+    console.error(`[TRACCAR LOGIN] Body de error:`, body);
+    throw new Error(`Traccar login failed: ${res.status}`);
+  }
 
   const cookie = res.headers.get('set-cookie');
+  console.log(`[TRACCAR LOGIN] Cookie obtenida: ${cookie ? 'SÍ ✓' : 'NO ✗ - revisar headers arriba'}`);
   if (!cookie) throw new Error('No session cookie from Traccar');
   return cookie;
 }
@@ -57,20 +72,9 @@ async function traccarGet<T>(cookie: string, path: string): Promise<T[]> {
   return await res.json();
 }
 
-// Fórmula de Haversine para calcular distancia en kilómetros entre dos coordenadas
-function getDistanceFromLatLonInKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
-  const R = 6371; // Radio de la tierra en km
-  const dLat = (lat2 - lat1) * (Math.PI / 180);
-  const dLon = (lon2 - lon1) * (Math.PI / 180);
-  const a = 
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) * 
-    Math.sin(dLon / 2) * Math.sin(dLon / 2); 
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)); 
-  return R * c;
-}
+import { findOptimalTaxi } from "./algorithms/headingMatcher.ts";
 
-export async function getNearestTaxi(lat: number, lng: number): Promise<{ name: string; distanceKm: number } | null> {
+export async function getNearestTaxi(lat: number, lng: number): Promise<{ name: string; distanceKm: number; deviceId: number } | null> {
   try {
     const cookie = await traccarLogin();
     
@@ -80,31 +84,19 @@ export async function getNearestTaxi(lat: number, lng: number): Promise<{ name: 
       traccarGet<TraccarPosition>(cookie, '/positions')
     ]);
 
-    if (!positions || positions.length === 0) return null;
-
-    let nearestTaxi: TraccarDevice | undefined;
-    let minDistance = Infinity;
-
-    // Buscar el dispositivo más cercano
-    for (const pos of positions) {
-      const device = devices.find(d => d.id === pos.deviceId);
-      
-      // Ignorar taxis apagados / offline
-      if (!device || device.status === 'offline') continue;
-
-      const distance = getDistanceFromLatLonInKm(lat, lng, pos.latitude, pos.longitude);
-      if (distance < minDistance) {
-        minDistance = distance;
-        nearestTaxi = device;
-      }
-    }
-
-    // Solo asignar si el taxi está a un máximo de 10 km
-    if (nearestTaxi && minDistance <= 10) {
-      console.log(`[TRACCAR] Taxi más cercano: ${nearestTaxi.name} a ${minDistance.toFixed(2)} km`);
-      return { name: nearestTaxi.name, distanceKm: minDistance };
-    } else if (nearestTaxi) {
-      console.log(`[TRACCAR] Se encontró a ${nearestTaxi.name} pero está muy lejos (${minDistance.toFixed(2)} km). Se descarta.`);
+    // Delegamos la lógica al módulo de algoritmo Vectorial
+    const result = findOptimalTaxi(devices, positions, lat, lng, 10);
+    
+    if (result.success) {
+      console.log(`[TRACCAR] Taxi óptimo encontrado en ${result.data.performanceMs}ms: ${result.data.name} a ${result.data.distanceKm.toFixed(2)}km`);
+      return { 
+        name: result.data.name, 
+        distanceKm: result.data.distanceKm, 
+        deviceId: result.data.deviceId 
+      };
+    } else {
+      console.warn(`[TRACCAR] No se asignó taxi: ${result.error}`);
+      return null;
     }
   } catch (e) {
     console.error('[TRACCAR] Error buscando taxi más cercano:', e);

@@ -1,0 +1,4 @@
+ALTER TABLE public.viajes
+ADD COLUMN destino_lat DOUBLE PRECISION,
+ADD COLUMN destino_lng DOUBLE PRECISION,
+ADD COLUMN distancia_estimada_km DOUBLE PRECISION;

@@ -11,7 +11,19 @@ export interface DispatchData {
   tarifa: number | string | null;
   nearestTaxiName?: string;
   nearestTaxiDist?: number;
-  dispatcherPhoneOverride?: string; // Sobrescribe DISPATCHER_PHONE para multi-tenant
+  trackingUrl?: string;           // Link de seguimiento en tiempo real para el despachador
+  dispatcherPhoneOverride?: string;
+}
+
+// Enviar cualquier mensaje de WhatsApp a cualquier número — usado para el link de tracking al cliente
+export async function sendWhatsApp(to: string, body: string) {
+  if (!YCLOUD_API_KEY) return;
+  const res = await fetch('https://api.ycloud.com/v2/whatsapp/messages', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-API-Key': YCLOUD_API_KEY },
+    body: JSON.stringify({ from: YCLOUD_SENDER, to, type: 'text', text: { body } }),
+  });
+  if (!res.ok) console.error('[YCLOUD SEND ERROR]', await res.text());
 }
 
 export async function dispatchToHuman(data: DispatchData) {
@@ -24,7 +36,7 @@ export async function dispatchToHuman(data: DispatchData) {
   const target = data.dispatcherPhoneOverride || DISPATCHER_PHONE;
 
   const dispatchExtraText = data.nearestTaxiName
-    ? `\n\n🟢 *Unidad más cercana:* ${data.nearestTaxiName} (a ${data.nearestTaxiDist?.toFixed(1)} km)`
+    ? `\n\n🟢 *Unidad más cercana:* ${data.nearestTaxiName} (a ${data.nearestTaxiDist?.toFixed(1)} km)${data.trackingUrl ? `\n📺 *Seguimiento en vivo:* ${data.trackingUrl}` : ''}`
     : `\n\n⚠️ *Atención:* No hay unidades disponibles cerca en Traccar.`;
 
   const tarifaFormateada = typeof data.tarifa === 'number'

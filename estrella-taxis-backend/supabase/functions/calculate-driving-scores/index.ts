@@ -86,7 +86,7 @@ async function traccarLogin(): Promise<string> {
   return cookie;
 }
 
-async function traccarGet(cookie: string, path: string): Promise<any[]> {
+async function traccarGet<T>(cookie: string, path: string): Promise<T[]> {
   const res = await fetch(`${TRACCAR_BASE}${path}`, {
     headers: { Cookie: cookie, Accept: 'application/json' },
   });
@@ -95,6 +95,12 @@ async function traccarGet(cookie: string, path: string): Promise<any[]> {
     return [];
   }
   return res.json();
+}
+
+interface RawTraccarDevice {
+  id: number;
+  name?: string;
+  [key: string]: unknown;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -152,7 +158,20 @@ function chiapasDateRange(dateStr: string): { from: string; to: string } {
 
 // ─── Parsing de posiciones ────────────────────────────────────────────────────
 
-function parsePositions(raw: any[]): Position[] {
+interface RawTraccarPosition {
+  fixTime?: string;
+  deviceTime?: string;
+  serverTime?: string;
+  latitude: number | string;
+  longitude: number | string;
+  speed?: number | string;
+  attributes?: {
+    ignition?: boolean;
+    [key: string]: unknown;
+  };
+}
+
+function parsePositions(raw: RawTraccarPosition[]): Position[] {
   const list: Position[] = [];
 
   for (const p of raw) {
@@ -342,9 +361,9 @@ Deno.serve(async (req) => {
     const cookie = await traccarLogin();
 
     // Obtener todos los dispositivos
-    const devicesRaw = await traccarGet(cookie, '/devices');
+    const devicesRaw = await traccarGet<RawTraccarDevice>(cookie, '/devices');
     let devices = filterDeviceId
-      ? devicesRaw.filter((d: any) => d.id === filterDeviceId)
+      ? devicesRaw.filter((d) => d.id === filterDeviceId)
       : devicesRaw;
 
     // ── Feature flag: solo calcular para empresas con score_diario activo ──────
@@ -366,16 +385,25 @@ Deno.serve(async (req) => {
         // 2. Construir el set de device IDs permitidos
         const allowedDeviceIds = new Set<number>();
         for (const emp of (empresasPermitidas ?? [])) {
-          const permisos = (emp.paquete as any)?.permisos_sistema ?? {};
-          if (!permisos.score_diario) continue;
+          let permisos: Record<string, boolean> = {};
+          
+          if (Array.isArray(emp.paquete) && emp.paquete.length > 0) {
+            const firstPaquete = emp.paquete[0] as Record<string, unknown>;
+            if (firstPaquete && typeof firstPaquete === 'object') {
+              permisos = (firstPaquete.permisos_sistema as Record<string, boolean>) ?? {};
+            }
+          } else if (emp.paquete && typeof emp.paquete === 'object' && !Array.isArray(emp.paquete)) {
+             permisos = ((emp.paquete as Record<string, unknown>).permisos_sistema as Record<string, boolean>) ?? {};
+          }
 
-          // La empresa guarda sus device IDs en un array
-          const ids: number[] = emp.traccar_device_ids ?? [];
+          if (!permisos.score_diario) continue;
+          
+          const ids: number[] = (emp.traccar_device_ids as number[]) ?? [];
           for (const id of ids) allowedDeviceIds.add(id);
         }
 
         const totalBefore = devices.length;
-        devices = devices.filter((d: any) => allowedDeviceIds.has(d.id));
+        devices = devices.filter((d) => allowedDeviceIds.has(d.id));
         console.log(`🔑 Feature flag score_diario: ${devices.length}/${totalBefore} vehículos permitidos`);
       }
     }
@@ -387,11 +415,11 @@ Deno.serve(async (req) => {
     const errors: string[] = [];
 
     for (const device of devices) {
-      const deviceId   = device.id as number;
-      const deviceName = (device.name as string) ?? `Vehículo ${deviceId}`;
+      const deviceId   = device.id;
+      const deviceName = device.name ?? `Vehículo ${deviceId}`;
 
       try {
-        const rawRoute = await traccarGet(
+        const rawRoute = await traccarGet<RawTraccarPosition>(
           cookie,
           `/reports/route?deviceId=${deviceId}&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
         );
@@ -405,8 +433,8 @@ Deno.serve(async (req) => {
         const score = analyzeRoute(positions, deviceId, deviceName, dateStr);
         results.push(score);
         console.log(`✅ ${deviceName}: score=${score.score} (${score.scoreLabel})`);
-      } catch (err) {
-        const msg = `❌ ${deviceName}: ${err instanceof Error ? err.message : err}`;
+      } catch (err: unknown) {
+        const msg = `❌ ${deviceName}: ${err instanceof Error ? err.message : String(err)}`;
         console.error(msg);
         errors.push(msg);
       }
@@ -450,10 +478,11 @@ Deno.serve(async (req) => {
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
     );
-  } catch (err: any) {
-    console.error('Fatal error:', err);
+  } catch (err: unknown) {
+    const errMsg = err instanceof Error ? err.message : String(err);
+    console.error('Fatal error:', errMsg);
     return new Response(
-      JSON.stringify({ error: err.message }),
+      JSON.stringify({ error: 'Internal Server Error', details: errMsg }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
     );
   }

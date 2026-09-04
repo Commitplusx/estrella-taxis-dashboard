@@ -99,7 +99,10 @@ async function sendAdminAlert(message: string) {
 async function setBotSpeaking(callControlId: string, isSpeaking: boolean) {
   await supabase
     .from('telnyx_active_calls')
-    .update({ bot_speaking: isSpeaking })
+    .update({ 
+      bot_speaking: isSpeaking,
+      updated_at: new Date().toISOString()
+    })
     .eq('call_control_id', callControlId);
 }
 
@@ -218,8 +221,7 @@ async function speakAndListen(callControlId: string, text: string, hangupNext = 
   console.log('[PLAY] Enviando texto al VPS para Google Cloud TTS (Fire and forget)...');
 
   try {
-    // Mandamos el audio al VPS, pero NO ESPERAMOS a que termine. (Fire and forget).
-    // Esto es vital para regresar el 200 OK a Telnyx instantáneamente y evitar el deadlock.
+    // Mandamos el audio al VPS con fallback automático a Telnyx si el VPS no responde
     fetch('https://taxis.estrella-eats.mx/ws-voice/speak', {
       method: 'POST',
       headers: {
@@ -231,12 +233,27 @@ async function speakAndListen(callControlId: string, text: string, hangupNext = 
         text,
         hangupAfter: hangupNext ? Math.max(3000, (text.length / 12) * 1000) : null
       })
-    }).catch(err => {
-      console.error('[VPS STREAM ERROR]', err);
+    }).then(async (res) => {
+      if (!res.ok) {
+        console.warn(`[VPS STREAM ERROR] Status ${res.status}. Disparando fallback nativo Telnyx TTS`);
+        await telnyxAction(callControlId, 'speak', {
+          payload: text,
+          voice: 'female',
+          language: 'es-MX',
+          client_state: hangupNext ? btoa('hangup_next') : undefined
+        });
+      }
+    }).catch(async (err) => {
+      console.error('[VPS STREAM NETWORK ERROR] Activando fallback nativo Telnyx TTS:', err);
+      await telnyxAction(callControlId, 'speak', {
+        payload: text,
+        voice: 'female',
+        language: 'es-MX',
+        client_state: hangupNext ? btoa('hangup_next') : undefined
+      });
     });
 
     console.log(`[VPS SPEAK INICIADO] callControlId=${callControlId}`);
-    // No reseteamos bot_speaking aquí. Esperaremos el webhook vps.speak.ended.
   } catch (err) {
     console.error('[VPS STREAM EXCEPTION]', err);
     await setBotSpeaking(callControlId, false);
@@ -285,9 +302,9 @@ async function parseWithGemini(callId: string, transcript: string, injectedSyste
 
   switch (empresa?.tipo_negocio) {
     case 'taxi':
-      objetivoPrompt = 'OBJETIVO: Sacar 3 datos (ORIGEN (CALLE Y COLONIA EXACTA), DESTINO, TELÉFONO). Si da una dirección ambigua, pregunta la colonia o referencia.';
-      camposJsonPrompt = `"origen":"la calle y colonia de origen", "destino":"el destino del viaje", "telefono":"teléfono del cliente"`;
-      validacionListaPrompt = 'Solo pon "viaje_listo": true cuando el cliente confirme y estés 100% seguro de la COLONIA de origen.';
+      objetivoPrompt = 'OBJETIVO: Sacar 3 datos (ORIGEN, DESTINO, TELÉFONO). Con que te den un punto de referencia (ej. un Oxxo, una colonia o un local) es suficiente como ORIGEN, NO los obligues a dar calle y número exacto.';
+      camposJsonPrompt = `"origen":"lugar de partida del cliente", "destino":"el destino del viaje", "telefono":"teléfono del cliente"`;
+      validacionListaPrompt = 'Solo pon "viaje_listo": true cuando tengas los 3 datos.';
       break;
     case 'restaurante':
     case 'farmacia':
@@ -307,24 +324,33 @@ async function parseWithGemini(callId: string, transcript: string, injectedSyste
       break;
   }
 
-  const systemPrompt = `Eres el asistente virtual de voz llamado "${nombreBot}", del servicio "${nombreEmpresa}".
-Tu trabajo es atender al cliente de manera súper cálida, rápida y natural. Eres humano, no un robot.
+  const systemPrompt = `Eres el despachador virtual de voz llamado "${nombreBot}", de la base de radio taxis "${nombreEmpresa}".
+Tu trabajo es atender al cliente de manera súper cálida, rápida, atenta y 100% natural, como un despachador humano de radio taxi en México.
 
-INFORMACIÓN DE LA EMPRESA:
-${infoEmpresa}
+INFORMACIÓN Y PREGUNTAS FRECUENTES (FAQ):
+- Servicio y horario: ¡Laborando y activos 24/7 (las 24 horas del día, los 365 días del año)! SIEMPRE hay taxis disponibles.
+- Tiempos de llegada: La unidad llega en promedio de 5 a 10 minutos.
+- Tarifas: Van desde $45 a $50 pesos según la colonia/distancia.
+- Mascotas: Sí se aceptan avisando con anticipación.
+- Métodos de pago: Efectivo y la gran mayoría de unidades cuenta con transferencia bancaria o tarjeta.
+- Facturación: Sí se emite factura.
+${infoEmpresa ? `\nInformación adicional: ${infoEmpresa}` : ''}
 
-REGLAS ESTRICTAS PARA QUE SUENES HUMANO Y FLUIDO:
-1. SÉ SÚPER CONVERSACIONAL Y RELAJADO. Responde en MÁXIMO 15 palabras por turno. Una sola oración corta. No te explayes.
-2. USA MULETILLAS NATURALES. Arranca SIEMPRE tus respuestas con una palabra muy corta de reconocimiento como "Claro,", "Va,", "Ok,", "Sí,", "Oye,". NUNCA empieces directo con la respuesta larga.
-3. Sé muy coloquial mexicano ("va que va", "claro que sí", "listísimo", "sale y vale", "órale", "qué onda").
+REGLAS CONVERSACIONALES:
+1. SI PREGUNTAN SI ESTÁN LABORANDO / TRABAJANDO / HAY SERVICIO / HAY TAXIS:
+   Responde con certeza inmediata y calidez: "¡Sí, claro que sí! Estamos trabajando las 24 horas, ¿para dónde necesitas tu taxi?"
+2. SI PREGUNTAN PRECIOS O TARIFAS:
+   Responde directo: "Las tarifas van desde $45 o $50 pesos según la zona. ¿De qué calle a qué destino sería tu viaje?"
+3. SI SOLO SALUDAN O PREGUNTAN CUALQUIER DUDA:
+   Responde su saludo o duda con amabilidad antes de pedir datos. No interrogues en seco.
 4. ${objetivoPrompt}
-5. MANTÉN LA MEMORIA: Usa el ESTADO ACTUAL. Si ya tienes un dato, guárdalo en tu JSON. Si hay uno nuevo, actualízalo.
-6. CONFIRMACIÓN Y TELÉFONOS (MUY IMPORTANTE): Cuando tengas los 3 datos, confírmaselos. PARA EL NÚMERO DE TELÉFONO: En el texto hablado, SIEMPRE escribe los números separados por guiones (ej. "9-6-1-1-2-3-4-5-6-7") para que la voz lo lea bien. Dile: "A ver, te confirmo: vas de [Dato 1] a [Dato 2], y tu cel es [T-e-l-e-f-o-n-o], ¿todo bien?" y espera el sí. ${validacionListaPrompt}
-7. NO repitas como perico. Si el cliente duda o hace pausas, responde de forma empática y no repitas todo el choro. 
-8. CONFUSIÓN: Si el cliente habla tonterías o no se entiende, pon "cliente_confundido": true.
-9. NADA de emojis ni asteriscos. Texto plano.
-10. Responde ÚNICAMENTE en JSON con este formato estricto:
-{"razonamiento":"qué tengo y qué falta","respuesta_hablada":"tu frase súper natural y corta", ${camposJsonPrompt}, "viaje_listo":false,"cliente_confundido":false}
+5. MANTÉN LA MEMORIA: Usa el ESTADO ACTUAL. Si ya tienes un dato, consérvalo. Si hay uno nuevo, actualízalo.
+6. CONFIRMACIÓN Y TELÉFONOS: Cuando tengas origen, destino y teléfono, confírmalos al cliente: "Te confirmo: vas de [Origen] a [Destino], y tu cel es [T-e-l-e-f-o-n-o con guiones], ¿correcto?" y espera el sí. ${validacionListaPrompt}
+7. RESPUESTAS CORTAS Y DIRECTAS: MÁXIMO 15 a 18 palabras por turno. Una sola oración natural y fluida.
+8. LENGUAJE COLOQUIAL MEXICANO: "Claro que sí", "Con gusto", "Enterado", "Va que va", "Sale", "Buenas tardes".
+9. CONFUSIÓN: Si el cliente habla cosas sin sentido o no se entiende, pon "cliente_confundido": true.
+10. TONO SUAVE: Cuando pidas datos faltantes (como la calle o el teléfono), hazlo con un tono muy suave, amable y servicial, pero siendo súper claro y directo en lo que necesitas para que el cliente no se confunda.
+11. NADA de emojis ni asteriscos. Texto 100% plano.
 
 ESTADO ACTUAL (MEMORIA INBORRABLE DE LA BASE DE DATOS):
 - Origen: ${currentOrigen}
@@ -336,29 +362,82 @@ ${newHistory}
 
 ${injectedSystemMessage ? `[⚠️ MENSAJE INTERNO DEL SISTEMA PARA TI (NO LO LEAS LITERAL, ÚSALO PARA RESPONDERLE AL CLIENTE): ${injectedSystemMessage}]` : ''}`;
 
-  // gemini-3.7-flash: último modelo de Google (agosto 2026), optimizado para agentic workflows
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.7-flash:generateContent?key=${GEMINI_API_KEY}`;
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      contents: [{ parts: [{ text: systemPrompt }] }],
-      generationConfig: { 
-        temperature: 0.3,
-        maxOutputTokens: 800  // Suficiente para JSON completo + respuesta de 1-2 oraciones
-      },
-    }),
-  });
+  const responseSchema = {
+    type: "OBJECT",
+    properties: {
+      razonamiento: { type: "STRING" },
+      respuesta_hablada: { type: "STRING" },
+      origen: { type: "STRING" },
+      destino: { type: "STRING" },
+      telefono: { type: "STRING" },
+      viaje_listo: { type: "BOOLEAN" },
+      cliente_confundido: { type: "BOOLEAN" }
+    },
+    required: ["respuesta_hablada", "viaje_listo", "cliente_confundido"]
+  };
 
-  if (!res.ok) {
-    const errText = await res.text();
-    console.error('[GEMINI ERROR]', errText);
-    await sendAdminAlert(`Fallo de conexión con Gemini API (Google AI).\nError:\n${errText.slice(0, 200)}`);
-    return { respuesta_hablada: 'Tuve un problema técnico. Por favor, llama de nuevo.', origen: null, destino: null, viaje_listo: false, cliente_confundido: true };
+  // La respuesta JSON ahora la pedimos directo en el prompt porque Groq con JSON mode requiere que la palabra "JSON" esté en el prompt.
+  const systemPromptFinal = systemPrompt + "\n\nResponde ÚNICAMENTE con un objeto JSON válido que siga esta estructura: { razonamiento, respuesta_hablada, origen, destino, telefono, viaje_listo, cliente_confundido }";
+
+  async function queryGroq(modelName: string) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
+    try {
+      const url = `https://api.groq.com/openai/v1/chat/completions`;
+      const groqKey = Deno.env.get('GROQ_API_KEY');
+      
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${groqKey}`
+        },
+        signal: controller.signal,
+        body: JSON.stringify({
+          model: modelName,
+          messages: [
+            { role: "system", content: "Eres un despachador de taxis. Responde ÚNICAMENTE con un objeto JSON válido." },
+            { role: "user", content: systemPromptFinal }
+          ],
+          temperature: 0.2,
+          max_tokens: 1024
+        }),
+      });
+      clearTimeout(timeoutId);
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${await res.text()}`);
+      }
+      return await res.json();
+    } catch (err) {
+      clearTimeout(timeoutId);
+      throw err;
+    }
   }
 
-  const data    = await res.json();
-  const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
+  let data: any = null;
+  try {
+    // 1. Usar modelo optimizado para velocidad en Groq (GPT OSS 20B)
+    data = await queryGroq('openai/gpt-oss-20b');
+  } catch (err1: any) {
+    console.warn('[GROQ FALLBACK] Falló modelo principal:', err1?.message || err1);
+    try {
+      // 2. Respaldo a Qwen 3.6 27B en caso de falla
+      data = await queryGroq('qwen/qwen3.6-27b');
+    } catch (err2: any) {
+      console.error('[GROQ FATAL] Todos los modelos de IA fallaron:', err2?.message || err2);
+      await sendAdminAlert(`Fallo total en Groq API.\nDetalle:\n${String(err2).slice(0, 200)}`);
+      return { 
+        respuesta_hablada: 'Disculpa, se nos fue un segundo la señal, ¿me puedes repetir a dónde vas?', 
+        origen: currentOrigen !== 'No proporcionado aún' ? currentOrigen : null, 
+        destino: currentDestino !== 'No proporcionado aún' ? currentDestino : null, 
+        telefono: currentTelefono !== 'No proporcionado aún' ? currentTelefono : null,
+        viaje_listo: false, 
+        cliente_confundido: false 
+      };
+    }
+  }
+
+  const rawText = data?.choices?.[0]?.message?.content || '{}';
   const cleanJson = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
 
   try {
@@ -369,12 +448,19 @@ ${injectedSystemMessage ? `[⚠️ MENSAJE INTERNO DEL SISTEMA PARA TI (NO LO LE
       parsed.cliente_confundido = false;
     }
 
+    // Preservar datos anteriores si el nuevo turno no los sobreescribió
+    if (!parsed.origen && currentOrigen !== 'No proporcionado aún') parsed.origen = currentOrigen;
+    if (!parsed.destino && currentDestino !== 'No proporcionado aún') parsed.destino = currentDestino;
+    if (!parsed.telefono && currentTelefono !== 'No proporcionado aún') parsed.telefono = currentTelefono;
+
     // Solo guardamos el historial si saveHistory es true. 
-    // Actualizamos las columnas de memoria para que el Estado Actual persista
     if (saveHistory) {
       const updatedHistory = `${newHistory}\nPompeyo: ${parsed.respuesta_hablada}`;
       
-      const updatePayload: any = { history: updatedHistory };
+      const updatePayload: any = { 
+        history: updatedHistory,
+        updated_at: new Date().toISOString()
+      };
       if (parsed.origen) updatePayload.origen_actual = parsed.origen;
       if (parsed.destino) updatePayload.destino_actual = parsed.destino;
       if (parsed.telefono) updatePayload.telefono_actual = parsed.telefono;
@@ -385,11 +471,11 @@ ${injectedSystemMessage ? `[⚠️ MENSAJE INTERNO DEL SISTEMA PARA TI (NO LO LE
         .eq('call_control_id', callId);
     }
     
-    // HARD CAP: cortar respuestas largas para que el audio no pase de ~5 segundos
-    if (parsed.respuesta_hablada && parsed.respuesta_hablada.length > 100) {
-      const cutoff = parsed.respuesta_hablada.substring(0, 100);
+    // HARD CAP: evitar monólogos gigantes sin cortar oraciones normales (~180 chars)
+    if (parsed.respuesta_hablada && parsed.respuesta_hablada.length > 180) {
+      const cutoff = parsed.respuesta_hablada.substring(0, 180);
       const lastPunct = Math.max(cutoff.lastIndexOf('.'), cutoff.lastIndexOf(','), cutoff.lastIndexOf('?'));
-      parsed.respuesta_hablada = lastPunct > 50 
+      parsed.respuesta_hablada = lastPunct > 80 
         ? cutoff.substring(0, lastPunct + 1) 
         : cutoff + '...';
       console.warn('[TRIM] Respuesta truncada a:', parsed.respuesta_hablada);
@@ -397,16 +483,49 @@ ${injectedSystemMessage ? `[⚠️ MENSAJE INTERNO DEL SISTEMA PARA TI (NO LO LE
 
     return parsed;
   } catch (_e) {
-    console.error('[GEMINI PARSE ERROR] Raw text was:', rawText.slice(0, 200));
+    console.error('[GEMINI PARSE ERROR] Raw text was:', rawText.slice(0, 300));
     
-    // INTENTO DE RESCATE: Si el JSON fue truncado, extraer la respuesta_hablada con regex
-    const rescueMatch = cleanJson.match(/"respuesta_hablada"\s*:\s*"([^"]+)"/);
-    if (rescueMatch) {
-      console.warn('[GEMINI RESCUE] Respuesta parcial recuperada:', rescueMatch[1]);
-      return { respuesta_hablada: rescueMatch[1], origen: null, destino: null, viaje_listo: false, cliente_confundido: false };
+    // RESCATE ROBUSTO: Extraer todos los campos disponibles aunque el JSON haya quedado cortado
+    const respMatch = cleanJson.match(/"respuesta_hablada"\s*:\s*"([^"]+)"/);
+    const origMatch = cleanJson.match(/"origen"\s*:\s*"([^"]+)"/);
+    const destMatch = cleanJson.match(/"destino"\s*:\s*"([^"]+)"/);
+    const telMatch  = cleanJson.match(/"telefono"\s*:\s*"([^"]+)"/);
+    const listoMatch = cleanJson.match(/"viaje_listo"\s*:\s*(true|false)/);
+    const confMatch = cleanJson.match(/"cliente_confundido"\s*:\s*(true|false)/);
+
+    if (respMatch) {
+      console.warn('[GEMINI RESCUE] Rescatando campos parciales con éxito...');
+      const rescued = {
+        respuesta_hablada: respMatch[1],
+        origen: origMatch ? origMatch[1] : (currentOrigen !== 'No proporcionado aún' ? currentOrigen : null),
+        destino: destMatch ? destMatch[1] : (currentDestino !== 'No proporcionado aún' ? currentDestino : null),
+        telefono: telMatch ? telMatch[1] : (currentTelefono !== 'No proporcionado aún' ? currentTelefono : null),
+        viaje_listo: listoMatch ? listoMatch[1] === 'true' : false,
+        cliente_confundido: confMatch ? confMatch[1] === 'true' : false
+      };
+
+      if (saveHistory) {
+        const updatePayload: any = { 
+          history: `${newHistory}\nPompeyo: ${rescued.respuesta_hablada}`,
+          updated_at: new Date().toISOString()
+        };
+        if (rescued.origen) updatePayload.origen_actual = rescued.origen;
+        if (rescued.destino) updatePayload.destino_actual = rescued.destino;
+        if (rescued.telefono) updatePayload.telefono_actual = rescued.telefono;
+
+        await supabase.from('telnyx_active_calls').update(updatePayload).eq('call_control_id', callId);
+      }
+
+      return rescued;
     }
     
-    return { respuesta_hablada: 'No te entendí bien. ¿Me lo puedes repetir?', origen: null, destino: null, viaje_listo: false, cliente_confundido: true };
+    return { 
+      respuesta_hablada: 'No te escuché bien. ¿Me lo puedes repetir?', 
+      origen: currentOrigen !== 'No proporcionado aún' ? currentOrigen : null, 
+      destino: currentDestino !== 'No proporcionado aún' ? currentDestino : null, 
+      viaje_listo: false, 
+      cliente_confundido: true 
+    };
   }
 }
 
@@ -532,7 +651,12 @@ serve(async (req) => {
           previousCall = data;
         }
 
-        let welcomeText = `¡Hola! Bienvenido a ${empresa?.nombre_empresa ?? 'Pompeyo Express'}. ¿En qué te puedo ayudar?`;
+        // Saludo natural de radio taxi mexicano según la hora del día (CST México UTC-6)
+        const currentHour = (new Date().getUTCHours() - 6 + 24) % 24;
+        const saludoHorario = (currentHour >= 5 && currentHour < 12) ? 'Buenos días' : (currentHour >= 12 && currentHour < 19) ? 'Buenas tardes' : 'Buenas noches';
+        const nombreBase = empresa?.nombre_empresa ?? 'Taxis Estrella';
+
+        let welcomeText = `${saludoHorario}, ${nombreBase}, a sus órdenes.`;
         let initialHistory = `${empresa?.nombre_bot ?? 'Pompeyo'}: ${welcomeText}`;
         let resumeData = {};
 
@@ -645,19 +769,24 @@ serve(async (req) => {
         // Solo ignoramos si el bot está activamente hablando en este instante (para evitar eco)
         const { data: lockData } = await supabase
           .from('telnyx_active_calls')
-          .select('bot_speaking')
+          .select('bot_speaking, updated_at')
           .eq('call_control_id', callControlId)
           .maybeSingle();
 
         if (lockData?.bot_speaking) {
-          console.log('[SKIP] Transcripción ignorada por ECO (el bot está hablando):', transcript);
-          break;
+          const updatedAt = lockData.updated_at ? new Date(lockData.updated_at).getTime() : 0;
+          const isStuck = updatedAt > 0 && (Date.now() - updatedAt > 10000); // 10s watchdog de seguridad
+          if (!isStuck) {
+            console.log('[SKIP] Transcripción ignorada por ECO (el bot está hablando):', transcript);
+            break;
+          }
+          console.warn('[WATCHDOG] El bot estuvo marcado como hablando por más de 10s. Forzando liberación de bloqueo.');
+          await setBotSpeaking(callControlId, false);
         }
 
         console.log(`[CLIENT SAID] "${transcript}"`);
 
-        // Procesamos directamente con Gemini sin muletillas intermedias
-        // (las muletillas causaban superposición de audio y conversación rota)
+        // Llamada directa a Gemini (sin muletillas intermedias, latencia ultrarrápida ~400ms)
         let aiResult = await parseWithGemini(callControlId, transcript, undefined, false);
         console.log('[GEMINI RAW]', JSON.stringify(aiResult));
 
@@ -690,18 +819,12 @@ serve(async (req) => {
           break;
         }
 
-        // --- FEEDBACK LOOP: Si hay origen, destino, teléfono y el viaje se marcó como listo, 
-        // verificamos si existe en el mapa y sacamos su costo H3.
+        // --- FEEDBACK LOOP: Si hay origen, destino, teléfono y el viaje se confirmó como listo
         if (aiResult.origen && aiResult.destino && aiResult.telefono && aiResult.viaje_listo) {
+          console.log(`[VALIDANDO UBICACION] Buscando coordenadas y tarifas para ${aiResult.origen}...`);
           
-          // Llenamos el silencio incómodo mientras procesamos el mapa a través del VPS
-          fetch('https://taxis.estrella-eats.mx/ws-voice/speak', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'x-internal-key': '075728a03c7b37229fe8a9b6d4dad4e6500c833a45ade5fcc6ddae9cf5074f17' },
-            body: JSON.stringify({ callControlId, text: "Permíteme un momento, estoy verificando la dirección en el mapa...", hangupAfter: null })
-          }).catch(e => {});
-
-          console.log(`[VALIDANDO UBICACION] Buscando coordenadas y tarifas...`);
+          // AUDIO DE ESPERA: Mantiene al cliente ocupado mientras la API de mapas/Traccar hace su trabajo
+          await speakAndListen(callControlId, "¡Excelente! Dame un segundito en lo que te busco la unidad más cercana, no me cuelgues...");
           
           try {
             // Cargar el tenant del contexto de esta llamada
@@ -722,12 +845,7 @@ serve(async (req) => {
             
             if (locOrigen.error || !locOrigen.lat || !locOrigen.lng) {
               console.log(`[GEO ERROR] No se encontró el origen: ${aiResult.origen}`);
-              aiResult = await parseWithGemini(
-                callControlId, 
-                transcript, 
-                `Error geográfico: No reconozco la ubicación "${aiResult.origen}". El viaje NO está listo. Pídele al cliente referencias de la calle o un lugar conocido cerca de su origen.`,
-                true
-              );
+              aiResult.respuesta_hablada = `Oye, no ubico bien la dirección "${aiResult.origen}", ¿me das alguna referencia cercana o entre qué calles queda?`;
               aiResult.viaje_listo = false;
             } else {
               console.log(`[GEO SUCCESS] Zona: ${locOrigen.nombre_zona} | Precio: ${locOrigen.precio || 'N/A'}`);
@@ -735,7 +853,7 @@ serve(async (req) => {
               // Buscar taxi más cercano en Traccar
               const nearestTaxi = await getNearestTaxi(locOrigen.lat, locOrigen.lng);
               
-              // Disparar WhatsApp al despachador ANTES de hablar con el cliente
+              // Disparar WhatsApp al despachador
               await dispatchToHuman({
                 origen: aiResult.origen,
                 destino: aiResult.destino,
@@ -746,21 +864,11 @@ serve(async (req) => {
                 dispatcherPhoneOverride: callEmpresa?.dispatcher_phone ?? undefined,
               });
 
-              let finalInstruction = '';
-              const txtPrecio = locOrigen.precio ? `La tarifa H3 validada es $${locOrigen.precio}. SOLO menciónala si el cliente preguntó por el precio, sino no la digas.` : `Tarifa a calcular.`;
-              
               if (nearestTaxi) {
-                finalInstruction = `INFO DEL SISTEMA: El viaje fue validado y enviado a la base. ${txtPrecio} Taxi asignado: ${nearestTaxi.name} a ${nearestTaxi.distanceKm.toFixed(1)} km. INSTRUCCIÓN: Actúa natural. Confírmale al cliente diciéndole: "Listo, el taxi ${nearestTaxi.name} ya va para allá". Despídete cordialmente.`;
+                aiResult.respuesta_hablada = `¡Listo! Ya quedó registrado tu viaje. El taxi ${nearestTaxi.name} va en camino para allá. ¡Muchas gracias!`;
               } else {
-                finalInstruction = `INFO DEL SISTEMA: El viaje fue validado y enviado a la base. ${txtPrecio} No hay taxis disponibles en GPS. INSTRUCCIÓN: Confírmale al cliente que ya anotaste su viaje, pero que los taxis están algo ocupados, que le mandaremos uno apenas se desocupe. Despídete.`;
+                aiResult.respuesta_hablada = `¡Listo! Ya quedó registrado tu viaje. En unos momentos te mandamos la unidad más cercana. ¡Muchas gracias!`;
               }
-
-              aiResult = await parseWithGemini(
-                callControlId,
-                transcript,
-                finalInstruction,
-                true
-              );
               
               aiResult.viaje_listo = true;
             }

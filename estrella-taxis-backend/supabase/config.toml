@@ -429,9 +429,6 @@ enabled = true
 verify_jwt = false
 entrypoint = "./functions/calculate-driving-scores/index.ts"
 
-[functions.calculate-driving-scores.schedule]
-cron = "05 06 * * *"
-
 [functions.generate-fillers]
 enabled = true
 verify_jwt = false

@@ -21,6 +21,7 @@ import SettingsPage from './pages/SettingsPage';
 import DeviceConnectionsPage from './pages/DeviceConnectionsPage';
 import BotPage from './pages/BotPage';
 import PackagesPage from './pages/PackagesPage';
+import TrackPage from './pages/TrackPage';
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
@@ -79,6 +80,8 @@ function AppRoutes() {
           <Route path="/bot" element={<BotPage />} />
           <Route path="/packages" element={<PackagesPage />} />
         </Route>
+        {/* Ruta pública de seguimiento — no requiere login, el cliente la abre desde el WhatsApp */}
+        <Route path="/track/:token" element={<TrackPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </>
