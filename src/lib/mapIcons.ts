@@ -8,6 +8,7 @@ export const STATUS_COLORS = {
   moving:  '#1d4ed8', // azul  = online + en movimiento
   online:  '#16a34a', // verde = online + detenido
   offline: '#94a3b8', // gris  = offline / sin señal
+  occupied: '#ef4444', // rojo  = taxi ocupado
 } as const;
 
 export type MarkerStatus = keyof typeof STATUS_COLORS;
@@ -24,19 +25,16 @@ export const VEHICLE_CATEGORIES: {
   anchor: [number, number];
   scale?: number;
 }[] = [
-  // ── Coches ────────────────────────────────────────────────
   {
     value: 'default',
     label: 'Taxi / Auto',
     path: 'M 6 6 C 6 2 18 2 18 6 L 18 18 C 18 22 6 22 6 18 Z M 8 7 L 8.5 11 L 15.5 11 L 16 7 Z M 8.5 14 L 8 17 L 16 17 L 15.5 14 Z',
-    image: '/taxi.png',
     anchor: [12, 12],
   },
   {
     value: 'car',
     label: 'Automóvil',
     path: 'M 6 6 C 6 2 18 2 18 6 L 18 18 C 18 22 6 22 6 18 Z M 8 7 L 8.5 11 L 15.5 11 L 16 7 Z M 8.5 14 L 8 17 L 16 17 L 15.5 14 Z',
-    image: '/taxi.png',
     anchor: [12, 12],
   },
   {
@@ -207,33 +205,80 @@ export function getCategoryDef(category?: string) {
   );
 }
 
-/** Calcula el color del marcador según el estado del dispositivo y su velocidad. */
-export function getMarkerColor(status: string, speed: number): string {
+/** Calcula el color del marcador según el estado del dispositivo, velocidad y si está ocupado. */
+export function getMarkerColor(status: string, speed: number, occupied?: boolean): string {
   if (status !== 'online') return STATUS_COLORS.offline;
+  if (occupied === true) return STATUS_COLORS.occupied;
   return speed > 0.5 ? STATUS_COLORS.moving : STATUS_COLORS.online;
 }
 
+const tintedImageCache = new Map<string, string>();
+
+function getTintedIconUrl(imageUrl: string, color: string): string {
+  const key = `${imageUrl}-${color}`;
+  if (tintedImageCache.has(key)) {
+    return tintedImageCache.get(key)!;
+  }
+  
+  // Inicialmente devolvemos la imagen original mientras se procesa
+  tintedImageCache.set(key, imageUrl);
+  
+  const img = new Image();
+  // img.crossOrigin = "Anonymous";
+  img.onload = () => {
+    const canvas = document.createElement('canvas');
+    canvas.width = img.width;
+    canvas.height = img.height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    
+    // 1. Dibujar imagen original
+    ctx.drawImage(img, 0, 0);
+    
+    // 2. Aplicar color inteligente usando 'multiply' para preservar las llantas y ventanas
+    ctx.globalCompositeOperation = 'multiply';
+    ctx.fillStyle = color;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    
+    // 3. Restaurar la transparencia original (los bordes) usando 'destination-in'
+    ctx.globalCompositeOperation = 'destination-in';
+    ctx.drawImage(img, 0, 0);
+    
+    const tintedUrl = canvas.toDataURL('image/png');
+    tintedImageCache.set(key, tintedUrl);
+    
+    // Forzar una actualización de los marcadores despachando un evento falso
+    window.dispatchEvent(new CustomEvent('forceMapRender'));
+  };
+  img.src = imageUrl;
+  
+  return imageUrl;
+}
+
 /**
- * Retorna un objeto google.maps.Symbol listo para usar como ícono de marcador.
+ * Retorna un objeto google.maps.Symbol o Icon listo para usar como ícono de marcador.
  * @param category  Valor de TraccarDevice.category (ej: 'motorcycle')
  * @param status    Estado del dispositivo ('online' | 'offline' | 'unknown')
  * @param speed     Velocidad en nudos (se convierte internamente)
  * @param course    Rumbo en grados (0=Norte, 90=Este...)
+ * @param occupied  Si el taxi lleva pasajero
  */
 export function getMarkerIcon(
   category: string | undefined,
   status: string,
   speed: number,
   course: number,
+  occupied: boolean | undefined,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   googleMaps: typeof google.maps,
 ): google.maps.Symbol | google.maps.Icon {
   const def = getCategoryDef(category);
-  const color = getMarkerColor(status, speed);
+  const color = getMarkerColor(status, speed, occupied);
 
   if (def.image) {
+    const finalUrl = getTintedIconUrl(def.image, color);
     return {
-      url: def.image,
+      url: finalUrl,
       scaledSize: new googleMaps.Size(40, 40),
       anchor: new googleMaps.Point(20, 20),
     };

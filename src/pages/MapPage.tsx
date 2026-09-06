@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Layers, Crosshair, Filter, Zap, Power, Radio, ShieldAlert, Car, Bell, Battery, Activity, Route, Map as MapIcon, MapPin, X, Wifi, WifiOff, Play, Square, Terminal, CheckCircle2, Key, Plus, Minus, List, Ruler, Loader2, Brain, ChevronDown } from 'lucide-react';
+import { Layers, Crosshair, Filter, Zap, Power, Radio, ShieldAlert, Car, Bell, Battery, Activity, Route, Map as MapIcon, MapPin, X, Wifi, WifiOff, Play, Square, Terminal, CheckCircle2, Key, Plus, Minus, List, Ruler, Loader2, Brain, ChevronDown, Search } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { loadGoogleMaps } from '../lib/mapsLoader';
 import { api, type TraccarDevice, type TraccarPosition } from '../lib/traccarApi';
@@ -58,6 +58,14 @@ export function generateInfoWindowContent(device: TraccarDevice, pos: TraccarPos
 
   const finalAddress = liveAddress || (pos.address ? pos.address.split(',')[0] : '');
   const timeText = formatRelativeTime(pos.serverTime, nowMs);
+  const isOccupied = pos.attributes?.occupied === true || pos.attributes?.occupied === 'true';
+
+  let occupiedStatusHtml = '';
+  if (isOccupied) {
+    occupiedStatusHtml = `<div style="margin-top:8px; display:flex; align-items:center; justify-content:center; gap:6px; font-size:11px; color:#991b1b; background:#fee2e2; border:1px solid #fecaca; padding:6px; border-radius:8px; font-weight:700;"><span style="width:8px;height:8px;background:#ef4444;border-radius:50%;box-shadow:0 0 4px #ef4444"></span> TAXI OCUPADO</div>`;
+  } else {
+    occupiedStatusHtml = `<div style="margin-top:8px; display:flex; align-items:center; justify-content:center; gap:6px; font-size:11px; color:#166534; background:#dcfce7; border:1px solid #bbf7d0; padding:6px; border-radius:8px; font-weight:700;"><span style="width:8px;height:8px;background:#22c55e;border-radius:50%;box-shadow:0 0 4px #22c55e"></span> TAXI LIBRE</div>`;
+  }
 
   return `
     <div style="font-family:Inter,sans-serif;min-width:220px;padding:4px">
@@ -78,6 +86,7 @@ export function generateInfoWindowContent(device: TraccarDevice, pos: TraccarPos
       </div>
 
       ${engineStatusHtml}
+      ${occupiedStatusHtml}
 
       ${finalAddress ? `<div style="margin-top:10px;font-size:11px;color:#64748b;line-height:1.4"><div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:2px;"><strong style="color:#475569">📍 Dirección:</strong> ${device.status === 'online' ? `<span style="display:flex;align-items:center;color:#059669;font-weight:700;font-size:9px;background:#ecfdf5;padding:2px 6px;border-radius:4px;border:1px solid #a7f3d0;">${isMoving ? '<svg class="animate-spin" style="width:10px;height:10px;margin-right:4px;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"></path></svg>' : '<span style="width:6px;height:6px;background:#10b981;border-radius:50%;margin-right:4px;"></span>'} EN VIVO</span>` : ''}</div>${finalAddress}</div>` : ''}
       
@@ -126,11 +135,22 @@ export default function MapPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [nowTick, setNowTick] = useState(Date.now());
   const [showMobileEvents, setShowMobileEvents] = useState(false);
+  const [showEventsPanel, setShowEventsPanel] = useState(true);
+  const [showSearch, setShowSearch] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const [streetViewActive, setStreetViewActive] = useState(false);
 
   // Heatmap
   const [showHeatmap, setShowHeatmap] = useState(false);
   const heatmapLayerRef = useRef<google.maps.visualization.HeatmapLayer | null>(null);
+
+  // Escuchar el evento de renderizado forzado (ej: cuando un canvas termina de tintar el taxi PNG)
+  useEffect(() => {
+    const handleForceRender = () => setNowTick(Date.now());
+    window.addEventListener('forceMapRender', handleForceRender);
+    return () => window.removeEventListener('forceMapRender', handleForceRender);
+  }, []);
 
   // ─── Simulador de Asignación IA ───
   const [isSimulatorActive, setIsSimulatorActive] = useState(false);
@@ -848,7 +868,8 @@ export default function MapPage() {
       if (!pos) return;
 
       const latLng = { lat: pos.latitude, lng: pos.longitude };
-      const icon = getMarkerIcon(device.category, device.status, pos.speed || 0, pos.course || 0, window.google.maps);
+      const isOccupied = pos.attributes?.occupied === true || pos.attributes?.occupied === 'true';
+      const icon = getMarkerIcon(device.category, device.status, pos.speed || 0, pos.course || 0, isOccupied, window.google.maps);
 
       if (markersRef.current.has(device.id)) {
         // OPTIMIZACIÓN DE RENDIMIENTO: 
@@ -1011,7 +1032,8 @@ export default function MapPage() {
   const updateMarkerImperative = useCallback((device: TraccarDevice, pos: TraccarPosition) => {
     if (!googleMapRef.current || !window.google?.maps) return;
     const latLng = { lat: pos.latitude, lng: pos.longitude };
-    const icon = getMarkerIcon(device.category, device.status, pos.speed || 0, pos.course || 0, window.google.maps);
+    const isOccupied = pos.attributes?.occupied === true || pos.attributes?.occupied === 'true';
+    const icon = getMarkerIcon(device.category, device.status, pos.speed || 0, pos.course || 0, isOccupied, window.google.maps);
     const marker = markersRef.current.get(device.id);
     if (marker) {
       marker.setPosition(latLng);
@@ -1293,9 +1315,11 @@ export default function MapPage() {
         )}
 
         {/* Panel lateral flotante de info del mapa */}
+        {showEventsPanel && (
         <div className={`absolute top-2 sm:top-4 right-2 sm:right-4 left-2 sm:left-auto sm:w-72 bg-white/95 backdrop-blur-sm p-4 rounded-xl shadow-lg border border-gray-200 z-[10] max-h-[45%] sm:max-h-[80%] overflow-y-auto transition-all duration-300 ease-out ${showMobileEvents ? 'opacity-100 translate-y-0 pointer-events-auto' : 'opacity-0 -translate-y-4 pointer-events-none sm:opacity-100 sm:translate-y-0 sm:pointer-events-auto'}`}>
           <h3 className="font-bold text-gray-800 mb-3 text-sm flex justify-between items-center">
-            Actividad Reciente <Radio size={16} className="text-primary animate-pulse" />
+            <span className="flex items-center gap-2">Actividad Reciente <Radio size={16} className="text-primary animate-pulse" /></span>
+            <button onClick={() => setShowEventsPanel(false)} className="text-gray-400 hover:text-gray-600 bg-gray-50 hover:bg-gray-200 p-1 rounded-full transition-colors" title="Ocultar Notificaciones"><X size={14} /></button>
           </h3>
           <div className="space-y-3">
             {realtimeEvents.length === 0 ? (
@@ -1347,10 +1371,73 @@ export default function MapPage() {
             )}
           </div>
         </div>
+        )}
       </div>
 
       {/* ─── Toolbar Flotante Estilo Traccar (Derecha) ─── */}
       <div className="absolute top-24 right-4 z-[30] flex flex-col gap-2">
+        {/* Buscar Taxi */}
+        <div className="bg-white rounded-xl shadow-lg border border-gray-100 flex flex-col group relative">
+          <button onClick={() => setShowSearch(!showSearch)} className={`w-10 h-10 flex items-center justify-center transition-colors ${showSearch ? 'text-blue-600 bg-blue-50' : 'text-gray-600 hover:text-blue-600 hover:bg-slate-50'}`} title="Buscar Taxi">
+            <Search size={18} />
+          </button>
+          {showSearch && (
+            <div className="absolute right-12 top-0 bg-white shadow-xl rounded-xl border border-gray-200 p-2 w-64 pointer-events-auto">
+              <input
+                ref={searchInputRef}
+                autoFocus
+                type="text"
+                placeholder="Escribe el nombre del taxi..."
+                className="w-full text-sm p-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 mb-2"
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+              />
+              <div className="max-h-48 overflow-y-auto custom-scrollbar">
+                {devices.filter(d => d.name.toLowerCase().includes(searchQuery.toLowerCase())).slice(0, 10).map(d => (
+                  <button
+                    key={d.id}
+                    onClick={() => {
+                      // 1. Empezar a seguirlo
+                      setFollowingDeviceId(d.id);
+                      // 2. Seleccionar para que abra el modal en móvil
+                      setSelectedDevice(d);
+                      // 3. Centrar el mapa
+                      const pos = positions.get(d.id);
+                      if (pos && googleMapRef.current) {
+                        googleMapRef.current.panTo({ lat: pos.latitude, lng: pos.longitude });
+                        googleMapRef.current.setZoom(16);
+                      }
+                      // 4. Disparar el click del marcador para abrir el InfoWindow en desktop
+                      const marker = markersRef.current.get(d.id);
+                      if (marker && window.google) {
+                        window.google.maps.event.trigger(marker, 'click');
+                      }
+                      // 5. Cerrar el buscador
+                      setShowSearch(false);
+                      setSearchQuery('');
+                    }}
+                    className="w-full text-left px-2 py-1.5 text-xs text-gray-700 hover:bg-blue-50 hover:text-blue-700 rounded-md truncate transition-colors flex items-center justify-between"
+                  >
+                    <span>{d.name}</span>
+                    <span className={`w-1.5 h-1.5 rounded-full ${d.status === 'online' ? 'bg-green-500' : 'bg-gray-400'}`}></span>
+                  </button>
+                ))}
+                {devices.filter(d => d.name.toLowerCase().includes(searchQuery.toLowerCase())).length === 0 && (
+                  <p className="text-xs text-gray-500 text-center py-2">No se encontraron taxis.</p>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Mostrar Notificaciones Toggle */}
+        {!showEventsPanel && (
+          <div className="bg-white rounded-xl shadow-lg border border-gray-100 flex flex-col overflow-hidden animate-in fade-in zoom-in duration-300">
+            <button onClick={() => setShowEventsPanel(true)} className="w-10 h-10 flex items-center justify-center text-gray-600 hover:text-blue-600 hover:bg-slate-50 transition-colors" title="Mostrar Notificaciones">
+              <Bell size={18} />
+            </button>
+          </div>
+        )}
         {/* Acercar / Alejar */}
         <div className="bg-white rounded-xl shadow-lg border border-gray-100 flex flex-col overflow-hidden">
           <button onClick={handleZoomIn} className="w-10 h-10 flex items-center justify-center text-gray-600 hover:text-blue-600 hover:bg-slate-50 transition-colors border-b border-gray-100" title="Acercar">
