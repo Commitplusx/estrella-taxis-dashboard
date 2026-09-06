@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { MapPin, Navigation, Clock, CheckCircle, AlertCircle } from 'lucide-react';
+import { Clock, CheckCircle, AlertCircle, Car, Activity, ChevronUp, ChevronDown } from 'lucide-react';
 
 interface TaxiPosition {
   name: string;
@@ -22,10 +22,38 @@ interface ViajeInfo {
 
 const SUPABASE_FN = 'https://knghdwpxheenkpuajkxl.supabase.co/functions/v1/track-position';
 
-// Convierte grados de heading a una flecha visual
-function headingToArrow(deg: number): string {
-  const dirs = ['↑','↗','→','↘','↓','↙','←','↖'];
-  return dirs[Math.round(deg / 45) % 8];
+// Math utils for ETA
+function deg2rad(deg: number) {
+  return deg * (Math.PI / 180);
+}
+
+function getDistanceKm(lat1: number, lon1: number, lat2: number, lon2: number) {
+  const R = 6371; // Radius of the earth in km
+  const dLat = deg2rad(lat2 - lat1);
+  const dLon = deg2rad(lon2 - lon1);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
+function calcularETA(taxiLat: number, taxiLng: number, userLat: number, userLng: number, speedKmh: number): number {
+  const distanceKm = getDistanceKm(taxiLat, taxiLng, userLat, userLng);
+  // Multiplicador urbano (manhattan distance ~1.4x)
+  const urbanDistance = distanceKm * 1.4;
+  
+  // Si va muy lento o parado, asume velocidad media de ciudad de 30 km/h
+  const effectiveSpeed = (speedKmh > 10) ? speedKmh : 30;
+  
+  const timeHours = urbanDistance / effectiveSpeed;
+  let timeMins = Math.ceil(timeHours * 60);
+  
+  if (timeMins < 1) timeMins = 1;
+  if (timeMins > 60) timeMins = 60; // Cap
+  
+  return timeMins;
 }
 
 function tiempoTranscurrido(iso: string): string {
@@ -41,18 +69,22 @@ export default function TrackPage() {
   const [viaje, setViaje] = useState<ViajeInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [lastPoll, setLastPoll] = useState<Date | null>(null);
+  const [isExpanded, setIsExpanded] = useState(false);
+  
+  const touchStartY = useRef<number | null>(null);
+  
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<google.maps.Map | null>(null);
   const taxiMarkerRef = useRef<google.maps.Marker | null>(null);
   const origenMarkerRef = useRef<google.maps.Marker | null>(null);
+  const hasFitBoundsRef = useRef(false);
 
-  // Inicializar el mapa de Google Maps una vez que el div esté listo
+  // Inicializar el mapa de Google Maps
   useEffect(() => {
     if (!mapRef.current) return;
     if ((window as any).google?.maps) {
       initMap();
     } else {
-      // Cargar el script de Google Maps dinámicamente
       const script = document.createElement('script');
       const key = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
       script.src = `https://maps.googleapis.com/maps/api/js?key=${key}&callback=__initTrackMap`;
@@ -64,11 +96,11 @@ export default function TrackPage() {
   function initMap() {
     if (!mapRef.current) return;
     const map = new (window as any).google.maps.Map(mapRef.current, {
-      center: { lat: 16.25, lng: -92.13 }, // Centro en Comitán de respaldo
-      zoom: 14,
+      center: { lat: 16.25, lng: -92.13 },
+      zoom: 15,
       mapTypeId: 'roadmap',
       disableDefaultUI: true,
-      zoomControl: true,
+      zoomControl: false,
       styles: [
         { featureType: 'poi', stylers: [{ visibility: 'off' }] },
         { featureType: 'transit', stylers: [{ visibility: 'off' }] },
@@ -77,7 +109,7 @@ export default function TrackPage() {
     mapInstanceRef.current = map;
   }
 
-  // Polling: consulta la posición cada 5 segundos
+  // Polling
   useEffect(() => {
     if (!token) return;
 
@@ -95,7 +127,7 @@ export default function TrackPage() {
         setLastPoll(new Date());
         setError(null);
 
-        // Actualizar marcador del taxi en el mapa
+        // Marker Taxi
         if (data.taxi.lat && data.taxi.lng && mapInstanceRef.current) {
           const G = (window as any).google.maps;
           const pos = { lat: data.taxi.lat, lng: data.taxi.lng };
@@ -107,16 +139,16 @@ export default function TrackPage() {
               title: data.taxi.name,
               icon: {
                 path: G.SymbolPath.FORWARD_CLOSED_ARROW,
-                scale: 5,
-                fillColor: '#4F46E5',
+                scale: 6,
+                fillColor: '#2563EB',
                 fillOpacity: 1,
-                strokeColor: '#fff',
+                strokeColor: '#FFFFFF',
                 strokeWeight: 2,
                 rotation: data.taxi.course || 0,
               },
               zIndex: 10,
             });
-            mapInstanceRef.current.setCenter(pos);
+            if (!data.viaje.origen_lat) mapInstanceRef.current.setCenter(pos);
           } else {
             taxiMarkerRef.current.setPosition(pos);
             const icon: any = taxiMarkerRef.current.getIcon();
@@ -124,7 +156,7 @@ export default function TrackPage() {
           }
         }
 
-        // Marcador del origen del cliente (se pone solo la primera vez)
+        // Marker Origen
         if (data.viaje.origen_lat && data.viaje.origen_lng && mapInstanceRef.current && !origenMarkerRef.current) {
           const G = (window as any).google.maps;
           origenMarkerRef.current = new G.Marker({
@@ -134,127 +166,199 @@ export default function TrackPage() {
             icon: {
               path: G.SymbolPath.CIRCLE,
               scale: 8,
-              fillColor: '#EF4444',
+              fillColor: '#10B981',
               fillOpacity: 1,
-              strokeColor: '#fff',
+              strokeColor: '#FFFFFF',
               strokeWeight: 2,
             },
           });
         }
+
+        // Auto-enfocar cámara en Taxi y Cliente la primera vez
+        if (taxiMarkerRef.current && origenMarkerRef.current && mapInstanceRef.current && !hasFitBoundsRef.current) {
+          const G = (window as any).google.maps;
+          const bounds = new G.LatLngBounds();
+          bounds.extend(taxiMarkerRef.current.getPosition());
+          bounds.extend(origenMarkerRef.current.getPosition());
+          // Evita que la tarjeta blanca tape los marcadores
+          mapInstanceRef.current.fitBounds(bounds, { bottom: 250, top: 100, left: 50, right: 50 });
+          hasFitBoundsRef.current = true;
+        }
+
       } catch {
-        // Red caída o función no disponible, ignorar silenciosamente
+        // Red caída ignorar silenciosamente
       }
     };
 
-    poll(); // Primera vez inmediato
+    poll(); 
     const interval = setInterval(poll, 5000);
     return () => clearInterval(interval);
   }, [token]);
 
   const isCompleted = viaje?.estado === 'completado';
+  
+  let etaMins = null;
+  if (taxi?.lat && taxi?.lng && viaje?.origen_lat && viaje?.origen_lng && !isCompleted) {
+    etaMins = calcularETA(taxi.lat, taxi.lng, viaje.origen_lat, viaje.origen_lng, taxi.speed || 0);
+  }
+
+  // Gestos para móvil
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartY.current = e.touches[0].clientY;
+  };
+  
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (!touchStartY.current) return;
+    const deltaY = e.changedTouches[0].clientY - touchStartY.current;
+    if (deltaY > 40) setIsExpanded(false); // Swipe hacia abajo
+    else if (deltaY < -40) setIsExpanded(true); // Swipe hacia arriba
+    touchStartY.current = null;
+  };
 
   return (
-    <div style={{ fontFamily: "'Inter', sans-serif", minHeight: '100dvh', background: '#0F172A', color: '#fff', display: 'flex', flexDirection: 'column' }}>
-
-      {/* Header */}
-      <div style={{ padding: '16px 20px', background: '#1E293B', borderBottom: '1px solid #334155', display: 'flex', alignItems: 'center', gap: 12 }}>
-        <div style={{ width: 36, height: 36, borderRadius: 10, background: 'linear-gradient(135deg, #4F46E5, #7C3AED)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-          <Navigation size={18} color="#fff" />
-        </div>
-        <div>
-          <div style={{ fontWeight: 700, fontSize: 15 }}>
-            {taxi ? `🚕 ${taxi.name}` : 'Seguimiento de Taxi'}
-          </div>
-          <div style={{ fontSize: 12, color: '#94A3B8', marginTop: 2 }}>
-            {isCompleted ? '✅ Viaje completado' : taxi ? 'En camino a recogerte' : 'Localizando unidad...'}
-          </div>
-        </div>
-        {lastPoll && (
-          <div style={{ marginLeft: 'auto', fontSize: 11, color: '#64748B', textAlign: 'right' }}>
-            Actualizado<br />{tiempoTranscurrido(lastPoll.toISOString())}
-          </div>
-        )}
+    <div className="font-sans h-[100dvh] w-full relative bg-gray-100 overflow-hidden">
+      
+      {/* Mapa en fondo completo (El wrapper evita que G.Maps rompa el absolute) */}
+      <div className="absolute inset-0 z-0">
+        <div ref={mapRef} className="w-full h-full" />
       </div>
 
-      {/* Mapa */}
-      <div ref={mapRef} style={{ flex: 1, minHeight: 320, background: '#1E293B' }} />
-
-      {/* Panel inferior */}
-      <div style={{ background: '#1E293B', borderTop: '1px solid #334155', padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 12 }}>
-
-        {error ? (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: '#FEF2F2', borderRadius: 12, padding: '12px 16px', color: '#B91C1C' }}>
-            <AlertCircle size={18} />
-            <span style={{ fontSize: 14, fontWeight: 600 }}>{error}</span>
+      {/* Header Flotante Arriba Derecha */}
+      <div className="absolute top-4 right-4 md:top-8 md:right-8 z-10 pointer-events-none">
+        <div className="bg-white/90 backdrop-blur-xl rounded-full shadow-[0_4px_20px_rgba(0,0,0,0.08)] border border-white/50 p-2 pr-5 flex items-center gap-4 pointer-events-auto transition-all">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-black rounded-full flex items-center justify-center text-white shadow-md shrink-0">
+              <Car size={18} strokeWidth={2.5} />
+            </div>
+            <div className="flex flex-col">
+              <span className="font-bold text-gray-900 text-sm leading-tight">
+                {taxi ? taxi.name : 'Stellar Tracker'}
+              </span>
+              <span className="text-[11px] text-gray-500 font-semibold uppercase tracking-wider">
+                {isCompleted ? 'Viaje completado' : taxi ? 'En camino' : 'Buscando unidad'}
+              </span>
+            </div>
           </div>
-        ) : isCompleted ? (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: '#F0FDF4', borderRadius: 12, padding: '12px 16px', color: '#166534' }}>
-            <CheckCircle size={18} />
-            <span style={{ fontSize: 14, fontWeight: 600 }}>Viaje completado. ¡Que te vaya bien!</span>
-          </div>
-        ) : (
-          <>
-            {/* Velocidad y heading */}
-            {taxi && taxi.lat && (
-              <div style={{ display: 'flex', gap: 10 }}>
-                <div style={{ flex: 1, background: '#0F172A', borderRadius: 12, padding: '10px 14px', textAlign: 'center' }}>
-                  <div style={{ fontSize: 22, fontWeight: 800, color: '#818CF8' }}>{Math.round(taxi.speed || 0)} <span style={{ fontSize: 12, fontWeight: 400 }}>km/h</span></div>
-                  <div style={{ fontSize: 11, color: '#64748B', marginTop: 2 }}>Velocidad</div>
-                </div>
-                <div style={{ flex: 1, background: '#0F172A', borderRadius: 12, padding: '10px 14px', textAlign: 'center' }}>
-                  <div style={{ fontSize: 22, fontWeight: 800, color: '#34D399' }}>{headingToArrow(taxi.course || 0)}</div>
-                  <div style={{ fontSize: 11, color: '#64748B', marginTop: 2 }}>Dirección</div>
-                </div>
-                <div style={{ flex: 1, background: '#0F172A', borderRadius: 12, padding: '10px 14px', textAlign: 'center' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <span style={{ width: 8, height: 8, background: '#22C55E', borderRadius: '50%', display: 'inline-block', marginRight: 6, boxShadow: '0 0 0 3px rgba(34,197,94,0.3)', animation: 'pulse 1.5s infinite' }} />
-                    <span style={{ fontSize: 13, fontWeight: 700, color: '#22C55E' }}>VIVO</span>
-                  </div>
-                  <div style={{ fontSize: 11, color: '#64748B', marginTop: 2 }}>GPS activo</div>
-                </div>
-              </div>
-            )}
-
-            {/* Ruta */}
-            {viaje && (
-              <div style={{ background: '#0F172A', borderRadius: 12, padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 8 }}>
-                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
-                  <MapPin size={15} color="#EF4444" style={{ flexShrink: 0, marginTop: 2 }} />
-                  <div>
-                    <div style={{ fontSize: 10, color: '#64748B', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5 }}>Recoge en</div>
-                    <div style={{ fontSize: 14, fontWeight: 600, color: '#E2E8F0' }}>{viaje.origen}</div>
-                  </div>
-                </div>
-                <div style={{ height: 1, background: '#1E293B', marginLeft: 25 }} />
-                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
-                  <div style={{ width: 15, height: 15, border: '2px solid #4F46E5', borderRadius: 3, flexShrink: 0, marginTop: 2 }} />
-                  <div>
-                    <div style={{ fontSize: 10, color: '#64748B', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5 }}>Destino</div>
-                    <div style={{ fontSize: 14, fontWeight: 600, color: '#E2E8F0' }}>{viaje.destino}</div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Pulsando mientras espera */}
-            {!taxi?.lat && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: '#94A3B8', fontSize: 13 }}>
-                <div className="animate-spin" style={{ width: 16, height: 16, border: '2px solid #4F46E5', borderTopColor: 'transparent', borderRadius: '50%' }} />
-                Localizando al conductor...
-              </div>
-            )}
-          </>
-        )}
-
-        <div style={{ fontSize: 10, color: '#334155', textAlign: 'center' }}>
-          Powered by Stellar Tracking • Actualización automática cada 5s
+          {lastPoll && (
+            <div className="text-[10px] text-gray-400 font-medium text-right leading-tight border-l border-gray-200 pl-3">
+              Actualizado<br/>{tiempoTranscurrido(lastPoll.toISOString())}
+            </div>
+          )}
         </div>
       </div>
 
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap');
-        @keyframes pulse { 0%,100%{box-shadow:0 0 0 3px rgba(34,197,94,0.3)} 50%{box-shadow:0 0 0 6px rgba(34,197,94,0.1)} }
-      `}</style>
+      {/* Tarjeta Principal (Bottom Sheet en Móvil / Panel Izquierdo en Desktop) */}
+      <div className="absolute bottom-0 w-full z-20 md:top-8 md:bottom-auto md:left-8 md:w-[400px]">
+        <div className="bg-white w-full rounded-t-[32px] md:rounded-[32px] shadow-[0_-10px_40px_rgba(0,0,0,0.1)] md:shadow-[0_20px_60px_rgba(0,0,0,0.15)] flex flex-col overflow-hidden border-t md:border border-gray-100 transition-all duration-300">
+          
+          {/* Zona de Arrastre (solo móvil) */}
+          <div 
+            className="w-full pt-3 pb-0 cursor-grab active:cursor-grabbing md:hidden flex justify-center text-gray-300"
+            onTouchStart={handleTouchStart}
+            onTouchEnd={handleTouchEnd}
+            onClick={() => setIsExpanded(!isExpanded)}
+          >
+            {isExpanded ? <ChevronDown size={28} /> : <ChevronUp size={28} className="animate-bounce" />}
+          </div>
+
+          <div className="px-5 pb-5 pt-1 md:p-8 flex flex-col gap-4 md:gap-6">
+            
+            {/* Estado / Errores */}
+            {error ? (
+              <div className="flex items-start gap-3 bg-red-50 text-red-700 p-4 rounded-2xl">
+                <AlertCircle size={20} className="shrink-0 mt-0.5" />
+                <span className="text-sm font-medium leading-relaxed">{error}</span>
+              </div>
+            ) : isCompleted ? (
+              <div className="flex items-center gap-3 bg-gray-900 text-white p-5 rounded-3xl shadow-lg">
+                <CheckCircle size={24} className="shrink-0 text-emerald-400" />
+                <span className="text-[15px] font-semibold">Viaje completado. ¡Gracias!</span>
+              </div>
+            ) : (
+              <>
+                {/* Gran ETA */}
+                <div className="flex flex-col items-center md:items-start text-center md:text-left py-1"
+                     onTouchStart={handleTouchStart}
+                     onTouchEnd={handleTouchEnd}
+                     onClick={() => setIsExpanded(!isExpanded)}>
+                  <div className="flex items-baseline justify-center md:justify-start gap-1">
+                    <span className="text-6xl md:text-7xl font-black text-gray-900 tracking-tighter">
+                      {etaMins ? etaMins : '-'}
+                    </span>
+                    <span className="text-2xl font-bold text-gray-400 mb-1">min</span>
+                  </div>
+                  <div className="text-sm font-semibold text-gray-500 uppercase tracking-widest mt-1">
+                    Tiempo de llegada
+                  </div>
+                </div>
+
+                {/* Contenido Colapsable */}
+                <div className={`flex flex-col gap-4 md:gap-6 transition-all duration-500 ease-in-out ${isExpanded ? 'max-h-[500px] opacity-100 mt-2' : 'max-h-0 opacity-0 md:max-h-[500px] md:opacity-100 md:mt-2'}`}>
+                  <hr className="border-gray-100/80" />
+
+                {/* Línea de tiempo de la Ruta */}
+                {viaje && (
+                  <div className="flex items-stretch gap-4 px-1">
+                    {/* Conectores visuales */}
+                    <div className="flex flex-col items-center pt-1.5 pb-1">
+                      <div className="w-4 h-4 rounded-full bg-black flex items-center justify-center shrink-0 z-10 shadow-sm">
+                        <div className="w-1.5 h-1.5 rounded-full bg-white" />
+                      </div>
+                      <div className="w-0.5 flex-1 bg-gray-200 my-1 rounded-full" />
+                      <div className="w-4 h-4 rounded-sm bg-gray-900 shrink-0 z-10 flex items-center justify-center shadow-sm">
+                         <div className="w-1.5 h-1.5 bg-emerald-400 rounded-sm" />
+                      </div>
+                    </div>
+                    
+                    {/* Textos de Ruta */}
+                    <div className="flex-1 flex flex-col justify-between py-0.5 gap-6">
+                      <div>
+                        <div className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">Punto de encuentro</div>
+                        <div className="text-[16px] font-bold text-gray-900 leading-snug truncate pr-4">{viaje.origen}</div>
+                      </div>
+                      <div>
+                        <div className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">Destino</div>
+                        <div className="text-[16px] font-bold text-gray-900 leading-snug truncate pr-4">{viaje.destino}</div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                <hr className="border-gray-100/80" />
+
+                {/* Footer del Tracker */}
+                <div className="flex items-center justify-between px-1">
+                  {taxi && taxi.lat ? (
+                    <>
+                      <div className="flex items-center gap-2 bg-emerald-50 px-3 py-1.5 rounded-full border border-emerald-100/50">
+                        <span className="relative flex h-2 w-2">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                          <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                        </span>
+                        <span className="text-[11px] font-bold text-emerald-700 uppercase tracking-wider mt-px">GPS Vivo</span>
+                      </div>
+                      
+                      <div className="flex items-center gap-1.5 text-gray-400 bg-gray-50 px-3 py-1.5 rounded-full">
+                        <Activity size={14} />
+                        <span className="text-[13px] font-bold text-gray-700">
+                          {Math.round(taxi.speed || 0)} <span className="text-[11px] font-semibold text-gray-400">km/h</span>
+                        </span>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="flex items-center gap-3 text-gray-500 text-sm font-medium py-2 mx-auto">
+                      <div className="animate-spin w-5 h-5 border-2 border-gray-300 border-t-black rounded-full" />
+                      Localizando unidad...
+                    </div>
+                  )}
+                </div>
+                </div> {/* End Contenido Colapsable */}
+
+              </>
+            )}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

@@ -2,7 +2,7 @@ import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
 import { resolveLocation } from '../_shared/geo.ts';
 import { getNearestTaxi } from '../_shared/traccar.ts';
-import { dispatchToHuman, sendWhatsApp } from '../_shared/whatsapp.ts';
+import { dispatchToHuman, sendWhatsApp, sendWhatsAppTemplate } from '../_shared/whatsapp.ts';
 
 // Genera un token corto y único para la URL de seguimiento del cliente
 function generarToken(len = 10): string {
@@ -20,6 +20,21 @@ const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
+
+interface EmpresaRow {
+  id: string;
+  nombre_empresa?: string;
+  nombre_bot?: string;
+  tipo_negocio?: string;
+  prompt_personalizado?: string;
+  telefono_telnyx?: string;
+  dispatcher_phone?: string;
+  waba_number?: string;
+  paquete?: {
+    permisos_sistema?: Record<string, boolean>;
+    incluye_bot?: boolean;
+  };
+}
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -48,7 +63,7 @@ serve(async (req) => {
       let inboundNumber = message.phoneNumber?.number || message.call?.phoneNumber?.number || '';
       console.log(`[VAPI ASSISTANT REQUEST] Llamada entrante al número: ${inboundNumber}, tenantId en URL: ${tenantId}`);
 
-      let empresa = null;
+      let empresa: EmpresaRow | null = null;
 
       // 1. Intentar buscar por tenantId si viene en la URL
       if (tenantId) {
@@ -188,7 +203,7 @@ Cuando la herramienta devuelva el resultado, léelo tal cual al cliente y despí
         // Recuperamos la empresa para saber en qué ciudad operar y a dónde mandar el WhatsApp
         const urlObj = new URL(req.url);
         const tenantId = urlObj.searchParams.get('tenantId');
-        let empresa: Record<string, unknown> | null = null;
+        let empresa: EmpresaRow | null = null;
         let permisosSistema: Record<string, boolean> = {};
 
         if (tenantId) {
@@ -230,20 +245,22 @@ Cuando la herramienta devuelva el resultado, léelo tal cual al cliente y despí
         const locOrigen = await resolveLocation(supabase, args.origen, ciudadTenant);
 
         // 2. Solo conectamos a Traccar si Google Maps nos dio coordenadas válidas
+        // 2. Solo conectamos a Traccar si Google Maps nos dio coordenadas válidas
+        let nearbyTaxis: { name: string; distanceKm: number; deviceId: number }[] | null = null;
         let nearestTaxi = null;
+
         if (locOrigen && locOrigen.lat !== null && locOrigen.lng !== null) {
           console.log(`[TRACCAR] Coordenadas encontradas (Lat: ${locOrigen.lat}, Lng: ${locOrigen.lng}). Conectando a Traccar para buscar unidades...`);
           try {
-            nearestTaxi = await getNearestTaxi(locOrigen.lat, locOrigen.lng, permisosSistema);
-            if (nearestTaxi) {
-              // distanceKm * 1000 para convertir a metros legibles en el log
-              console.log(`[TRACCAR EXITO] Unidad más cercana encontrada: ${nearestTaxi.name} a ${Math.round(nearestTaxi.distanceKm * 1000)} metros.`);
+            nearbyTaxis = await getNearestTaxi(locOrigen.lat, locOrigen.lng, permisosSistema);
+            if (nearbyTaxis && nearbyTaxis.length > 0) {
+              nearestTaxi = nearbyTaxis[0];
+              console.log(`[TRACCAR EXITO] Unidades cercanas encontradas. Asignando la más cercana: ${nearestTaxi.name} a ${Math.round(nearestTaxi.distanceKm * 1000)} metros.`);
             } else {
               console.log(`[TRACCAR FALLO] No se encontraron unidades cercanas con GPS activo.`);
             }
           } catch (traccarErr: unknown) {
             console.error(`[TRACCAR ERROR] Falló conexión a Traccar, continuando sin GPS:`, traccarErr instanceof Error ? traccarErr.message : String(traccarErr));
-
           }
         } else {
           console.log(`[GEOLOCALIZACION] No se pudieron resolver las coordenadas del origen.`);
@@ -272,13 +289,19 @@ Cuando la herramienta devuelva el resultado, léelo tal cual al cliente y despí
             else console.log(`[VIAJE] Viaje creado con token: ${token}`);
           });
 
-          // Mandamos el link de tracking al cliente por WhatsApp (número separado al del despachador)
+          // Mandamos el link de tracking al cliente por WhatsApp usando plantilla aprobada de Meta
           if (customerNumber && customerNumber !== 'Desconocido') {
             const cleanCustomer = customerNumber.startsWith('+') ? customerNumber : `+${customerNumber}`;
-            sendWhatsApp(
-              cleanCustomer,
-              `🚕 ¡Tu taxi *${nearestTaxi.name}* ya va en camino!\n\nSigue tu unidad en tiempo real aquí:\n${trackingUrl}\n\n📍 *Origen:* ${args.origen}\n🏁 *Destino:* ${args.destino}`
-            ).catch(err => console.error('[YCLOUD CLIENTE ERROR]', err));
+            const fallbackBody = `🚕 ¡Tu taxi *${nearestTaxi.name}* ya va en camino!\n\nSigue tu unidad en tiempo real aquí:\n${trackingUrl}\n\n📍 *Origen:* ${args.origen}\n🏁 *Destino:* ${args.destino}`;
+
+            sendWhatsAppTemplate({
+              to: cleanCustomer,
+              templateName: 'seguimiento_viaje',
+              languageCode: 'es_MX',
+              bodyParameters: [nearestTaxi.name, trackingUrl],
+              fromOverride: empresa?.waba_number || undefined,
+              fallbackText: fallbackBody,
+            }).catch(err => console.error('[YCLOUD CLIENTE TEMPLATE ERROR]', err));
           }
         }
 
@@ -296,8 +319,23 @@ Cuando la herramienta devuelva el resultado, léelo tal cual al cliente y despí
 
         // 5. Armar el mensaje exacto que leerá el bot al cliente en la llamada
         let resultMsg = "";
-        if (nearestTaxi) {
-          resultMsg = `¡Listo! Tu viaje quedó registrado. La unidad ${nearestTaxi.name} ya va en camino a recogerte. Te mando un mensaje de WhatsApp para que puedas seguirlo en el mapa. ¡Que te vaya muy bien!`;
+        if (nearbyTaxis && nearbyTaxis.length > 0) {
+          // [MODO DE PRUEBA / DEMO]
+          // Esta lógica se agregó temporalmente para la demostración con los taxis de Wialon.
+          // La IA mencionará dinámicamente varios taxis cercanos para dar la impresión
+          // de que está escaneando la zona en tiempo real.
+          
+          // Asumimos velocidad urbana de 30 km/h -> 2 mins por km
+          const getMins = (km: number) => Math.max(1, Math.round(km * 2));
+          
+          if (nearbyTaxis.length === 1) {
+             const mins = getMins(nearbyTaxis[0].distanceKm);
+             resultMsg = `¡Listo! Tu viaje quedó registrado. La unidad ${nearbyTaxis[0].name} es la más cercana y llegará en aproximadamente ${mins} minutos. Ya va en camino. Te acabo de mandar un mensaje de WhatsApp para que puedas seguir su ruta en tiempo real. ¡Que tengas buen viaje!`;
+          } else {
+             const mins1 = getMins(nearbyTaxis[0].distanceKm);
+             const mins2 = getMins(nearbyTaxis[1].distanceKm);
+             resultMsg = `¡Listo! Tu viaje quedó registrado. Encontré a la unidad ${nearbyTaxis[1].name} a ${mins2} minutos, pero te he asignado la unidad ${nearbyTaxis[0].name} que está aún más cerca, a solo ${mins1} minutos. Ya va en camino. Te acabo de mandar un WhatsApp con el enlace para seguirlo en el mapa. ¡Que te vaya muy bien!`;
+          }
         } else {
           resultMsg = `¡Listo! Tu viaje quedó registrado. En unos momentos te mandamos la unidad. ¡Que te vaya muy bien!`;
         }

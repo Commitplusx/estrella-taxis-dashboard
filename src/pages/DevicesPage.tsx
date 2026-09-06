@@ -37,8 +37,10 @@ function EditDeviceModal({ device, groups, onClose, onSaved }: EditDeviceModalPr
     setSaving(true);
     setError('');
     try {
-      const res = await fetch(`${BASE_URL}/devices/${device.id}`, {
-        method: 'PUT',
+      const isNew = !device.id;
+      const url = isNew ? `${BASE_URL}/devices` : `${BASE_URL}/devices/${device.id}`;
+      const res = await fetch(url, {
+        method: isNew ? 'POST' : 'PUT',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...device, ...form, groupId: Number(form.groupId) }),
@@ -363,7 +365,13 @@ groupedDevices[0].devices.push(d);
   const [searchTerm, setSearchTerm] = useState('');
 
   const handleSaved = (updated: TraccarDevice) => {
-    setDevices(prev => prev.map(d => d.id === updated.id ? updated : d));
+    setDevices(prev => {
+      const exists = prev.find(d => d.id === updated.id);
+      if (exists) {
+        return prev.map(d => d.id === updated.id ? updated : d);
+      }
+      return [...prev, updated];
+    });
   };
 
   return (

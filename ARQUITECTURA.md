@@ -59,6 +59,7 @@ Cliente abre WhatsApp → link /track/:token                             │
 
 | Servicio | Qué hace en el sistema | URL / Panel |
 |---|---|---|
+| **Wialon** | Proveedor original de los GPS (Kotan). Extraemos de aquí la telemetría en bruto. | `https://hosting.wialon.com` |
 | **Traccar** | GPS en tiempo real, historial de rutas, velocidad, heading, ignición | `https://taxis.estrella-eats.mx` |
 | **Supabase** | Base de datos, Edge Functions, Auth, Storage | `https://supabase.com/dashboard/project/knghdwpxheenkpuajkxl` |
 | **Vapi** | Bot de voz IA, transcripción, manejo de llamadas PSTN | `https://dashboard.vapi.ai` |
@@ -281,7 +282,7 @@ driving_scores
 
 7. Si encontró taxi:
    a. Crea registro en tabla `viajes` con token único
-   b. Manda WhatsApp al CLIENTE: link de tracking en tiempo real
+   b. Manda WhatsApp al CLIENTE: link de tracking en tiempo real (vía plantilla oficial de Meta `seguimiento_viaje` para evitar bloqueo de ventana 24h en llamadas)
    c. Manda WhatsApp al DESPACHADOR: resumen + link de tracking
 
 8. El bot responde en la llamada:
@@ -290,6 +291,30 @@ driving_scores
 
 9. Fin de llamada → Vapi envía end-of-call-report
    └── Se guarda el transcript en telnyx_active_calls
+```
+
+---
+
+## 6.5 Flujo Completo del Bot de WhatsApp (Texto)
+
+```text
+1. Cliente envía mensaje por WhatsApp ("Mándame un taxi a la plaza")
+        │
+        ▼
+   [YCloud API]
+        │ Webhook Inbound Message
+        ▼
+[ycloud-webhook] ← Supabase Edge Function
+        │
+        ├──► 1. Gatekeeping: Verifica si la empresa tiene `paquetes.incluye_bot`. Si no, ignora.
+        ├──► 2. Carga historial de chat desde tabla `whatsapp_sessions`.
+        ├──► 3. [Gemini 3.6 Flash] procesa el texto con un prompt inteligente (detecta ciudad, tipo_negocio, usa emojis y saludos amigables).
+        ├──► 4. Si faltan datos, el bot responde pidiendo lo que falta vía YCloud.
+        └──► 5. Si tiene Origen y Destino completos, genera ESTRICTAMENTE un JSON `{"tool":"book_taxi"}`:
+                a. Geocodifica con Google Maps.
+                b. Llama a Traccar para buscar el taxi más cercano (usa Enrutamiento Vectorial si es Enterprise).
+                c. Guarda en tabla `viajes` y manda tracking link al cliente con **Botón Nativo de WhatsApp (CTA_URL)**.
+                d. Notifica al despachador humano.
 ```
 
 ---
@@ -319,6 +344,28 @@ driving_scores
    - Velocidad en km/h
    - Indicador de GPS activo (punto verde parpadeante)
    - Origen del cliente (marcador rojo)
+```
+
+---
+
+## 7.5 Arquitectura del Wialon Bridge
+
+Dado que los equipos GPS están apuntando físicamente a Wialon, se construyó un "Bridge" en Node.js que extrae la telemetría y la inyecta en Traccar simulando ser un dispositivo físico mediante el protocolo OsmAnd.
+
+```text
+Ubicación: VPS de Ubuntu (/root/wialon-bridge/index.js)
+Gestor de procesos: PM2 (autorestart habilitado y logrotate)
+
+[Wialon API] ──(HTTP GET/POST)──► [wialon-bridge] ──(OsmAnd Protocol)──► [Traccar Server]
+
+Características de robustez implementadas:
+1. Jitter Anti-Spam: El ciclo de sincronización no es fijo. Se usa un delay aleatorio de 25s a 35s para simular tráfico humano y evitar bloqueos.
+2. Inyección Paralela: Usa Promise.all para mandar las 17 coordenadas a Traccar simultáneamente.
+3. Fetch Timeouts: AbortSignal de 15s para Wialon y 5s para Traccar evita cuelgues de red.
+4. Mapeo de Parámetros: 
+   - io_3 (Kotan): Traducido a `occupied` (0 = Ocupado, 1 = Libre).
+   - pwr_int / battery: Traducido a nivel de batería (0-100%).
+   - io_239 / ignition: Traducido a estado del motor.
 ```
 
 ---

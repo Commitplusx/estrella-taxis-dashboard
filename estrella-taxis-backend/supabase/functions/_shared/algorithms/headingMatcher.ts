@@ -1,5 +1,5 @@
 import { TraccarDevice, TraccarPosition } from "../traccar.ts";
-import { z } from "npm:zod";
+import { z } from "https://esm.sh/zod@3.22.4";
 
 /**
  * Módulo de Enrutamiento Vectorial (Heading Matcher)
@@ -75,16 +75,14 @@ export function findOptimalTaxi(
   clientLat: number, 
   clientLng: number,
   maxRadiusKm: number = 10
-): Result<OptimalTaxiResult> {
+): Result<OptimalTaxiResult[]> {
   const startMs = performance.now();
   
   if (!Array.isArray(positions) || positions.length === 0) return { success: false, error: "No positions available" };
   if (!Array.isArray(devices) || devices.length === 0) return { success: false, error: "No devices available" };
   if (!isValidCoord(clientLat, clientLng)) return { success: false, error: "Invalid client coordinates" };
 
-  let nearestTaxi: TraccarDevice | undefined;
-  let minEffectiveDistance = Infinity;
-  let trueDistanceOfSelected = Infinity;
+  let scoredTaxis: { device: TraccarDevice; effectiveDist: number; rawDist: number }[] = [];
 
   for (const pos of positions) {
     if (!pos || !pos.deviceId || !isValidCoord(pos.latitude, pos.longitude)) continue;
@@ -92,6 +90,11 @@ export function findOptimalTaxi(
     // Fast-path: Bounding box culling (O(1) simple math)
     if (!isWithinBoundingBox(clientLat, clientLng, pos.latitude, pos.longitude, maxRadiusKm * 1.5)) {
       continue; // Ignorar taxis completamente fuera de zona
+    }
+
+    // Filtrar taxis ocupados (ignorar si attributes.occupied es 'true' o true)
+    if (pos.attributes && (pos.attributes.occupied === 'true' || pos.attributes.occupied === true)) {
+      continue; // Ignorar taxis que ya llevan pasaje
     }
 
     const device = devices.find(d => d.id === pos.deviceId);
@@ -119,26 +122,28 @@ export function findOptimalTaxi(
 
     const effectiveDistance = rawDistance + penaltyKm;
     
-    if (effectiveDistance < minEffectiveDistance) {
-      minEffectiveDistance = effectiveDistance;
-      trueDistanceOfSelected = rawDistance;
-      nearestTaxi = device;
-    }
+    scoredTaxis.push({ device, effectiveDist: effectiveDistance, rawDist: rawDistance });
   }
+
+  // Ordenar por distancia efectiva (menor a mayor)
+  scoredTaxis.sort((a, b) => a.effectiveDist - b.effectiveDist);
+
+  // Filtrar los que están realmente dentro del radio máximo crudo
+  const validTaxis = scoredTaxis.filter(t => t.rawDist <= maxRadiusKm);
 
   const endMs = performance.now();
   const perf = Number((endMs - startMs).toFixed(3));
 
-  if (nearestTaxi && trueDistanceOfSelected <= maxRadiusKm) {
-    return { 
-      success: true, 
-      data: { 
-        name: nearestTaxi.name, 
-        distanceKm: trueDistanceOfSelected, 
-        deviceId: nearestTaxi.id,
-        performanceMs: perf
-      }
-    };
+  if (validTaxis.length > 0) {
+    const topTaxis = validTaxis.slice(0, 3).map(t => ({
+      name: t.device.name,
+      distanceKm: t.rawDist,
+      deviceId: t.device.id,
+      performanceMs: perf
+    }));
+
+    // Retornamos el array de taxis encontrados
+    return { success: true, data: topTaxis };
   }
   
   return { success: false, error: "No suitable taxi found within radius" };

@@ -26,6 +26,7 @@ export interface TraccarPosition {
   speed?: number;
   course?: number;
   address?: string;
+  attributes?: Record<string, unknown>;
 }
 
 const TRACCAR_BASE = Deno.env.get('TRACCAR_URL') || 'https://taxis.estrella-eats.mx/api';
@@ -74,7 +75,7 @@ async function traccarGet<T>(cookie: string, path: string): Promise<T[]> {
 
 import { findOptimalTaxi } from "./algorithms/headingMatcher.ts";
 
-export async function getNearestTaxi(lat: number, lng: number, permisos: Record<string, boolean> = {}): Promise<{ name: string; distanceKm: number; deviceId: number } | null> {
+export async function getNearestTaxi(lat: number, lng: number, permisos: Record<string, boolean> = {}): Promise<{ name: string; distanceKm: number; deviceId: number }[] | null> {
   try {
     const cookie = await traccarLogin();
     
@@ -92,12 +93,13 @@ export async function getNearestTaxi(lat: number, lng: number, permisos: Record<
       const result = findOptimalTaxi(devices, positions, lat, lng, 10);
       
       if (result.success) {
-        console.log(`[TRACCAR] Taxi óptimo encontrado en ${result.data.performanceMs}ms: ${result.data.name} a ${result.data.distanceKm.toFixed(2)}km`);
-        return { 
-          name: result.data.name, 
-          distanceKm: result.data.distanceKm, 
-          deviceId: result.data.deviceId 
-        };
+        const topTaxis = result.data;
+        console.log(`[TRACCAR] ${topTaxis.length} taxis encontrados. El más cercano es ${topTaxis[0].name} a ${topTaxis[0].distanceKm.toFixed(2)}km`);
+        return topTaxis.map((t) => ({
+          name: t.name, 
+          distanceKm: t.distanceKm, 
+          deviceId: t.deviceId 
+        }));
       } else {
         console.warn(`[TRACCAR] No se asignó taxi por Vectorial: ${result.error}`);
         return null;
@@ -108,7 +110,7 @@ export async function getNearestTaxi(lat: number, lng: number, permisos: Record<
     }
     
   } catch (e) {
-    console.error('[TRACCAR] Error buscando taxi más cercano:', e);
+    console.error('[TRACCAR] Error buscando taxis más cercanos:', e);
   }
   
   return null;

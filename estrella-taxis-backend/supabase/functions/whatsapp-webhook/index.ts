@@ -22,9 +22,9 @@ Deno.serve(async (req: Request) => {
     try {
       const parsed = JSON.parse(safeBody);
       
-      // Si el JSON viene de YCloud (confirmación de lectura/entrega), lo ignoramos devolviendo 200
-      if (parsed.whatsappMessage || parsed.type === 'whatsapp.message.updated') {
-        return new Response('Webhook de YCloud recibido', { status: 200 });
+      // Si el JSON viene de YCloud (confirmación de lectura/entrega o mensaje entrante), lo ignoramos devolviendo 200
+      if (parsed.whatsappMessage || parsed.whatsappInboundMessage || parsed?.type?.startsWith('whatsapp.')) {
+        return new Response('Webhook de YCloud recibido y descartado en ruta de Traccar', { status: 200 });
       }
       
       phone = parsed.phone;
