@@ -14,10 +14,11 @@ interface TaxiPosition {
 interface ViajeInfo {
   origen: string;
   destino: string;
-  origen_lat: number | null;
   origen_lng: number | null;
   estado: string;
   createdAt: string;
+  empresaName?: string;
+  clienteNombre?: string;
 }
 
 const SUPABASE_FN = 'https://knghdwpxheenkpuajkxl.supabase.co/functions/v1/track-position';
@@ -85,11 +86,19 @@ export default function TrackPage() {
     if ((window as any).google?.maps) {
       initMap();
     } else {
-      const script = document.createElement('script');
-      const key = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
-      script.src = `https://maps.googleapis.com/maps/api/js?key=${key}&callback=__initTrackMap`;
-      (window as any).__initTrackMap = initMap;
-      document.head.appendChild(script);
+      const existingScript = document.getElementById('google-maps-script');
+      if (!existingScript) {
+        const script = document.createElement('script');
+        script.id = 'google-maps-script';
+        const key = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
+        script.src = `https://maps.googleapis.com/maps/api/js?key=${key}&callback=__initTrackMap&loading=async`;
+        script.async = true;
+        script.defer = true;
+        (window as any).__initTrackMap = initMap;
+        document.head.appendChild(script);
+      } else {
+        (window as any).__initTrackMap = initMap;
+      }
     }
   }, []);
 
@@ -197,6 +206,12 @@ export default function TrackPage() {
 
   const isCompleted = viaje?.estado === 'completado';
   
+  useEffect(() => {
+    if (viaje?.empresaName) {
+      document.title = `${viaje.empresaName} - Tracker`;
+    }
+  }, [viaje?.empresaName]);
+
   let etaMins = null;
   if (taxi?.lat && taxi?.lng && viaje?.origen_lat && viaje?.origen_lng && !isCompleted) {
     etaMins = calcularETA(taxi.lat, taxi.lng, viaje.origen_lat, viaje.origen_lng, taxi.speed || 0);
@@ -232,16 +247,16 @@ export default function TrackPage() {
             </div>
             <div className="flex flex-col">
               <span className="font-bold text-gray-900 text-sm leading-tight">
-                {taxi ? taxi.name : 'Stellar Tracker'}
+                {taxi ? taxi.name : (viaje?.empresaName || 'Stellar Tracker')}
               </span>
               <span className="text-[11px] text-gray-500 font-semibold uppercase tracking-wider">
-                {isCompleted ? 'Viaje completado' : taxi ? 'En camino' : 'Buscando unidad'}
+                {viaje?.estado === 'cancelado' ? 'Viaje cancelado' : isCompleted ? 'Viaje completado' : taxi ? 'En camino' : 'Buscando unidad'}
               </span>
             </div>
           </div>
-          {lastPoll && (
+          {taxi?.lastUpdate && (
             <div className="text-[10px] text-gray-400 font-medium text-right leading-tight border-l border-gray-200 pl-3">
-              Actualizado<br/>{tiempoTranscurrido(lastPoll.toISOString())}
+              Actualizado<br/>{tiempoTranscurrido(taxi.lastUpdate)}
             </div>
           )}
         </div>
@@ -263,6 +278,20 @@ export default function TrackPage() {
 
           <div className="px-5 pb-5 pt-1 md:p-8 flex flex-col gap-4 md:gap-6">
             
+            {/* Nombre de la Empresa */}
+            {viaje?.empresaName && (
+              <div className="text-center md:text-left text-xs font-extrabold text-blue-600/80 uppercase tracking-widest -mb-2 md:-mb-4">
+                {viaje.empresaName}
+              </div>
+            )}
+
+            {/* Saludo Personalizado */}
+            {viaje?.clienteNombre && !isCompleted && !error && (
+              <div className="text-center md:text-left text-gray-500 font-medium text-sm md:text-base -mt-1 md:-mt-3">
+                ¡Hola, <span className="text-gray-900 font-bold">{viaje.clienteNombre.split(' ')[0]}</span>! Tu viaje está en proceso.
+              </div>
+            )}
+
             {/* Estado / Errores */}
             {error ? (
               <div className="flex items-start gap-3 bg-red-50 text-red-700 p-4 rounded-2xl">
@@ -312,6 +341,21 @@ export default function TrackPage() {
                     
                     {/* Textos de Ruta */}
                     <div className="flex-1 flex flex-col justify-between py-0.5 gap-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <div>
+                      <h2 className="text-xl font-bold text-gray-800">
+                        {viaje.estado === 'buscando_conductor' ? 'Buscando conductor ideal...' : `Taxi: ${taxi?.name}`}
+                      </h2>
+                      {viaje.clienteNombre && (
+                        <p className="text-sm text-gray-500">
+                          Pasajero: {viaje.clienteNombre}
+                        </p>
+                      )}
+                      <p className="text-sm text-gray-500">
+                        {viaje.estado === 'buscando_conductor' ? 'Enviando alerta a unidades cercanas' : `Placas: ${taxi?.deviceId || 'N/A'}`}
+                      </p>
+                    </div>
+                  </div>
                       <div>
                         <div className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">Punto de encuentro</div>
                         <div className="text-[16px] font-bold text-gray-900 leading-snug truncate pr-4">{viaje.origen}</div>

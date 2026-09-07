@@ -9,6 +9,7 @@ export interface TraccarDevice {
   lastUpdate?: string;
   positionId?: number;
   groupId?: number;
+  phone?: string;
 }
 
 export interface TraccarPosition {
@@ -75,7 +76,7 @@ async function traccarGet<T>(cookie: string, path: string): Promise<T[]> {
 
 import { findOptimalTaxi } from "./algorithms/headingMatcher.ts";
 
-export async function getNearestTaxi(lat: number, lng: number, permisos: Record<string, boolean> = {}): Promise<{ name: string; distanceKm: number; deviceId: number }[] | null> {
+export async function getNearestTaxi(lat: number, lng: number, permisos: Record<string, boolean> = {}): Promise<{ name: string; distanceKm: number; deviceId: number; phone?: string }[] | null> {
   try {
     const cookie = await traccarLogin();
     
@@ -84,6 +85,20 @@ export async function getNearestTaxi(lat: number, lng: number, permisos: Record<
       traccarGet<TraccarDevice>(cookie, '/devices'),
       traccarGet<TraccarPosition>(cookie, '/positions')
     ]);
+
+    // ── MODO DE PRUEBAS: Filtrar a unidades específicas ──
+    const testUnits = ["POMPEYO1014", "POMPEYO0540"];
+    const filteredDevices = devices.filter(d => testUnits.includes(d.name));
+    
+    if (filteredDevices.length > 0) {
+       console.log(`[TEST MODE] Forzando asignación a unidades de prueba:`, filteredDevices.map(d => d.name));
+       return filteredDevices.map(d => ({
+          name: d.name,
+          distanceKm: 0.1, // Fake distance para evitar que sea rechazado
+          deviceId: d.id,
+          phone: d.phone
+       }));
+    }
 
     // ── FEATURE FLAG: Enrutamiento Vectorial ──
     const usaVectorial = permisos.enrutamiento_vectorial !== false; // Activo por defecto a menos que se apague explícitamente
@@ -95,11 +110,15 @@ export async function getNearestTaxi(lat: number, lng: number, permisos: Record<
       if (result.success) {
         const topTaxis = result.data;
         console.log(`[TRACCAR] ${topTaxis.length} taxis encontrados. El más cercano es ${topTaxis[0].name} a ${topTaxis[0].distanceKm.toFixed(2)}km`);
-        return topTaxis.map((t) => ({
-          name: t.name, 
-          distanceKm: t.distanceKm, 
-          deviceId: t.deviceId 
-        }));
+        return topTaxis.map((t) => {
+          const device = devices.find(d => d.id === t.deviceId);
+          return {
+            name: t.name, 
+            distanceKm: t.distanceKm, 
+            deviceId: t.deviceId,
+            phone: device?.phone
+          };
+        });
       } else {
         console.warn(`[TRACCAR] No se asignó taxi por Vectorial: ${result.error}`);
         return null;

@@ -92,6 +92,18 @@ export function findOptimalTaxi(
       continue; // Ignorar taxis completamente fuera de zona
     }
 
+    // Filtrar taxis apagados o sin señal (GPS > 10 mins de antigüedad)
+    const MAX_AGE_MS = 10 * 60 * 1000;
+    const fixTime = new Date(pos.fixTime || 0).getTime();
+    if (Date.now() - fixTime > MAX_AGE_MS) {
+      continue;
+    }
+
+    // Filtrar taxis con motor apagado (si el GPS lo reporta)
+    if (pos.attributes && pos.attributes.ignition === false) {
+      continue;
+    }
+
     // Filtrar taxis ocupados (ignorar si attributes.occupied es 'true' o true)
     if (pos.attributes && (pos.attributes.occupied === 'true' || pos.attributes.occupied === true)) {
       continue; // Ignorar taxis que ya llevan pasaje
@@ -110,14 +122,22 @@ export function findOptimalTaxi(
     
     const angleDiff = getAngleDifference(taxiCourse, bearing);
     
-    const basePenalty = Math.max(1, rawDistance * 0.2); 
+    // Penalización plana: 
+    // Dar vuelta en U (U-turn) en una ciudad típicamente toma entre 1 y 2 km de recorrido extra.
+    // Dar vuelta a la manzana toma ~0.5 a 1 km.
+    // La penalización NO debe crecer con la distancia, ya que hacer una vuelta en U toma el mismo tiempo a 1km que a 10km.
     let penaltyKm = 0;
 
-    if (taxiSpeedKmh > 5) {
-      if (angleDiff <= 45) penaltyKm = 0;
-      else if (angleDiff <= 90) penaltyKm = 0.5 * basePenalty;
-      else if (angleDiff <= 135) penaltyKm = 1.2 * basePenalty;
-      else penaltyKm = 2.5 * basePenalty;
+    if (taxiSpeedKmh > 5) { // Solo si el vehículo está en movimiento
+      if (angleDiff <= 45) {
+        penaltyKm = 0; // Va en dirección correcta
+      } else if (angleDiff <= 90) {
+        penaltyKm = 0.5; // Va de lado (requiere cruzar/doblar)
+      } else if (angleDiff <= 135) {
+        penaltyKm = 1.2; // Va casi en contra
+      } else {
+        penaltyKm = 2.0; // Va totalmente en contra (requiere retorno / U-turn)
+      }
     }
 
     const effectiveDistance = rawDistance + penaltyKm;

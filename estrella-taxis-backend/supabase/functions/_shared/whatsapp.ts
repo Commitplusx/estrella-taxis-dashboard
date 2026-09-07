@@ -56,6 +56,57 @@ export async function sendWhatsAppCTA(to: string, body: string, buttonText: stri
   if (!res.ok) console.error('[YCLOUD SEND CTA ERROR]', await res.text());
 }
 
+// Enviar un mensaje interactivo con botones rápidos (hasta 3)
+export async function sendWhatsAppButtons(to: string, body: string, buttons: {id: string, title: string}[], fromOverride?: string) {
+  if (!YCLOUD_API_KEY) return;
+  const sender = fromOverride || YCLOUD_SENDER;
+  const payload = {
+    from: sender,
+    to,
+    type: 'interactive',
+    interactive: {
+      type: 'button',
+      body: { text: body },
+      action: {
+        buttons: buttons.map(b => ({
+          type: 'reply',
+          reply: { id: b.id, title: b.title.substring(0, 20) } // YCloud WhatsApp limit is 20 chars
+        }))
+      }
+    }
+  };
+  const res = await fetch('https://api.ycloud.com/v2/whatsapp/messages', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-API-Key': YCLOUD_API_KEY },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) console.error('[YCLOUD SEND BUTTONS ERROR]', await res.text());
+}
+
+// Enviar un mensaje con botón nativo para solicitar la ubicación
+export async function sendWhatsAppLocationRequest(to: string, body: string, fromOverride?: string) {
+  if (!YCLOUD_API_KEY) return;
+  const sender = fromOverride || YCLOUD_SENDER;
+  const payload = {
+    from: sender,
+    to,
+    type: 'interactive',
+    interactive: {
+      type: 'location_request_message',
+      body: { text: body },
+      action: {
+        name: 'send_location'
+      }
+    }
+  };
+  const res = await fetch('https://api.ycloud.com/v2/whatsapp/messages', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-API-Key': YCLOUD_API_KEY },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) console.error('[YCLOUD LOCATION REQUEST ERROR]', await res.text());
+}
+
 export interface SendTemplateOptions {
   to: string;
   templateName: string;
@@ -126,9 +177,10 @@ export async function dispatchToHuman(data: DispatchData) {
   // Usar el teléfono del tenant si viene, sino el global del env var
   const target = data.dispatcherPhoneOverride || DISPATCHER_PHONE;
 
+  const distText = data.nearestTaxiDist !== undefined ? ` (a ${data.nearestTaxiDist.toFixed(1)} km)` : '';
   const dispatchExtraText = data.nearestTaxiName
-    ? `\n\n🟢 *Unidad más cercana:* ${data.nearestTaxiName} (a ${data.nearestTaxiDist?.toFixed(1)} km)${data.trackingUrl ? `\n📺 *Seguimiento en vivo:* ${data.trackingUrl}` : ''}`
-    : `\n\n⚠️ *Atención:* No hay unidades disponibles cercas.`;
+    ? `\n\n🟢 *Unidad más cercana:* ${data.nearestTaxiName}${distText}${data.trackingUrl ? `\n📺 *Seguimiento en vivo:* ${data.trackingUrl}` : ''}`
+    : (data.isEscalation ? '' : `\n\n⚠️ *Atención:* No hay unidades disponibles cercas.`);
 
   const tarifaFormateada = typeof data.tarifa === 'number'
     ? `$${data.tarifa}`

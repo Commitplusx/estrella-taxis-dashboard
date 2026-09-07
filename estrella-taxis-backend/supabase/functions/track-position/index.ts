@@ -57,7 +57,7 @@ serve(async (req) => {
     // Buscar el viaje por su token
     const { data: viaje, error } = await supabase
       .from('viajes')
-      .select('device_id, taxi_name, origen, destino, origen_lat, origen_lng, estado, cliente_tel, created_at')
+      .select('device_id, taxi_name, origen, destino, origen_lat, origen_lng, estado, cliente_tel, cliente_nombre, created_at, tenant_id')
       .eq('token', token)
       .maybeSingle();
 
@@ -65,6 +65,12 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: 'Viaje no encontrado' }), {
         status: 404, headers: { ...cors, 'Content-Type': 'application/json' }
       });
+    }
+
+    let empresaName = null;
+    if (viaje.tenant_id) {
+      const { data: emp } = await supabase.from('empresas').select('nombre_empresa').eq('id', viaje.tenant_id).maybeSingle();
+      if (emp) empresaName = emp.nombre_empresa;
     }
 
     // Obtener sesión de Traccar (reutiliza la misma por 10 minutos para no hacer login en cada poll)
@@ -94,6 +100,8 @@ serve(async (req) => {
         origen_lng: viaje.origen_lng,
         estado: viaje.estado,
         createdAt: viaje.created_at,
+        empresaName: empresaName,
+        clienteNombre: viaje.cliente_nombre,
       }
     }), {
       headers: { ...cors, 'Content-Type': 'application/json' }

@@ -103,24 +103,24 @@ serve(async (req) => {
       let objetivoPrompt = '';
       let mensajeInicial = '';
       if (empresa.tipo_negocio === 'taxi') {
-        objetivoPrompt = 'OBJETIVO: Recolectar ORIGEN, DESTINO y TELÉFONO. (Origen puede ser un punto de referencia, no obligues calle exacta).';
-        mensajeInicial = `¡Buenas! ${nombreEmpresa} al habla, soy ${nombreBot}, ¿en qué le ayudo?`;
+        objetivoPrompt = 'OBJETIVO PRINCIPAL: Recolectar NOMBRE DEL CLIENTE, ORIGEN y DESTINO. (El teléfono ya lo tienes).';
       } else {
-        objetivoPrompt = 'OBJETIVO: Recolectar PEDIDO EXACTO, DIRECCIÓN DE ENTREGA y TELÉFONO.';
-        mensajeInicial = `¡Buenas! ${nombreEmpresa} al habla, soy ${nombreBot}, ¿en qué le ayudo?`;
+        objetivoPrompt = 'OBJETIVO PRINCIPAL: Recolectar NOMBRE DEL CLIENTE, PEDIDO EXACTO y DIRECCIÓN DE ENTREGA. (El teléfono ya lo tienes).';
       }
+      mensajeInicial = `¡Hola! te estas comunicando a  ${nombreEmpresa}, soy ${nombreBot}, ¿en qué te puedo ayudar?`;
 
       const systemPrompt = `Eres el despachador de radio de "${nombreEmpresa}", tu nombre es ${nombreBot}.
 Tu trabajo es atender la llamada de manera súper natural y humana, como un despachador real de radio-taxi en México.
 
 1. TONO: Cálido, ágil y coloquial mexicano. Usa frases como "Claro que sí", "Con mucho gusto", "Enterado", "Perfecto".
 2. BREVEDAD: Máximo 15 palabras por turno. Sin rodeos.
-3. FLUJO NATURAL: Ya te presentaste, así que cuando el cliente diga para qué llama, ve directo a recopilar los datos uno por uno (origen, luego destino, luego teléfono). No los preguntes todos de un jalón.
-4. ${objetivoPrompt}
-5. INFO EXTRA: ${infoEmpresa}
+3. FLUJO NATURAL: Ya te presentaste, así que cuando el cliente diga para qué llama, ve directo a recopilar los datos uno por uno.
+4. ${objetivoPrompt} 
+5. ANTES de confirmar cualquier viaje o pedido, DEBES preguntarle su nombre si aún no lo ha dicho (Ej: "¿A nombre de quién mando el taxi?").
+6. INFO EXTRA: ${infoEmpresa}
 
 PROCESO DE RESERVA:
-Cuando tengas ORIGEN, DESTINO y TELÉFONO, EJECUTA INMEDIATAMENTE la función (herramienta) \`book_taxi\`.
+Cuando tengas NOMBRE, ORIGEN, DESTINO y TELÉFONO, EJECUTA INMEDIATAMENTE la función (herramienta) \`book_taxi\`.
 IMPORTANTE: NO digas "usando herramienta", ni "déjame checar", ni generes NINGÚN texto adicional antes de llamar a la función. SOLO ejecuta la función.
 El sistema hablará automáticamente el mensaje de espera mientras procesa.
 Cuando la herramienta devuelva el resultado, léelo tal cual al cliente y despídete amablemente.`;
@@ -163,11 +163,12 @@ Cuando la herramienta devuelva el resultado, léelo tal cual al cliente y despí
                   parameters: {
                     type: "object",
                     properties: {
+                      nombre: { type: "string" },
                       origen: { type: "string" },
                       destino: { type: "string" },
                       telefono: { type: "string" }
                     },
-                    required: ["origen", "destino", "telefono"]
+                    required: ["nombre", "origen", "destino", "telefono"]
                   }
                 },
                 server: {
@@ -215,7 +216,7 @@ Cuando la herramienta devuelva el resultado, léelo tal cual al cliente y despí
 
           if (data) {
             empresa = data as Record<string, unknown>;
-            
+
             // ── GATEKEEPING: Validación estricta del Plan ──
             const paqueteObj = Array.isArray(data.paquete) ? data.paquete[0] : data.paquete;
             if (paqueteObj && typeof paqueteObj === 'object') {
@@ -245,7 +246,6 @@ Cuando la herramienta devuelva el resultado, léelo tal cual al cliente y despí
         const locOrigen = await resolveLocation(supabase, args.origen, ciudadTenant);
 
         // 2. Solo conectamos a Traccar si Google Maps nos dio coordenadas válidas
-        // 2. Solo conectamos a Traccar si Google Maps nos dio coordenadas válidas
         let nearbyTaxis: { name: string; distanceKm: number; deviceId: number }[] | null = null;
         let nearestTaxi = null;
 
@@ -267,91 +267,120 @@ Cuando la herramienta devuelva el resultado, léelo tal cual al cliente y despí
         }
 
         // 3. Si encontramos un taxi, creamos el registro del viaje y generamos el link de seguimiento
-        let trackingUrl: string | null = null;
-        if (nearestTaxi) {
-          const token = generarToken();
-          trackingUrl = `${APP_URL}/track/${token}`;
+          let assignedTaxi = null;
+          let aiResponse = "";
+          let trackingUrlForCTA = "";
 
-          // Guardamos el viaje en Supabase para que la página de tracking lo encuentre
-          await supabase.from('viajes').insert({
-            token,
-            tenant_id: tenantId || null,
-            device_id: nearestTaxi.deviceId,
-            taxi_name: nearestTaxi.name,
-            cliente_tel: customerNumber,
-            origen: args.origen,
-            destino: args.destino,
-            origen_lat: locOrigen?.lat ?? null,
-            origen_lng: locOrigen?.lng ?? null,
-            estado: 'en_camino',
-          }).then(({ error }) => {
-            if (error) console.error('[VIAJE] Error al guardar viaje:', error.message);
-            else console.log(`[VIAJE] Viaje creado con token: ${token}`);
-          });
+          if (nearbyTaxis && nearbyTaxis.length > 0) {
+            // 1. Crear el viaje en estado buscando_conductor
+            const token = generarToken();
+            const { data: newViaje, error: insertErr } = await supabase.from('viajes').insert({
+              token, tenant_id: empresa.id,
+              cliente_tel: customerNumber, cliente_nombre: args.nombre, 
+              origen: args.origen, destino: args.destino,
+              origen_lat: locOrigen?.lat, origen_lng: locOrigen?.lng,
+              estado: 'buscando_conductor'
+            }).select().single();
 
-          // Mandamos el link de tracking al cliente por WhatsApp usando plantilla aprobada de Meta
-          if (customerNumber && customerNumber !== 'Desconocido') {
+            if (!insertErr && newViaje) {
+              trackingUrlForCTA = `${APP_URL}/track/${token}`;
+              
+              // 2. Cascada robusta: Iterar sobre los 3 taxis más cercanos
+              const topTaxis = nearbyTaxis.slice(0, 3);
+              for (const taxi of topTaxis) {
+                try {
+                  // Obtener teléfono del conductor
+                  const { data: conductor, error: condErr } = await supabase.from('conductores').select('telefono_whatsapp').eq('device_id', taxi.deviceId).maybeSingle();
+                  if (condErr || !conductor) continue;
+
+                  // Agregar a contactados (RPC Atómico robusto)
+                  const { error: rpcErr } = await supabase.rpc('array_append_viaje_conductores', { v_id: newViaje.id, d_id: taxi.deviceId });
+                  if (rpcErr) console.warn('[VAPI] Error en RPC array_append:', rpcErr);
+
+                  // Enviar oferta por WA al chofer (Manejo de fallos de red)
+                  const wabaNumber = empresa.waba_number || '';
+                  try {
+                    await sendWhatsApp(conductor.telefono_whatsapp, `🚨 *NUEVO VIAJE (A ${taxi.distanceKm.toFixed(1)} km)* 🚨\n\nRecoger a: ${args.nombre || 'Cliente'}\nOrigen: ${args.origen}\nDestino: ${args.destino}\n\nResponde *1* rápido para aceptar.`, wabaNumber);
+                  } catch (waErr) {
+                    console.error('[VAPI] Error enviando WhatsApp al chofer, saltando...', waErr);
+                    continue;
+                  }
+
+                  // Polling Seguro (esperar 5 segundos max por chofer = 15s total max)
+                  let accepted = false;
+                  for (let i = 0; i < 5; i++) {
+                    await new Promise(res => setTimeout(res, 1000)); // Esperar 1 segundo
+                    try {
+                      const { data: checkViaje } = await supabase.from('viajes').select('estado, taxi_name').eq('id', newViaje.id).single();
+                      if (checkViaje && checkViaje.estado === 'en_camino') {
+                        accepted = true;
+                        assignedTaxi = { name: checkViaje.taxi_name };
+                        break;
+                      }
+                    } catch (dbErr) {
+                      console.warn('[VAPI] Error de red en polling, reintentando...', dbErr);
+                    }
+                  }
+
+                  if (accepted) break; // Si aceptó, salimos del ciclo principal
+                } catch (generalErr) {
+                  console.error('[VAPI] Excepcion no controlada en cascada:', generalErr);
+                }
+              }
+            }
+          }
+
+          if (assignedTaxi) {
+            aiResponse = `¡Listo! El taxista ${assignedTaxi.name} ya confirmó y va para allá. Te mandé un mensaje de texto con el link del mapa. ¡Gracias por llamar!`;
+          } else {
+            aiResponse = `Nuestros conductores están tardando un poquito en responder. Pero no te preocupes, en cuanto uno confirme te mandaremos el link por mensaje. ¡Muchas gracias por llamar!`;
+          }
+
+          // Notificar al cliente si tenemos número
+          if (customerNumber && customerNumber !== 'Desconocido' && trackingUrlForCTA) {
             const cleanCustomer = customerNumber.startsWith('+') ? customerNumber : `+${customerNumber}`;
-            const fallbackBody = `🚕 ¡Tu taxi *${nearestTaxi.name}* ya va en camino!\n\nSigue tu unidad en tiempo real aquí:\n${trackingUrl}\n\n📍 *Origen:* ${args.origen}\n🏁 *Destino:* ${args.destino}`;
-
+            const tName = assignedTaxi ? assignedTaxi.name : 'Unidad por confirmar';
+            const fallbackBody = assignedTaxi 
+              ? `🚕 ¡Tu taxi *${tName}* ya va en camino!\n\nSigue tu unidad en tiempo real aquí:\n${trackingUrlForCTA}\n\n📍 *Origen:* ${args.origen}\n🏁 *Destino:* ${args.destino}`
+              : `🚕 Estamos asignando tu unidad...\n\nSigue tu viaje en tiempo real aquí para ver qué taxi toma tu servicio:\n${trackingUrlForCTA}\n\n📍 *Origen:* ${args.origen}\n🏁 *Destino:* ${args.destino}`;
+            
             sendWhatsAppTemplate({
               to: cleanCustomer,
               templateName: 'seguimiento_viaje',
               languageCode: 'es_MX',
-              bodyParameters: [nearestTaxi.name, trackingUrl],
+              bodyParameters: [tName, trackingUrlForCTA],
               fromOverride: empresa?.waba_number || undefined,
               fallbackText: fallbackBody,
             }).catch(err => console.error('[YCLOUD CLIENTE TEMPLATE ERROR]', err));
           }
-        }
 
-        // 4. Notificar al despachador humano — si la empresa tiene su propio número de WhatsApp, usamos ese
+        // 4. Notificar al despachador humano
+        const dispatchTaxiName = assignedTaxi ? assignedTaxi.name : 'Por confirmar';
+        const dispatchTaxiDist = assignedTaxi ? assignedTaxi.distanceKm : (nearbyTaxis && nearbyTaxis.length > 0 ? nearbyTaxis[0].distanceKm : undefined);
         dispatchToHuman({
           origen: args.origen,
           destino: args.destino,
           telefono: customerNumber,
           tarifa: locOrigen ? locOrigen.precio : null,
-          nearestTaxiName: nearestTaxi ? nearestTaxi.name : undefined,
-          nearestTaxiDist: nearestTaxi ? nearestTaxi.distanceKm : undefined,
-          trackingUrl: trackingUrl || undefined,
+          nearestTaxiName: dispatchTaxiName,
+          nearestTaxiDist: dispatchTaxiDist,
+          trackingUrl: trackingUrlForCTA || undefined,
           dispatcherPhoneOverride: empresa?.dispatcher_phone || undefined
         }).catch(err => console.error('[YCLOUD BACKGROUND ERROR]', err));
 
-        // 5. Armar el mensaje exacto que leerá el bot al cliente en la llamada
-        let resultMsg = "";
-        if (nearbyTaxis && nearbyTaxis.length > 0) {
-          // [MODO DE PRUEBA / DEMO]
-          // Esta lógica se agregó temporalmente para la demostración con los taxis de Wialon.
-          // La IA mencionará dinámicamente varios taxis cercanos para dar la impresión
-          // de que está escaneando la zona en tiempo real.
-          
-          // Asumimos velocidad urbana de 30 km/h -> 2 mins por km
-          const getMins = (km: number) => Math.max(1, Math.round(km * 2));
-          
-          if (nearbyTaxis.length === 1) {
-             const mins = getMins(nearbyTaxis[0].distanceKm);
-             resultMsg = `¡Listo! Tu viaje quedó registrado. La unidad ${nearbyTaxis[0].name} es la más cercana y llegará en aproximadamente ${mins} minutos. Ya va en camino. Te acabo de mandar un mensaje de WhatsApp para que puedas seguir su ruta en tiempo real. ¡Que tengas buen viaje!`;
-          } else {
-             const mins1 = getMins(nearbyTaxis[0].distanceKm);
-             const mins2 = getMins(nearbyTaxis[1].distanceKm);
-             resultMsg = `¡Listo! Tu viaje quedó registrado. Encontré a la unidad ${nearbyTaxis[1].name} a ${mins2} minutos, pero te he asignado la unidad ${nearbyTaxis[0].name} que está aún más cerca, a solo ${mins1} minutos. Ya va en camino. Te acabo de mandar un WhatsApp con el enlace para seguirlo en el mapa. ¡Que te vaya muy bien!`;
-          }
-        } else {
-          resultMsg = `¡Listo! Tu viaje quedó registrado. En unos momentos te mandamos la unidad. ¡Que te vaya muy bien!`;
-        }
-
+        // 5. Retornar a VAPI
         return new Response(JSON.stringify({
           results: [
             {
               toolCallId: toolCallInfo.toolCall.id,
-              result: resultMsg
+              result: aiResponse
             }
           ]
         }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           status: 200
         });
-      }
+      } // Fin de book_taxi
 
       // Si Vapi manda una herramienta que no reconocemos, respondemos vacío para que no se quede esperando
       return new Response(JSON.stringify({ results: [] }), {
@@ -398,7 +427,7 @@ Cuando la herramienta devuelva el resultado, léelo tal cual al cliente y despí
   } catch (error: unknown) {
     const errMsg = error instanceof Error ? error.message : String(error);
     console.error("[VAPI WEBHOOK ERROR]", errMsg);
-    return new Response(JSON.stringify({ error: errMsg }), { 
+    return new Response(JSON.stringify({ error: errMsg }), {
       status: 500,
       headers: { "Content-Type": "application/json" }
     });

@@ -226,13 +226,19 @@ perfiles ───────────────────────�
   empresa_id (FK → empresas)                           │
   rol ('superadmin'|'admin_empresa'|'operador')        │
                                                        │
+conductores ──────────────────────────────────────────►┤  🆕
+  id (UUID), tenant_id (FK → empresas)                 │
+  device_id (único), telefono_whatsapp                 │
+  nombre, activo                                       │
+                                                       │
 viajes ───────────────────────────────────────────────►┤  🆕
   id (UUID), token (único para URL pública)            │
   tenant_id (FK → empresas)                            │
-  device_id    ← ID del taxi en Traccar                │
+  device_id    ← (Nullable) ID del taxi asignado       │
   taxi_name, cliente_tel, origen, destino              │
   origen_lat, origen_lng                               │
-  estado ('en_camino'|'completado'|'cancelado')        │
+  estado ('buscando_conductor'|'en_camino'|'completado')│
+  conductores_contactados ← Array de taxis contactados │
   created_at                                           │
                                                        │
 telnyx_active_calls ──────────────────────────────────►┘
@@ -277,17 +283,20 @@ driving_scores
 6. book_taxi hace en paralelo:
    a. Google Maps → coordenadas del origen
    b. Traccar → lista de dispositivos + posiciones (incluyendo offline)
-   c. Calcula taxi más cercano con Haversine (distancia en línea recta)
+   c. Calcula taxi más cercano usando Enrutamiento Vectorial.
    d. Filtra taxis a más de 10 km (se descartan)
 
-7. Si encontró taxi:
-   a. Crea registro en tabla `viajes` con token único
-   b. Manda WhatsApp al CLIENTE: link de tracking en tiempo real (vía plantilla oficial de Meta `seguimiento_viaje` para evitar bloqueo de ventana 24h en llamadas)
-   c. Manda WhatsApp al DESPACHADOR: resumen + link de tracking
+7. Flujo de Asignación en Cascada (Enterprise):
+   a. Crea registro en tabla `viajes` con estado `buscando_conductor`.
+   b. Itera sobre los 3 taxis más cercanos (Cascada).
+   c. Envía WhatsApp al Chofer 1 ofreciendo el viaje.
+   d. Espera hasta 5 segundos haciendo polling seguro. Si el chofer acepta (con "1"), se bloquea la fila mediante `FOR UPDATE SKIP LOCKED` en Postgres (previniendo Race Conditions).
+   e. Si acepta, estado pasa a `en_camino`. Si no, avanza al Chofer 2.
+   f. Manda link de tracking al CLIENTE (vía plantilla oficial de Meta) y resumen al DESPACHADOR.
 
 8. El bot responde en la llamada:
-   - CON taxi: "¡Listo! La unidad [X] ya va en camino. Te mando WhatsApp para seguirlo."
-   - SIN taxi: "¡Listo! En unos momentos te mandamos la unidad."
+   - CON taxi: "¡Listo! El taxista [X] ya confirmó y va para allá. Te mando WhatsApp para seguirlo."
+   - SIN taxi: "Nuestros conductores están tardando un poquito, pero en cuanto asignemos te mandamos mensaje."
 
 9. Fin de llamada → Vapi envía end-of-call-report
    └── Se guarda el transcript en telnyx_active_calls
@@ -362,11 +371,21 @@ Características de robustez implementadas:
 1. Jitter Anti-Spam: El ciclo de sincronización no es fijo. Se usa un delay aleatorio de 25s a 35s para simular tráfico humano y evitar bloqueos.
 2. Inyección Paralela: Usa Promise.all para mandar las 17 coordenadas a Traccar simultáneamente.
 3. Fetch Timeouts: AbortSignal de 15s para Wialon y 5s para Traccar evita cuelgues de red.
-4. Mapeo de Parámetros: 
+6. Mapeo de Parámetros: 
    - io_3 (Kotan): Traducido a `occupied` (0 = Ocupado, 1 = Libre).
    - pwr_int / battery: Traducido a nivel de batería (0-100%).
    - io_239 / ignition: Traducido a estado del motor.
 ```
+
+---
+
+## 7.6 Algoritmo de Enrutamiento Vectorial (Heading Matcher)
+
+El sistema ya no usa distancias en línea recta simple (Haversine). Ahora calcula una **distancia efectiva** tomando en cuenta el sentido de circulación (heading) y velocidad:
+1. Filtra vehículos apagados (`ignition == false`) u ocupados.
+2. Compara el ángulo del vehículo (`course`) contra la dirección hacia el cliente.
+3. **Penalización Plana por Giro**: Si un vehículo debe dar la vuelta en U, se le suma un castigo plano en kilómetros (+2.0 km), emulando el trayecto extra de dar vuelta en la ciudad, en lugar de penalizaciones multiplicativas que rompían la precisión a grandes distancias.
+4. El taxi con la menor distancia efectiva es considerado el "ideal" (el que llegará más rápido).
 
 ---
 

@@ -23,17 +23,28 @@ export async function resolveLocation(
   }
 
   try {
-    const searchQuery = encodeURIComponent(`${address}, ${ciudad}`);
-    const url = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${searchQuery}&key=${mapsKey}`;
-    
-    const geoRes = await fetch(url);
-    const geoData = await geoRes.json();
-    
-    if (geoData.status !== 'OK' || !geoData.results || geoData.results.length === 0) {
-      return { error: true, message: 'No se encontró la dirección en el mapa.', precio: null, nombre_zona: '', lat: null, lng: null };
+    let location = { lat: 0, lng: 0 };
+    const gpsMatch = address.match(/([+-]?\d{1,3}\.\d+),\s*([+-]?\d{1,3}\.\d+)/);
+
+    if (gpsMatch) {
+      location.lat = parseFloat(gpsMatch[1]);
+      location.lng = parseFloat(gpsMatch[2]);
+      isExactGPS = true;
+      console.log(`[GEO] El origen es una coordenada GPS directa: ${location.lat}, ${location.lng}`);
+    } else {
+      const searchQuery = encodeURIComponent(`${address}`);
+      // Comitán: 16.2517, -92.1333
+      const url = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${searchQuery}%20en%20${encodeURIComponent(ciudad)}&location=16.2517,-92.1333&radius=15000&key=${mapsKey}`;
+      
+      const geoRes = await fetch(url);
+      const geoData = await geoRes.json();
+      
+      if (geoData.status !== 'OK' || !geoData.results || geoData.results.length === 0) {
+        return { error: true, message: 'No se encontró la dirección en el mapa.', precio: null, nombre_zona: '', lat: null, lng: null };
+      }
+      location = geoData.results[0].geometry.location;
     }
 
-    const location = geoData.results[0].geometry.location;
     const centerHex = h3.latLngToCell(location.lat, location.lng, 10);
     const nearbyHexes = h3.gridDisk(centerHex, 3);
 
@@ -58,5 +69,23 @@ export async function resolveLocation(
   } catch (err) {
     console.error('[GEO ERROR]', err);
     return { error: true, message: 'Error de conexión con mapas.', precio: null, nombre_zona: '', lat: null, lng: null };
+  }
+}
+
+export async function reverseGeocode(lat: number, lng: number): Promise<string> {
+  const mapsKey = Deno.env.get('GOOGLE_MAPS_API_KEY');
+  if (!mapsKey) return `${lat},${lng}`;
+
+  try {
+    const url = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${mapsKey}`;
+    const res = await fetch(url);
+    const data = await res.json();
+    if (data.status === 'OK' && data.results && data.results.length > 0) {
+      return data.results[0].formatted_address;
+    }
+    return `${lat},${lng}`;
+  } catch (err) {
+    console.error('[REVERSE GEOCODE ERROR]', err);
+    return `${lat},${lng}`;
   }
 }
