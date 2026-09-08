@@ -578,4 +578,110 @@ npm run build
 
 ---
 
+## 14. Webhooks Inteligentes (Multi-Giro) — Arquitectura DDD de Bots
+
+El webhook de WhatsApp (`ycloud-webhook`) está estructurado usando **Domain-Driven Design (DDD)** para soportar un modelo SaaS de múltiples giros (Taxis, Restaurantes, Dentistas) desde un mismo endpoint.
+
+### A. Principio de Diseño: Gateway + Dominios
+
+El `index.ts` es un **Gateway puro**: valida el mensaje entrante de WhatsApp, carga la configuración del tenant desde Supabase (`empresa`), intercepta botones interactivos, y delega la inteligencia a la carpeta correcta.
+
+> ⚠️ **El `index.ts` NO contiene lógica de negocio.** Si necesitas agregar o modificar el comportamiento de un giro, ve a su carpeta de dominio, nunca al webhook.
+
+---
+
+### B. Estructura de Carpetas del Bot
+
+```
+estrella-taxis-backend/supabase/functions/_shared/bot/
+│
+├── core/                       # Motor central del sistema (compartido por TODOS los giros)
+│   ├── types.ts                # Definiciones de TypeScript estrictas (EmpresaConfig, ToolData, etc.)
+│   ├── router.ts               # Lee tipo_negocio y despacha al dominio correcto
+│   └── commonTools.ts          # Herramientas genéricas disponibles para TODOS los bots
+│
+├── taxis/                      # Dominio: Servicio de Transporte
+│   ├── prompt.ts               # Prompt del chofer con info de viaje activo
+│   └── tools.ts                # Herramientas exclusivas de taxis
+│
+├── restaurante/                # Dominio: Comida a Domicilio
+│   ├── prompt.ts               # Prompt de mesero/tomador de pedidos
+│   └── tools.ts                # Herramientas exclusivas de restaurantes
+│
+├── farmacia/                   # Dominio: Farmacia
+│   └── prompt.ts               # Prompt de asesor farmacéutico
+│
+└── otro/                       # Dominio: Giro genérico (Dentista, Taller, etc.)
+    └── prompt.ts               # Prompt genérico configurable
+```
+
+---
+
+### C. Catálogo Completo de Herramientas (Tool Calls)
+
+Cuando el LLM (Gemini) decide ejecutar una acción, inyecta un JSON al final de su respuesta. El `router.ts` lo parsea y ejecuta la función correspondiente.
+
+#### 🌐 Herramientas Genéricas (`core/commonTools.ts`) — Disponibles en TODOS los giros
+
+| Herramienta | Función TypeScript | Descripción |
+|---|---|---|
+| `escalar_humano` | `handleEscalarHumano()` | Silencia al bot (cambia sesión a `estado: 'human'`) y notifica al despachador por WhatsApp |
+| `pedir_ubicacion` | `handlePedirUbicacion()` | Envía un botón interactivo de "Compartir Ubicación GPS" al cliente |
+| `consultar_catalogo` | `handleConsultarCatalogo()` | **Búsqueda semántica vectorial (RAG).** Genera un embedding vía Gemini y busca en la tabla `catalogos` usando `pgvector`. Disponible para cualquier giro |
+
+#### 🚕 Herramientas de Taxis (`taxis/tools.ts`)
+
+| Herramienta | Función TypeScript | Descripción |
+|---|---|---|
+| `book_taxi` | `handleBookTaxi()` | Resuelve la ubicación del cliente, busca los taxis más cercanos en Traccar (Heading Matcher), crea el registro en tabla `viajes`, y manda botones interactivos a la flota |
+| `cotizar_viaje` | `handleCotizarViaje()` | Calcula la tarifa estimada consultando la tabla de `zonas` según la dirección del cliente |
+| `cancelar_viaje` | `handleCancelarViaje()` | Cancela el viaje activo del cliente y notifica al chofer asignado |
+
+#### 🍔 Herramientas de Restaurante (`restaurante/tools.ts`)
+
+| Herramienta | Función TypeScript | Descripción |
+|---|---|---|
+| `enviar_pedido` | `handleEnviarPedido()` | **Valida estrictamente** que existan pedido y dirección. Inserta en tabla `pedidos`, y envía botones interactivos `[✅ Confirmar]` y `[❌ Rechazar]` a la cocina |
+| `cotizar_envio` | `handleCotizarEnvio()` | Resuelve la zona de entrega y retorna el costo aproximado de envío |
+
+---
+
+### D. Flujo de Botones Interactivos (Restaurante)
+
+When la cocina interactúa con los botones de WhatsApp, el `index.ts` los intercepta ANTES de llegar al LLM:
+
+```
+[Cocina presiona ✅ Confirmar Pedido (ID: order_accept_UUID)]
+     ↓
+[index.ts detecta interactiveId.startsWith('order_accept_')]
+     ↓
+Supabase: UPDATE pedidos SET estado = 'confirmado' WHERE id = UUID
+     ↓
+sendWhatsApp(cocina, '✅ ¡Has confirmado el pedido!')
+     ↓
+sendWhatsApp(cliente, '✅ ¡Tu pedido ha sido confirmado! Ya se está preparando...')
+```
+
+Flujo equivalente existe para `order_reject_`, `finish_` (taxis), `accept_` (choferes) y `reject_` (rechazar viaje).
+
+---
+
+### E. Catálogo Vectorial Polimórfico (pgvector + JSONB)
+
+Se usa una única tabla universal `catalogos` para soportar cualquier giro sin migrar el esquema:
+
+| Columna | Tipo | Propósito |
+|---|---|---|
+| `tenant_id` | UUID | Multi-tenant. Cada empresa tiene sus propios items |
+| `tipo_item` | TEXT | Clasifica el item: `'comida'`, `'servicio_medico'`, `'refaccion'` |
+| `nombre` | TEXT | El nombre que busca la IA |
+| `precio` | NUMERIC | Opcional |
+| `detalles` | **JSONB** | Atributos dinámicos según el giro (ingredientes, duración, etc.) |
+| `embedding` | **VECTOR(768)** | Vector semántico generado por Gemini `text-embedding-004` |
+| `disponible` | BOOLEAN | Si está en `false`, el bot no lo ofrece |
+
+La función SQL `match_catalogos(query_embedding, threshold, count, tenant_id)` realiza la búsqueda por similitud de coseno. El script de migración está en: `estrella-taxis-backend/catalogos_migration.sql`.
+
+---
+
 *Generado automáticamente con base en el estado actual del sistema (Septiembre 2026)*

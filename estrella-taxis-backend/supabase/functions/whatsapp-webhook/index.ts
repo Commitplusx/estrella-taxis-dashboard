@@ -67,9 +67,16 @@ Deno.serve(async (req: Request) => {
         finalMessage = `📡 *ALERTA STELLAR* 📡\n\nSe ha *PERDIDO LA SEÑAL* del taxi.\n🕒 Hora: ${timeStr}`;
     }
 
-    // Asegurar formato internacional +52 para el destino
+    // Bug 13 Fix: normalizar número de teléfono sin duplicar el código de país
     const cleanPhone = phone.replace(/[^0-9]/g, '');
-    const finalTo = cleanPhone.length === 10 ? '+52' + cleanPhone : '+' + cleanPhone;
+    let finalTo: string;
+    if (cleanPhone.length === 10) {
+      finalTo = '+52' + cleanPhone;          // Número local sin código de país
+    } else if (cleanPhone.startsWith('52') && cleanPhone.length === 12) {
+      finalTo = '+' + cleanPhone;            // Ya trae 52 + 10 dígitos
+    } else {
+      finalTo = '+' + cleanPhone;            // Formato internacional genérico
+    }
 
     const ycloudPayload = {
       from: YCLOUD_SENDER,

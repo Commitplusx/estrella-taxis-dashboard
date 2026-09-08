@@ -98,11 +98,20 @@ function VincularEmpresaModal({ user, perfil, onClose, onSaved }: { user: Tracca
 }
 
 // ─── Modal: Crear Usuario ──────────────────────────────────────────────────────
-function CreateUserModal({ onClose, onCreated }: { onClose: () => void; onCreated: (u: TraccarUser) => void }) {
+function CreateUserModal({ onClose, onCreated }: { onClose: () => void; onCreated: (u: TraccarUser, p?: Perfil) => void }) {
   const [form, setForm] = useState({ name: '', email: '', password: '', administrator: false, deviceLimit: -1 });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [showPass, setShowPass] = useState(false);
+  const [empresas, setEmpresas] = useState<Empresa[]>([]);
+  const [selectedEmpresaId, setSelectedEmpresaId] = useState<string>('');
+  const [rol, setRol] = useState<string>('operador');
+
+  useEffect(() => {
+    supabase.from('empresas').select('id, nombre_empresa, nombre_bot, tipo_negocio').eq('activo', true).then(({ data }) => {
+      setEmpresas(data || []);
+    });
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -116,7 +125,19 @@ function CreateUserModal({ onClose, onCreated }: { onClose: () => void; onCreate
         body: { name: form.name, email: form.email, password: form.password }
       }).catch(err => console.error('Error enviando correo de bienvenida:', err));
 
-      onCreated(created);
+      let newPerfil: Perfil | undefined = undefined;
+      if (selectedEmpresaId) {
+        const payload = { traccar_user_id: created.id, empresa_id: selectedEmpresaId, rol };
+        const { data: perfilData } = await supabase
+          .from('perfiles')
+          .upsert(payload, { onConflict: 'traccar_user_id' })
+          .select('*, empresa:empresas(id, nombre_empresa, nombre_bot, tipo_negocio)')
+          .maybeSingle();
+        
+        if (perfilData) newPerfil = perfilData as Perfil;
+      }
+
+      onCreated(created, newPerfil);
       onClose();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Error al crear usuario');
@@ -179,14 +200,40 @@ function CreateUserModal({ onClose, onCreated }: { onClose: () => void; onCreate
               type="checkbox"
               id="admin"
               checked={form.administrator}
-              onChange={e => setForm({ ...form, administrator: e.target.checked })}
+              onChange={e => {
+                setForm({ ...form, administrator: e.target.checked });
+                if (e.target.checked) setRol('superadmin');
+              }}
               className="w-4 h-4 accent-blue-600"
             />
             <label htmlFor="admin" className="text-sm text-amber-800 font-medium">
               <Shield size={13} className="inline mr-1 mb-0.5" />
-              Administrador (acceso total)
+              Administrador en Traccar (acceso total a GPS)
             </label>
           </div>
+          
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="text-xs font-medium text-gray-600 mb-1 block">Empresa (Opcional)</label>
+              <select value={selectedEmpresaId} onChange={e => setSelectedEmpresaId(e.target.value)}
+                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <option value="">Sin empresa (Global)</option>
+                {empresas.map(e => (
+                  <option key={e.id} value={e.id}>{e.nombre_empresa}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="text-xs font-medium text-gray-600 mb-1 block">Rol en Dashboard</label>
+              <select value={rol} onChange={e => setRol(e.target.value)} disabled={!selectedEmpresaId && !form.administrator}
+                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-400">
+                <option value="superadmin">Superadmin</option>
+                <option value="admin_empresa">Admin Empresa</option>
+                <option value="operador">Operador</option>
+              </select>
+            </div>
+          </div>
+
           <div className="flex gap-3 pt-2">
             <button type="button" onClick={onClose} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50 transition">
               Cancelar
@@ -435,8 +482,11 @@ export default function UsersPage() {
     return matchesSearch && matchesRole && matchesStatus;
   });
 
-  const handleCreated = (user: TraccarUser) => {
+  const handleCreated = (user: TraccarUser, perfil?: Perfil) => {
     setUsers(prev => [...prev, user]);
+    if (perfil) {
+      setPerfiles(prev => ({ ...prev, [perfil.traccar_user_id]: perfil }));
+    }
   };
 
   const handleDelete = async (userId: number) => {

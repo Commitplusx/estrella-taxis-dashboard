@@ -22,10 +22,19 @@ export interface Paquete {
   permisos_sistema: PermisosSistema;
 }
 
+export interface EmpresaData {
+  id: string;
+  nombre_empresa: string;
+  logo_url: string | null;
+  tipo_negocio: string;
+  categorias_catalogo?: string[];
+}
+
 type AuthContextType = {
   user: TraccarUser | null;
   userRole: UserRole | null;
   empresaId: string | null;
+  empresaData: EmpresaData | null;
   paqueteActual: Paquete | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
@@ -39,6 +48,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<TraccarUser | null>(null);
   const [userRole, setUserRole] = useState<UserRole | null>(null);
   const [empresaId, setEmpresaId] = useState<string | null>(null);
+  const [empresaData, setEmpresaData] = useState<EmpresaData | null>(null);
   const [paqueteActual, setPaqueteActual] = useState<Paquete | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -49,6 +59,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (u.administrator) {
       setUserRole('superadmin');
       setEmpresaId(null);
+      setEmpresaData(null);
       setPaqueteActual(null);
       return;
     }
@@ -58,13 +69,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setEmpresaId(data.empresa_id);
       if (data.empresa_id) {
         const { data: empresa } = await supabase.from('empresas').select('*, paquete:paquetes(*)').eq('id', data.empresa_id).single();
+        setEmpresaData(empresa ? { id: empresa.id, nombre_empresa: empresa.nombre_empresa, logo_url: empresa.logo_url, tipo_negocio: empresa.tipo_negocio, categorias_catalogo: empresa.categorias_catalogo || [] } : null);
         setPaqueteActual(empresa?.paquete ? (empresa.paquete as Paquete) : null);
       } else {
+        setEmpresaData(null);
         setPaqueteActual(null);
       }
     } else {
       setUserRole('operador');
       setEmpresaId(null);
+      setEmpresaData(null);
       setPaqueteActual(null);
     }
   };
@@ -84,13 +98,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           await loadRole(userData);
           window.history.replaceState({}, document.title, window.location.pathname);
         })
-        .catch(() => { setUser(null); setUserRole(null); setEmpresaId(null); setPaqueteActual(null); })
+        .catch(() => { setUser(null); setUserRole(null); setEmpresaId(null); setEmpresaData(null); setPaqueteActual(null); })
         .finally(() => setLoading(false));
     } else {
       // Flujo normal: verificar sesión existente
       api.getSession()
         .then(async (u) => { setUser(u); await loadRole(u); })
-        .catch(() => { setUser(null); setUserRole(null); setEmpresaId(null); setPaqueteActual(null); })
+        .catch(() => { setUser(null); setUserRole(null); setEmpresaId(null); setEmpresaData(null); setPaqueteActual(null); })
         .finally(() => setLoading(false));
     }
   }, []);
@@ -131,6 +145,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(null);
       setUserRole(null);
       setEmpresaId(null);
+      setEmpresaData(null);
       setPaqueteActual(null);
       // Opcional: recargar la página para limpiar estados residuales
       window.location.href = '/login';
@@ -143,7 +158,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, userRole, empresaId, paqueteActual, loading, login, logout, resetPassword }}>
+    <AuthContext.Provider value={{ user, userRole, empresaId, empresaData, paqueteActual, loading, login, logout, resetPassword }}>
       {children}
     </AuthContext.Provider>
   );

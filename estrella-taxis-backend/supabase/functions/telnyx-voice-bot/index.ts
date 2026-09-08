@@ -887,19 +887,22 @@ serve(async (req) => {
               // Buscar taxi más cercano en Traccar, inyectando feature flags del plan
               const nearestTaxi = await getNearestTaxi(locOrigen.lat, locOrigen.lng, permisosSistema);
               
+              // Bug 12 Fix: getNearestTaxi devuelve ARRAY, no objeto simple.
+              const bestTaxi = nearestTaxi?.[0] ?? null;
+
               // Disparar WhatsApp al despachador
               await dispatchToHuman({
                 origen: aiResult.origen,
                 destino: aiResult.destino,
                 telefono: aiResult.telefono,
                 tarifa: locOrigen.precio,
-                nearestTaxiName: nearestTaxi?.name,
-                nearestTaxiDist: nearestTaxi?.distanceKm,
+                nearestTaxiName: bestTaxi?.name,
+                nearestTaxiDist: bestTaxi?.distanceKm,
                 dispatcherPhoneOverride: callEmpresa?.dispatcher_phone ?? undefined,
               });
 
-              if (nearestTaxi) {
-                aiResult.respuesta_hablada = `¡Listo! Ya quedó registrado tu viaje. El taxi ${nearestTaxi.name} va en camino para allá. ¡Muchas gracias!`;
+              if (bestTaxi) {
+                aiResult.respuesta_hablada = `¡Listo! Ya quedó registrado tu viaje. El taxi ${bestTaxi.name} va en camino para allá. ¡Muchas gracias!`;
               } else {
                 aiResult.respuesta_hablada = `¡Listo! Ya quedó registrado tu viaje. En unos momentos te mandamos la unidad más cercana. ¡Muchas gracias!`;
               }
@@ -912,9 +915,11 @@ serve(async (req) => {
              aiResult.viaje_listo = false;
           }
           if (aiResult.viaje_listo) {
-            // El viaje se completó exitosamente, podemos borrar el estado activo
-            await supabase.from('telnyx_active_calls').delete().eq('call_control_id', callControlId);
+            // Bug 11 Fix: Hablar PRIMERO, borrar después.
+            // Si se borraba el registro antes de hablar y speakAndListen fallaba,
+            // el Smart Resume no podía recuperar el estado de la llamada.
             await speakAndListen(callControlId, aiResult.respuesta_hablada, true);
+            await supabase.from('telnyx_active_calls').delete().eq('call_control_id', callControlId);
           } else {
             // Guardamos manualmente el historial si hubo un error en la API o le faltan datos
             const { data: callData } = await supabase.from('telnyx_active_calls').select('history').eq('call_control_id', callControlId).maybeSingle();

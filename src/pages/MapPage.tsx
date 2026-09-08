@@ -4,6 +4,8 @@ import { Layers, Crosshair, Filter, Zap, Power, Radio, ShieldAlert, Car, Bell, B
 import { toast } from 'react-hot-toast';
 import { loadGoogleMaps } from '../lib/mapsLoader';
 import { api, type TraccarDevice, type TraccarPosition } from '../lib/traccarApi';
+import { supabase } from '../lib/supabase';
+import * as h3 from 'h3-js';
 import { useTraccarSocket } from '../hooks/useTraccarSocket';
 import { RequireFeature } from '../components/RequireFeature';
 import { CommandModal } from '../components/CommandModal';
@@ -513,7 +515,7 @@ export default function MapPage() {
   useEffect(() => { isMeasuringRef.current = isMeasuring; }, [isMeasuring]);
   
   const measurePathRef = useRef<google.maps.LatLngLiteral[]>([]);
-  const measurePolylineRef = useRef<any>(null);
+  const measureDirectionsRendererRef = useRef<any>(null);
   const measureMarkersRef = useRef<any[]>([]);
   const measureLabelRef = useRef<any>(null);
 
@@ -718,50 +720,112 @@ export default function MapPage() {
     });
 
     // Clic en el mapa (fondo): cerrar sheet o medir distancia
-    googleMapRef.current.addListener('click', (e: any) => {
+    googleMapRef.current.addListener('click', async (e: any) => {
       if (isMeasuringRef.current && e.latLng) {
         const latLng = e.latLng.toJSON();
-        measurePathRef.current.push(latLng);
         
-        // Draw marker
-        const marker = new window.google.maps.Marker({
-          position: latLng,
-          map: googleMapRef.current,
-          icon: {
-            path: window.google.maps.SymbolPath.CIRCLE,
-            scale: 4,
-            fillColor: '#3b82f6',
-            fillOpacity: 1,
-            strokeColor: '#ffffff',
-            strokeWeight: 2,
-          }
-        });
-        measureMarkersRef.current.push(marker);
-
-        // Draw or update Polyline
-        if (!measurePolylineRef.current) {
-          measurePolylineRef.current = new window.google.maps.Polyline({
-            path: measurePathRef.current,
-            map: googleMapRef.current,
-            strokeColor: '#3b82f6',
-            strokeWeight: 3,
-            strokeOpacity: 0.8,
-          });
-        } else {
-          measurePolylineRef.current.setPath(measurePathRef.current);
+        // Reiniciar si ya tenemos 2 puntos (origen y destino)
+        if (measurePathRef.current.length >= 2) {
+          measurePathRef.current = [];
+          if (measureDirectionsRendererRef.current) measureDirectionsRendererRef.current.setMap(null);
+          measureMarkersRef.current.forEach(m => m.setMap(null));
+          measureMarkersRef.current = [];
+          if (measureLabelRef.current) measureLabelRef.current.close();
         }
 
-        // Calculate Distance
-        if (measurePathRef.current.length > 1) {
-          const length = window.google.maps.geometry.spherical.computeLength(measurePathRef.current);
-          const distanceStr = length > 1000 ? (length/1000).toFixed(2) + ' km' : Math.round(length) + ' m';
+        measurePathRef.current.push(latLng);
+        
+        // Ocultamos los marcadores manuales si usamos DirectionsRenderer, o los mantenemos si es solo origen
+        if (measurePathRef.current.length === 1) {
+          const marker = new window.google.maps.Marker({
+            position: latLng,
+            map: googleMapRef.current,
+            icon: {
+              path: window.google.maps.SymbolPath.CIRCLE,
+              scale: 6,
+              fillColor: '#16a34a',
+              fillOpacity: 1,
+              strokeColor: '#ffffff',
+              strokeWeight: 2,
+            }
+          });
+          measureMarkersRef.current.push(marker);
+        } else if (measurePathRef.current.length === 2) {
+          // Ya tenemos origen y destino, usamos DirectionsService
+          const origin = measurePathRef.current[0];
+          const dest = measurePathRef.current[1];
+          
+          if (!measureDirectionsRendererRef.current) {
+            measureDirectionsRendererRef.current = new window.google.maps.DirectionsRenderer({
+              map: googleMapRef.current,
+              suppressMarkers: false,
+              polylineOptions: {
+                strokeColor: '#3b82f6',
+                strokeWeight: 5,
+                strokeOpacity: 0.8,
+              }
+            });
+          }
+          
+          measureMarkersRef.current.forEach(m => m.setMap(null));
+          measureMarkersRef.current = [];
+
+          const directionsService = new window.google.maps.DirectionsService();
           
           if (!measureLabelRef.current) {
             measureLabelRef.current = new window.google.maps.InfoWindow({ disableAutoPan: true });
           }
-          measureLabelRef.current.setContent(`<div style="padding: 2px 4px; font-weight: bold; color: #1e3a8a;">${distanceStr}</div>`);
-          measureLabelRef.current.setPosition(latLng);
+          measureLabelRef.current.setContent(`<div style="padding: 8px; font-size: 14px; text-align: center;"><div class="animate-spin inline-block w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full"></div> Cotizando...</div>`);
+          measureLabelRef.current.setPosition(dest);
           measureLabelRef.current.open(googleMapRef.current);
+
+          directionsService.route({
+            origin: origin,
+            destination: dest,
+            travelMode: window.google.maps.TravelMode.DRIVING,
+            drivingOptions: {
+              departureTime: new Date(),  // Fuerza a Google a usar tráfico en vivo
+              trafficModel: window.google.maps.TrafficModel.BEST_GUESS
+            }
+          }, async (response: any, status: any) => {
+            if (status === 'OK' && response) {
+              measureDirectionsRendererRef.current.setDirections(response);
+              
+              const leg = response.routes[0].legs[0];
+              const distanceText = leg.distance.text;
+              // Usar tiempo con tráfico si está disponible, de lo contrario tiempo normal
+              const durationText = leg.duration_in_traffic ? leg.duration_in_traffic.text : leg.duration.text;
+
+              // Calcular H3
+              const centerHexOrigin = h3.latLngToCell(origin.lat, origin.lng, 10);
+              const centerHexDest = h3.latLngToCell(dest.lat, dest.lng, 10);
+              
+              const nearbyOrigin = h3.gridDisk(centerHexOrigin, 3);
+              const nearbyDest = h3.gridDisk(centerHexDest, 3);
+              
+              const [res1, res2] = await Promise.all([
+                supabase.from('h3_zonas').select('precio').in('h3_index', nearbyOrigin),
+                supabase.from('h3_zonas').select('precio').in('h3_index', nearbyDest)
+              ]);
+
+              const originPrice = res1.data && res1.data.length > 0 ? Math.max(...res1.data.map(z => z.precio || 0)) : 0;
+              const destPrice = res2.data && res2.data.length > 0 ? Math.max(...res2.data.map(z => z.precio || 0)) : 0;
+              
+              const finalPrice = Math.max(originPrice, destPrice);
+              const priceText = finalPrice > 0 ? `$${finalPrice}` : 'A consultar';
+
+              const content = `
+                <div style="padding: 4px; min-width: 140px; text-align: center; font-family: sans-serif;">
+                  <div style="font-size: 18px; font-weight: bold; color: #16a34a; margin-bottom: 4px;">💵 ${priceText}</div>
+                  <div style="font-size: 13px; color: #475569;">📏 ${distanceText}</div>
+                  <div style="font-size: 13px; color: #475569;" title="Incluye tráfico actual">🚦 ${durationText}</div>
+                </div>
+              `;
+              measureLabelRef.current.setContent(content);
+            } else {
+              measureLabelRef.current.setContent(`<div style="padding: 4px; color: #ef4444;">No se pudo trazar ruta</div>`);
+            }
+          });
         }
         return; // Detener flujo normal
       }
@@ -1231,7 +1295,7 @@ export default function MapPage() {
 
   const clearMeasure = () => {
     measurePathRef.current = [];
-    if (measurePolylineRef.current) measurePolylineRef.current.setMap(null);
+    if (measureDirectionsRendererRef.current) measureDirectionsRendererRef.current.setMap(null);
     measureMarkersRef.current.forEach(m => m.setMap(null));
     measureMarkersRef.current = [];
     if (measureLabelRef.current) measureLabelRef.current.close();

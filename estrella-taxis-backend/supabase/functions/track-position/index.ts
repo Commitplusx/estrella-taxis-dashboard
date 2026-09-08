@@ -67,6 +67,14 @@ serve(async (req) => {
       });
     }
 
+    // Bug 10 Fix: No exponer posición de viajes ya terminados.
+    const ACTIVE_STATES = ['buscando_conductor', 'en_camino'];
+    if (!ACTIVE_STATES.includes(viaje.estado)) {
+      return new Response(JSON.stringify({ error: 'Viaje finalizado', estado: viaje.estado }), {
+        status: 410, headers: { ...cors, 'Content-Type': 'application/json' }
+      });
+    }
+
     let empresaName = null;
     if (viaje.tenant_id) {
       const { data: emp } = await supabase.from('empresas').select('nombre_empresa').eq('id', viaje.tenant_id).maybeSingle();

@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { Car, MapPin, Users, Activity, CheckCircle2, Navigation2, MailCheck } from 'lucide-react';
 
 export default function Login() {
-  const { user, login, resetPassword } = useAuth();
+  const { user, userRole, empresaData, login, resetPassword } = useAuth();
   
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -22,7 +22,8 @@ export default function Login() {
   }, []);
 
   if (user && !isTransitioning) {
-    return <Navigate to="/map" replace />;
+    const isNonTaxi = empresaData && empresaData.tipo_negocio !== 'taxi' && userRole !== 'superadmin';
+    return <Navigate to={isNonTaxi ? '/dashboard' : '/map'} replace />;
   }
 
   const handleSubmit = async (e: React.FormEvent) => {

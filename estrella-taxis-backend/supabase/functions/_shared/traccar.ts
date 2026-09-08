@@ -34,10 +34,18 @@ const TRACCAR_BASE = Deno.env.get('TRACCAR_URL') || 'https://taxis.estrella-eats
 const TRACCAR_EMAIL = Deno.env.get('TRACCAR_EMAIL')!;
 const TRACCAR_PASSWORD = Deno.env.get('TRACCAR_PASSWORD')!;
 
-async function traccarLogin(): Promise<string> {
-  console.log(`[TRACCAR LOGIN] Intentando login en: ${TRACCAR_BASE}/session`);
-  console.log(`[TRACCAR LOGIN] Email: ${TRACCAR_EMAIL}, Password length: ${TRACCAR_PASSWORD?.length}`);
+// Bug 7 Fix: Caché de sesión de Traccar para evitar login en cada petición.
+// Las sesiones de Traccar duran ~30 min; renovamos a los 14 para tener margen.
+let _traccarSession: { cookie: string; expiresAt: number } | null = null;
 
+async function traccarLogin(): Promise<string> {
+  const now = Date.now();
+  if (_traccarSession && _traccarSession.expiresAt > now) {
+    console.log(`[TRACCAR LOGIN] Usando sesión cacheada (expira en ${Math.round((_traccarSession.expiresAt - now) / 1000)}s)`);
+    return _traccarSession.cookie;
+  }
+
+  console.log(`[TRACCAR LOGIN] Iniciando nueva sesión en: ${TRACCAR_BASE}/session`);
   const res = await fetch(`${TRACCAR_BASE}/session`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -45,11 +53,6 @@ async function traccarLogin(): Promise<string> {
   });
 
   console.log(`[TRACCAR LOGIN] Status: ${res.status} ${res.statusText}`);
-  
-  // Log all headers to debug cookie issue
-  const headersObj: Record<string, string> = {};
-  res.headers.forEach((v, k) => { headersObj[k] = v; });
-  console.log(`[TRACCAR LOGIN] Headers recibidos:`, JSON.stringify(headersObj));
 
   if (!res.ok) {
     const body = await res.text();
@@ -58,8 +61,11 @@ async function traccarLogin(): Promise<string> {
   }
 
   const cookie = res.headers.get('set-cookie');
-  console.log(`[TRACCAR LOGIN] Cookie obtenida: ${cookie ? 'SÍ ✓' : 'NO ✗ - revisar headers arriba'}`);
   if (!cookie) throw new Error('No session cookie from Traccar');
+
+  // Guardar en caché por 14 minutos
+  _traccarSession = { cookie, expiresAt: now + 14 * 60 * 1000 };
+  console.log(`[TRACCAR LOGIN] Sesión nueva guardada en caché (expira en 14 min)`);
   return cookie;
 }
 
@@ -85,20 +91,6 @@ export async function getNearestTaxi(lat: number, lng: number, permisos: Record<
       traccarGet<TraccarDevice>(cookie, '/devices'),
       traccarGet<TraccarPosition>(cookie, '/positions')
     ]);
-
-    // ── MODO DE PRUEBAS: Filtrar a unidades específicas ──
-    const testUnits = ["POMPEYO1014", "POMPEYO0540"];
-    const filteredDevices = devices.filter(d => testUnits.includes(d.name));
-    
-    if (filteredDevices.length > 0) {
-       console.log(`[TEST MODE] Forzando asignación a unidades de prueba:`, filteredDevices.map(d => d.name));
-       return filteredDevices.map(d => ({
-          name: d.name,
-          distanceKm: 0.1, // Fake distance para evitar que sea rechazado
-          deviceId: d.id,
-          phone: d.phone
-       }));
-    }
 
     // ── FEATURE FLAG: Enrutamiento Vectorial ──
     const usaVectorial = permisos.enrutamiento_vectorial !== false; // Activo por defecto a menos que se apague explícitamente

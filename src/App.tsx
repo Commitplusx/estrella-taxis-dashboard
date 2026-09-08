@@ -21,11 +21,21 @@ import SettingsPage from './pages/SettingsPage';
 import DeviceConnectionsPage from './pages/DeviceConnectionsPage';
 import BotPage from './pages/BotPage';
 import PackagesPage from './pages/PackagesPage';
+import CatalogPage from './pages/CatalogPage';
+import OrdersPage from './pages/OrdersPage';
 import TrackPage from './pages/TrackPage';
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
   return user ? <>{children}</> : <Navigate to="/login" replace />;
+}
+
+function TaxiOnlyRoute({ children }: { children: React.ReactNode }) {
+  const { userRole, empresaData } = useAuth();
+  if (userRole !== 'superadmin' && empresaData && empresaData.tipo_negocio !== 'taxi') {
+    return <Navigate to="/dashboard" replace />;
+  }
+  return <>{children}</>;
 }
 
 function AppRoutes() {
@@ -65,20 +75,22 @@ function AppRoutes() {
         <Route path="/reset-password" element={<ResetPassword />} />
         <Route element={<PrivateRoute><Layout /></PrivateRoute>}>
           <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/map" element={null} />
-          <Route path="/devices" element={<DevicesPage />} />
-          <Route path="/connections" element={<DeviceConnectionsPage />} />
-          <Route path="/reports" element={<ReportsPage />} />
-          <Route path="/replay" element={<ReplayPage />} />
+          <Route path="/map" element={<TaxiOnlyRoute>{null}</TaxiOnlyRoute>} />
+          <Route path="/devices" element={<TaxiOnlyRoute><DevicesPage /></TaxiOnlyRoute>} />
+          <Route path="/connections" element={<TaxiOnlyRoute><DeviceConnectionsPage /></TaxiOnlyRoute>} />
+          <Route path="/reports" element={<TaxiOnlyRoute><ReportsPage /></TaxiOnlyRoute>} />
+          <Route path="/replay" element={<TaxiOnlyRoute><ReplayPage /></TaxiOnlyRoute>} />
           <Route path="/notifications" element={<NotificationsPage />} />
-          <Route path="/groups" element={<GroupsPage />} />
-          <Route path="/drivers" element={<DriversPage />} />
-          <Route path="/geofences" element={<GeofencesPage />} />
-          <Route path="/maintenance" element={<MaintenancePage />} />
+          <Route path="/groups" element={<TaxiOnlyRoute><GroupsPage /></TaxiOnlyRoute>} />
+          <Route path="/drivers" element={<TaxiOnlyRoute><DriversPage /></TaxiOnlyRoute>} />
+          <Route path="/geofences" element={<TaxiOnlyRoute><GeofencesPage /></TaxiOnlyRoute>} />
+          <Route path="/maintenance" element={<TaxiOnlyRoute><MaintenancePage /></TaxiOnlyRoute>} />
           <Route path="/users" element={<UsersPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/bot" element={<BotPage />} />
           <Route path="/packages" element={<PackagesPage />} />
+          <Route path="/catalog" element={<CatalogPage />} />
+          <Route path="/orders" element={<OrdersPage />} />
         </Route>
         {/* Ruta pública de seguimiento — no requiere login, el cliente la abre desde el WhatsApp */}
         <Route path="/track/:token" element={<TrackPage />} />

@@ -28,6 +28,29 @@ export async function sendWhatsApp(to: string, body: string, fromOverride?: stri
   if (!res.ok) console.error('[YCLOUD SEND ERROR]', await res.text());
 }
 
+// Marcar un mensaje entrante como leído (muestra las dos palomitas azules al cliente)
+export async function markAsRead(messageId: string) {
+  if (!YCLOUD_API_KEY || !messageId) return;
+  try {
+    await fetch(`https://api.ycloud.com/v2/whatsapp/inboundMessages/${messageId}/markAsRead`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-API-Key': YCLOUD_API_KEY },
+    });
+  } catch (e) {
+    console.warn('[YCLOUD] markAsRead falló (no crítico):', e);
+  }
+}
+
+// Mostrar indicador de "escribiendo..." al cliente.
+// Ycloud no expone un endpoint nativo de typing, pero marcamos como leído + delay,
+// lo que genera la percepción de "escribiendo" antes de la respuesta real.
+export async function sendTypingIndicator(to: string, fromOverride?: string) {
+  if (!YCLOUD_API_KEY) return;
+  // El typing se percibe visualmente cuando el usuario ve leído (palomitas azules)
+  // y después recibe la respuesta — el delay de 600ms crea esa ventana natural.
+  await new Promise(r => setTimeout(r, 600));
+}
+
 // Enviar un mensaje interactivo con botón URL nativo (CTA_URL)
 export async function sendWhatsAppCTA(to: string, body: string, buttonText: string, url: string, fromOverride?: string) {
   if (!YCLOUD_API_KEY) return;
@@ -105,6 +128,31 @@ export async function sendWhatsAppLocationRequest(to: string, body: string, from
     body: JSON.stringify(payload),
   });
   if (!res.ok) console.error('[YCLOUD LOCATION REQUEST ERROR]', await res.text());
+}
+
+// Enviar un mensaje interactivo con lista nativa (hasta 10 elementos)
+export async function sendWhatsAppList(to: string, body: string, buttonText: string, sections: any[], fromOverride?: string) {
+  if (!YCLOUD_API_KEY) return;
+  const sender = fromOverride || YCLOUD_SENDER;
+  const payload = {
+    from: sender,
+    to,
+    type: 'interactive',
+    interactive: {
+      type: 'list',
+      body: { text: body },
+      action: {
+        button: buttonText.substring(0, 20),
+        sections: sections
+      }
+    }
+  };
+  const res = await fetch('https://api.ycloud.com/v2/whatsapp/messages', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-API-Key': YCLOUD_API_KEY },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) console.error('[YCLOUD SEND LIST ERROR]', await res.text());
 }
 
 export interface SendTemplateOptions {

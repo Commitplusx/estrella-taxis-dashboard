@@ -51,6 +51,9 @@ Deno.serve(async (req) => {
       const h3Index = h3.latLngToCell(lat, lng, 10)
       console.log(`Upsert taxi ${deviceId}: ${lat}, ${lng} (H3: ${h3Index})`)
 
+      // Bug 14 Fix: NO incluir activo:true aquí.
+      // Un taxi desactivado manualmente (en taller, vacaciones) NO debe
+      // reactivarse automáticamente por un ping de GPS.
       const { error } = await supabaseClient
         .from("taxis")
         .upsert({
@@ -59,7 +62,7 @@ Deno.serve(async (req) => {
           lng: lng,
           h3_index: h3Index,
           bateria: battery,
-          activo: true
+          last_position_at: new Date().toISOString()
         }, { onConflict: "device_id" })
 
       if (error) console.error("Error BD:", error)
