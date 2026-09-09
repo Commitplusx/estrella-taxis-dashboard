@@ -22,7 +22,8 @@ export const ZodToolSchemas: Record<string, z.ZodTypeAny> = {
     boton: z.coerce.string().catch(''),
     items: z.array(z.object({
       nombre: z.coerce.string().catch(''),
-      descripcion: z.coerce.string().catch('').optional()
+      descripcion: z.coerce.string().catch('').optional(),
+      categoria: z.coerce.string().catch('').optional()
     })).catch([])
   }).passthrough(),
   

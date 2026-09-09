@@ -28,7 +28,10 @@ export async function handlePreguntarTipoEntrega(
     ],
     toNumber
   );
-  return texto;
+  // BugFix: Devolvemos un string de confirmación, NO el texto de la pregunta.
+  // El texto ya fue enviado como mensaje interactivo. Si devolvemos el texto,
+  // el caller lo volvería a enviar como sendWhatsApp() duplicando el mensaje.
+  return `[Botones de tipo de entrega enviados al cliente: "${texto.substring(0, 60)}..."]`;
 }
 
 export async function handleEnviarPedido(
@@ -68,7 +71,7 @@ export async function handleEnviarPedido(
   const lowerNombre = rawNombre.toLowerCase();
   
   // Guard 3: Nombre vacío o genérico
-  if (!rawNombre || rawNombre.length < 2 || lowerNombre === 'cliente' || lowerNombre.includes('pendiente') || lowerNombre.includes('por confirmar')) {
+  if (!rawNombre || rawNombre.length < 2 || lowerNombre === 'cliente' || lowerNombre === 'usuario' || lowerNombre.includes('pendiente') || lowerNombre.includes('por confirmar')) {
     return '¿Me podrías indicar a qué nombre anoto el pedido, por favor?';
   }
 
@@ -131,9 +134,15 @@ ${modalidadCocina}
       );
     } catch (waErr) {
       console.error('[HANDLERS] Error notificando a cocina:', waErr);
+      // BugFix: Si falla la notificación a cocina, NO le decimos al cliente que todo está bien.
+      // Devolvemos un mensaje que pide al bot escalar a humano.
+      return 'Hubo un error enviando la notificación a la cocina. Permíteme comunicarte con un agente para que te atienda directamente.';
     }
   } else {
-    console.warn(`[HANDLERS] Empresa ${empresa.id} no tiene dispatcher_phone. La cocina no fue notificada por WA.`);
+    // BugFix: Si no hay dispatcher_phone configurado, el pedido queda en la BD pero NADIE en cocina lo ve.
+    // Avisamos al cliente que un agente lo contactará, y logueamos el problema crítico.
+    console.error(`[HANDLERS] CRÍTICO: Empresa ${empresa.id} (${empresa.nombre_empresa}) no tiene dispatcher_phone. Pedido ${newPedido.id} en BD sin notificación a cocina.`);
+    return `¡Anotado! 🗒️ Recibimos tu pedido, pero tuvimos un problema técnico para notificar a la cocina. Un agente te contactará en breve para confirmar.`;
   }
 
   // Respuesta al cliente con UX cuidada (SIN dar costos ni totales de envío)
@@ -197,30 +206,84 @@ function getEmojiForMenu(texto: string): string {
   return '🍽️';
 }
 
+export async function handleEnviarTicketFacturacion(
+  toolData: ToolData,
+  empresa: EmpresaConfig,
+  fromNumber: string,
+  toNumber: string
+): Promise<string> {
+  const mediaId = (toolData.media_id as string) || '';
+  if (!mediaId) {
+    return 'Lo siento, no pude procesar la imagen del ticket. ¿Podrías volver a enviarla por favor?';
+  }
+
+  const contadorPhone = (empresa as any).contador_phone || empresa.dispatcher_phone;
+  if (!contadorPhone) {
+    return 'Actualmente no tenemos un contador configurado en el sistema para procesar tu factura. Por favor, comunícate con un agente.';
+  }
+
+  const caption = `🚨 *Nueva Solicitud de Facturación*\nCliente: ${fromNumber}\n\nPor favor genera la factura y responde a este chat adjuntando el PDF con el siguiente texto exacto en el mensaje:\n#factura ${fromNumber}`;
+  
+  try {
+    const { sendWhatsAppMediaId } = await import('../../whatsapp.ts');
+    await sendWhatsAppMediaId(contadorPhone, 'image', mediaId, caption, toNumber);
+    return '¡Gracias! Hemos verificado tu ticket y lo hemos enviado a nuestro equipo de facturación. En cuanto esté lista la factura, te enviaremos el PDF por este mismo medio.';
+  } catch (err) {
+    console.error('[HANDLERS] Error enviando ticket de facturacion:', err);
+    return 'Hubo un problema de conexión al enviar el ticket a facturación. Un agente te apoyará en breve.';
+  }
+}
+
 export async function handleMostrarMenuLista(
   toolData: ToolData,
   fromNumber: string,
   toNumber: string,
   aiResponseText?: string
 ): Promise<string> {
-  const title = (aiResponseText && aiResponseText.length > 5) ? aiResponseText : ((toolData.mensaje as string) || 'Aquí tienes nuestras opciones:');
-  const buttonText = (toolData.boton as string) || 'Ver Menú';
-  const items = (toolData.items as Array<{nombre: string, descripcion?: string, categoria?: string}>) || [];
+  // WhatsApp limita el 'body' (title del mensaje) a 1024 caracteres.
+  // Si el LLM devolvió una respuesta larga, la truncamos a algo sensato.
+  const rawTitle = (aiResponseText && aiResponseText.length > 5) ? aiResponseText : ((toolData.mensaje as string) || 'Aquí tienes nuestras opciones:');
+  const title = rawTitle.length > 800 ? rawTitle.substring(0, 800) + '...' : rawTitle;
+  const buttonText = ((toolData.boton as string) || 'Ver Menú').substring(0, 20); // WA: máx 20 chars en botón
+  let items = toolData.items as Array<{nombre: string, descripcion?: string, categoria?: string}>;
+  if (!Array.isArray(items)) {
+    items = [];
+  }
   
   if (items.length === 0) {
     return 'No encontré opciones para mostrar en la lista.';
   }
 
-  // Agrupar por categoría
-  const groupedItems = items.slice(0, 10).reduce((acc: any, item, i) => {
+  // WhatsApp permite máximo 10 SECCIONES y un TOTAL MÁXIMO DE 10 FILAS EN TODA LA LISTA.
+  const MAX_SECTIONS = 10;
+  const MAX_TOTAL_ROWS = 10;
+  let totalRowsAdded = 0;
+
+  const groupedItems = items.reduce((acc: any, item, i) => {
+    // Si ya llegamos a 10 filas en total, ignorar el resto
+    if (totalRowsAdded >= MAX_TOTAL_ROWS) return acc;
+
     const cat = (item.categoria || 'Menú').substring(0, 24);
-    if (!acc[cat]) acc[cat] = [];
+    if (!acc[cat]) {
+      // Si agregar una nueva sección excede el límite de 10 secciones, la ignoramos
+      if (Object.keys(acc).length >= MAX_SECTIONS) return acc;
+      acc[cat] = [];
+    }
+    
     const emoji = getEmojiForMenu(item.nombre + ' ' + (item.descripcion || ''));
+    const safeId = `mi_${i}_${item.nombre.substring(0, 8).replace(/\W/g, '')}`;
+    const rawTitle = item.nombre;
+    const truncatedTitle = rawTitle.length <= 24
+      ? rawTitle
+      : rawTitle.substring(0, 23).replace(/\s\S+$/, '') || rawTitle.substring(0, 24);
+      
     acc[cat].push({
-      id: `menu_item_${i}_${item.nombre.substring(0, 10).replace(/\s/g, '')}`,
-      title: `${emoji} ${item.nombre}`.substring(0, 24),
+      id: safeId,
+      title: truncatedTitle,
       description: (item.descripcion || '').substring(0, 72)
     });
+    
+    totalRowsAdded++;
     return acc;
   }, {});
 

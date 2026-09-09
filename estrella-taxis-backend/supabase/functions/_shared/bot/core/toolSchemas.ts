@@ -29,11 +29,11 @@ export const COMMON_TOOLS: Array<Record<string, unknown>> = [
     type: "function",
     function: {
       name: "consultar_catalogo",
-      description: "Busca en la base de datos (RAG) información sobre productos, precios, menú o servicios del negocio.",
+      description: "⚠️ OBLIGATORIO: Ejecuta esta herramienta SIEMPRE que el cliente mencione un producto, paquete o menú, INCLUSO SI crees que ya sabes la respuesta por el historial de la conversación. NUNCA respondas de memoria, los datos cambian en tiempo real. Si te vuelven a preguntar, VUELVES a buscar.",
       parameters: {
         type: "object",
         properties: {
-          query: { type: "string", description: "Término de búsqueda (ej. 'hamburguesas', 'precios de envío', 'horarios')." }
+          query: { type: "string", description: "Término de búsqueda (ej. 'paquete 3', 'hamburguesas', 'precios de envío')." }
         },
         required: ["query"]
       }
@@ -60,21 +60,21 @@ export const RESTAURANT_TOOLS: Array<Record<string, unknown>> = [
     type: "function",
     function: {
       name: "mostrar_menu_lista",
-      description: "Muestra un menú interactivo nativo de WhatsApp. ÚSALO SIEMPRE que el cliente pida ver opciones, el menú, o pregunte qué hay.",
+      description: "⚠️ OBLIGATORIO: Usa SIEMPRE este tool para mostrar el menú, categorías, o cualquier lista de productos al cliente. NUNCA mandes el menú como texto plano. Primero usa 'consultar_catalogo' para obtener los productos reales, luego pasa esos datos aquí.",
       parameters: {
         type: "object",
         properties: {
-          mensaje: { type: "string", description: "Texto breve y amable invitando a abrir el menú." },
-          boton: { type: "string", description: "Texto del botón, máximo 20 caracteres (ej. 'Ver Menú')." },
+          mensaje: { type: "string", description: "Texto breve e invitador antes de la lista (ej: '¡Aquí está nuestro menú! 🍗 Toca para ver los detalles:')." },
+          boton: { type: "string", description: "Texto del botón, máximo 20 caracteres (ej. 'Ver Menú 🍽️')." },
           items: {
             type: "array",
-            description: "OBLIGATORIO: DEBES llenar este arreglo con TODAS las opciones o categorías solicitadas (hasta el límite técnico de 10). ESTÁ ESTRICTAMENTE PROHIBIDO resumir la lista a 5 opciones por 'conveniencia'. Tienes que agotar el límite de 10 espacios si hay más de 5 elementos.",
+            description: "OBLIGATORIO: Lista de productos del catálogo. DEBES incluir hasta 10 items (el máximo de WhatsApp). Ponle emojis de comida en la descripción para hacerlo visual.",
             items: {
               type: "object",
               properties: {
-                nombre: { type: "string", description: "Nombre corto del producto (máx 22 chars). ¡NO PONGAS PRECIOS AQUÍ porque WhatsApp lo recorta!" },
-                descripcion: { type: "string", description: "Breve descripción y el PRECIO (máx 72 chars)." },
-                categoria: { type: "string", description: "Categoría del producto (ej. 'Bebidas', 'Complementos', 'Platos Fuertes')." }
+                nombre: { type: "string", description: "Nombre del producto, máx 22 chars (ej. 'Boneless 10 Pzas')." },
+                descripcion: { type: "string", description: "Emoji + precio + detalle breve, máx 72 chars (ej. '🍗 $120 — Con dip de tu elección')." },
+                categoria: { type: "string", description: "Categoría del producto (ej. 'Alitas', 'Paquetes', 'Complementos')." }
               },
               required: ["nombre"]
             }
@@ -112,6 +112,20 @@ export const RESTAURANT_TOOLS: Array<Record<string, unknown>> = [
           direccion: { type: "string", description: "Calle y colonia a donde se enviaría." }
         },
         required: ["direccion"]
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "enviar_ticket_facturacion",
+      description: "Ejecuta esta herramienta SOLO cuando el cliente solicite una factura y envíe un ticket de consumo válido. Esta herramienta redirige el ticket al contador. Si el ticket no es válido o falta información, pide al usuario lo que necesites antes de usar esta herramienta.",
+      parameters: {
+        type: "object",
+        properties: {
+          media_id: { type: "string", description: "El ID_IMAGEN que recibiste en el contexto del mensaje." }
+        },
+        required: ["media_id"]
       }
     }
   }

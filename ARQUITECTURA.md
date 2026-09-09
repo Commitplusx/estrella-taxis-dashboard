@@ -1,7 +1,7 @@
 # 🚕 Stellar Tracking — Guía de Arquitectura y Troubleshooting
 
 > Última actualización: Septiembre 2026  
-> Stack: Vite + React + TypeScript · Supabase (Edge Functions + Postgres) · Traccar · Vapi · YCloud · Google Maps
+> Stack: Vite + React + TypeScript · Supabase (Edge Functions + Postgres) · Traccar · Vapi · YCloud · OpenAI · VPS Ubuntu (PM2)
 
 ---
 
@@ -14,16 +14,33 @@
 5. [Base de Datos — Tablas y Relaciones](#5-base-de-datos--tablas-y-relaciones)
 6. [Flujo Completo de una Llamada (Bot de Voz)](#6-flujo-completo-de-una-llamada-bot-de-voz)
 7. [Flujo de Tracking en Tiempo Real](#7-flujo-de-tracking-en-tiempo-real)
-8. [Variables de Entorno y Secrets](#8-variables-de-entorno-y-secrets)
-9. [Planes y Feature Flags](#9-planes-y-feature-flags)
-10. [Guía de Troubleshooting](#10-guía-de-troubleshooting)
-11. [Dónde Está Cada Cosa](#11-dónde-está-cada-cosa)
+8. [VPS — Bot Worker de WhatsApp (PM2)](#75-arquitectura-del-wialon-bridge)
+9. [Variables de Entorno y Secrets](#8-variables-de-entorno-y-secrets)
+10. [Planes y Feature Flags](#9-planes-y-feature-flags)
+11. [Guía de Troubleshooting](#10-guía-de-troubleshooting)
+12. [Dónde Está Cada Cosa](#11-dónde-está-cada-cosa)
 
 ---
 
 ## 1. Visión General del Sistema
 
 ```
+Cliente manda WhatsApp
+        │
+        ▼
+   [YCloud API]
+        │ Webhook inbound
+        ▼
+[VPS Ubuntu — bot-worker] ← process-queue/index.ts corriendo con PM2
+        │
+        ├──► [OpenAI gpt-4o]          → IA que razona y decide qué herramienta usar
+        ├──► [OpenAI text-embedding-3-small] → Vector semántico para buscar en el catálogo
+        ├──► [Supabase DB] → Lee historial, guarda sesión, inserta pedidos/viajes
+        ├──► [Supabase pgvector] → Búsqueda semántica del catálogo (RAG)
+        ├──► [Traccar API] → Busca taxi más cercano (Heading Matcher)
+        ├──► [Google Maps API] → Geocodifica la dirección del cliente
+        └──► [YCloud API] → Responde al cliente por WhatsApp
+
 Cliente llama por teléfono
         │
         ▼
@@ -59,11 +76,13 @@ Cliente abre WhatsApp → link /track/:token                             │
 
 | Servicio | Qué hace en el sistema | URL / Panel |
 |---|---|---|
+| **VPS (74.208.153.209)** | Servidor Ubuntu que corre el **bot-worker de WhatsApp** bajo PM2. Es el cerebro del chat: recibe mensajes de YCloud, los procesa con OpenAI, ejecuta herramientas y responde. | SSH: `root@74.208.153.209` · Gestor: PM2 (app #4 `bot-worker`) |
 | **Wialon** | Proveedor original de los GPS (Kotan). Extraemos de aquí la telemetría en bruto. | `https://hosting.wialon.com` |
 | **Traccar** | GPS en tiempo real, historial de rutas, velocidad, heading, ignición | `https://taxis.estrella-eats.mx` |
-| **Supabase** | Base de datos, Edge Functions, Auth, Storage | `https://supabase.com/dashboard/project/knghdwpxheenkpuajkxl` |
+| **Supabase** | Base de datos, Edge Functions, Auth, Storage, Realtime | `https://supabase.com/dashboard/project/knghdwpxheenkpuajkxl` |
+| **OpenAI** | LLM (`gpt-4o`) para razonamiento del bot · Embeddings (`text-embedding-3-small`) para búsqueda vectorial RAG | `https://platform.openai.com` |
 | **Vapi** | Bot de voz IA, transcripción, manejo de llamadas PSTN | `https://dashboard.vapi.ai` |
-| **YCloud** | Envío de WhatsApp Business (al despachador y al cliente) | `https://app.ycloud.com` |
+| **YCloud** | Envío y recepción de WhatsApp Business (webhook inbound + mensajes outbound al cliente y despachador) | `https://app.ycloud.com` |
 | **Google Maps** | Geocodificación del origen del cliente, mapa en el frontend | `https://console.cloud.google.com` |
 | **Telnyx** | Número de teléfono que Vapi usa para recibir llamadas | `https://portal.telnyx.com` |
 | **Loyalty Estrella** | Proyecto principal del ecosistema. Conexión vía API para validación de clientes y lógica cruzada. | `https://app-estrella.shop` |
@@ -389,6 +408,201 @@ El sistema ya no usa distancias en línea recta simple (Haversine). Ahora calcul
 
 ---
 
+## 7.7 VPS — Bot Worker de WhatsApp (process-queue)
+
+> **IP:** `74.208.153.209` · **OS:** Ubuntu · **Gestor:** PM2 · **Runtime:** Deno
+
+Esta es la pieza más crítica de la arquitectura del bot de WhatsApp. A diferencia de las Edge Functions de Supabase (que son stateless y tienen límites de tiempo), el bot-worker corre como un **servidor HTTP persistente** en el VPS, gestionado por PM2.
+
+### Por qué existe el VPS (y no todo está en Supabase Edge Functions)
+
+| Edge Functions (Supabase) | Bot-Worker (VPS) |
+|---|---|
+| Máximo 2 minutos de ejecución | Sin límite de tiempo |
+| Sin estado entre llamadas | Puede mantener colas y locks en memoria |
+| Buenas para operaciones rápidas (webhook de Traccar, scoring) | Ideal para el loop de procesamiento de mensajes con debounce, locks de sesión y reintentos |
+
+### Estructura de archivos en el VPS
+
+```
+/opt/bot-worker/
+├── ecosystem.config.cjs        ← Config de PM2: nombre, script, env vars
+└── functions/
+    ├── process-queue/
+    │   └── index.ts            ← Servidor HTTP principal. Recibe webhooks de YCloud.
+    └── _shared/
+        ├── whatsapp.ts         ← Envío de mensajes, listas, botones a YCloud
+        ├── geo.ts              ← Geocodificación con Google Maps
+        ├── traccar.ts          ← Login + búsqueda de taxi más cercano
+        └── bot/
+            ├── core/
+            │   ├── types.ts         ← Tipos compartidos
+            │   ├── router.ts        ← Despacha por tipo_negocio al dominio correcto
+            │   ├── commonTools.ts   ← Herramientas genéricas (catálogo, ubicación, escalar)
+            │   └── toolSchemas.ts   ← Definición de tools para OpenAI
+            ├── restaurante/
+            │   ├── prompt.ts        ← Prompt del tomador de pedidos
+            │   └── tools.ts         ← enviar_pedido, cotizar_envio, mostrar_menu_lista
+            ├── taxis/
+            │   ├── prompt.ts
+            │   └── tools.ts         ← book_taxi, cotizar_viaje, cancelar_viaje
+            ├── farmacia/
+            │   └── prompt.ts
+            └── otro/
+                └── prompt.ts
+```
+
+### Flujo interno del bot-worker (por cada mensaje)
+
+```text
+1. YCloud recibe WhatsApp del cliente
+        │ POST /webhook (inbound)
+        ▼
+2. process-queue/index.ts — recibe el mensaje
+        │
+        ├─► Debounce (2s): acumula mensajes rápidos del mismo número
+        ├─► Lock de sesión (Supabase): evita procesamiento paralelo del mismo cliente
+        │
+        ▼
+3. Carga contexto desde Supabase:
+        ├─► Empresa del tenant (tipo_negocio, prompt, categorías)
+        └─► Historial de la conversación (últimos N mensajes)
+        │
+        ▼
+4. [OpenAI gpt-4o] — razona con el contexto y decide:
+        ├─► Responde directamente (finish_reason: stop)
+        └─► Llama una herramienta (finish_reason: tool_calls)
+        │
+        ▼
+5. Si hay tool_call → router.ts lo despacha:
+        ├─► consultar_catalogo  → pgvector (embedding OpenAI → match_catalogos)
+        ├─► mostrar_menu_lista  → sendWhatsAppList() con límite de 10 items
+        ├─► preguntar_tipo_entrega → sendWhatsAppButtons() [🛵 Domicilio / 🏬 Recoger]
+        ├─► pedir_ubicacion     → sendWhatsAppLocationRequest()
+        ├─► enviar_pedido       → INSERT en tabla pedidos → Notifica cocina
+        ├─► book_taxi           → Traccar + Heading Matcher → INSERT en tabla viajes
+        └─► escalar_humano      → Marca sesión como 'human', notifica despachador
+        │
+        ▼
+6. Guarda respuesta en historial (whatsapp_sessions)
+7. Envía respuesta al cliente vía YCloud
+8. Libera el lock de sesión
+```
+
+### Variables de entorno del VPS
+
+> ⚠️ **IMPORTANTE — Dos fuentes de variables:**
+> - **`OPENAI_API_KEY`**: Está **hardcodeada directamente** en `ecosystem.config.cjs` en disco (es la única con el valor real en el archivo).
+> - **El resto** (`YCLOUD_API_KEY`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `YCLOUD_SENDER`): El archivo tiene placeholders (`TU_SUPABASE_URL`, etc.) pero están inyectadas como valores reales en el proceso PM2 en memoria — probablemente vía `pm2 set` o `pm2 restart --update-env`.
+>
+> Para ver **todas** las variables activas reales del proceso:
+> ```bash
+> pm2 env 4
+> ```
+
+| Variable | Descripción | Estado |
+|---|---|---|
+| `PORT` | Puerto donde escucha el bot-worker (`3002`) | ✅ |
+| `SUPABASE_URL` | URL del proyecto Supabase | ✅ |
+| `SUPABASE_SERVICE_ROLE_KEY` | Service role key (bypass de RLS) | ✅ |
+| `OPENAI_API_KEY` | Clave de OpenAI para `gpt-4o` (LLM) y `text-embedding-3-small` (embeddings RAG) | ✅ |
+| `YCLOUD_API_KEY` | API key de YCloud para enviar mensajes | ✅ |
+| `YCLOUD_SENDER` | Número de WhatsApp Business de fallback. **En la práctica no se usa como sender principal** — ver nota abajo | ⚠️ |
+| `GOOGLE_MAPS_API_KEY` | Geocodificación de direcciones (cotizar envío, destinos de taxi) | ❌ No configurada |
+| `TRACCAR_URL` | URL de la API de Traccar | ✅ |
+
+### Cómo funciona el número de salida (YCLOUD_SENDER vs toNumber)
+
+> Este es uno de los aspectos más contraintuitivos del sistema.
+
+El bot **NO usa `YCLOUD_SENDER`** como número de salida en el flujo normal. El número desde el que responde el bot lo toma **directamente del webhook de YCloud**:
+
+```text
+1. Cliente manda WhatsApp al número del negocio (ej: +529632361353)
+        │
+        ▼
+2. YCloud envía webhook al VPS con:
+        - from: +52XXXXXXXXXX  (número del cliente)
+        - to:   +529632361353  (número de la base WhatsApp Business)
+        │
+        ▼
+3. El bot extrae toNumber = "+529632361353" del payload
+        │
+        ▼
+4. Todas las respuestas se envían usando ese mismo toNumber como sender
+   → sendWhatsApp(cliente, mensaje, toNumber)
+```
+
+`YCLOUD_SENDER` solo se usa como **fallback** si por algún bug el `toNumber` llega vacío. En condiciones normales, el número de salida es siempre el que YCloud pone en el campo `to` del webhook.
+
+**Consecuencia práctica:** Si tienes múltiples números de WhatsApp Business (distintos tenants/empresas), el bot responde automáticamente desde el número correcto sin configuración adicional. La identificación de la empresa se hace buscando en Supabase el tenant cuyo `waba_number` coincide con el `toNumber` del webhook.
+
+### Gestión del historial de conversación (whatsapp_sessions)
+
+El bot guarda todo el historial en la tabla `whatsapp_sessions` campo `history` (array JSON). Antes de cada llamada a OpenAI, el historial pasa por `pruneContext()` que lo recorta a ~2500 tokens (~10,000 caracteres) conservando siempre los mensajes más recientes.
+
+**Comandos de operador** (se mandan desde el chat de WhatsApp al número del negocio):
+
+| Comando | Efecto | Quién lo usa |
+|---|---|---|
+| `/reset` | Borra el historial (`history: []`) y reactiva el bot | Operador, para limpiar conversaciones confusas |
+| `/bot` | Reactiva el bot si la sesión está en modo `human` | Operador, después de atender manualmente |
+| `/configurar` | Easter egg que simula una recarga del sistema (mensajes de estado) | Para impresionar al cliente |
+
+**Modos de sesión** (`whatsapp_sessions.estado`):
+
+| Estado | Descripción |
+|---|---|
+| `bot` | El bot atiende normalmente |
+| `human` | Un operador tomó el chat. El bot está **silenciado** y no responde |
+| `procesando` | El bot está procesando un mensaje (lock anti-concurrencia) |
+
+### Archivos viejos en el VPS (no tocar)
+
+> `/root/backend/` — Backend Express.js + Firebase del **septiembre 2025**. Proyecto abandonado, sin relación con el sistema actual. No está corriendo bajo PM2 ni interfiere con el bot-worker. No borrar por si acaso.
+
+### Gestión del proceso con PM2
+
+```bash
+# Ver estado de todos los procesos
+pm2 status
+
+# Ver variables de entorno activas del bot-worker
+pm2 env 4
+
+# Ver logs en tiempo real
+pm2 logs 4
+
+# Ver últimas 50 líneas (no en tiempo real)
+pm2 logs 4 --lines 50 --nostream
+
+# Reiniciar después de subir código
+pm2 restart 4
+
+# El proceso es el #4 y se llama 'bot-worker'
+# wialon-bridge es el #0 (no tocar)
+```
+
+### Cómo deployar cambios al VPS
+
+```powershell
+# Desde tu máquina local (PowerShell con PuTTY instalado)
+# Subir un archivo específico:
+pscp -pw "PASSWORD" -hostkey "SHA256:C9f1dwKjSSdS6ZnO/Znu6lE548C47E4AlCq8oQQouRA" `
+  "C:\ruta\al\archivo.ts" root@74.208.153.209:/opt/bot-worker/functions/ruta/archivo.ts
+
+# Subir toda la carpeta _shared:
+pscp -r -pw "PASSWORD" -hostkey "SHA256:C9f1dwKjSSdS6ZnO/Znu6lE548C47E4AlCq8oQQouRA" `
+  "C:\...\functions\_shared" root@74.208.153.209:/opt/bot-worker/functions/
+
+# Luego reiniciar el proceso:
+pm2 restart 4
+```
+
+> ⚠️ El VPS **no se actualiza automáticamente** con `git push` ni con `supabase functions deploy`. Siempre requiere el `pscp` + `pm2 restart` manual.
+
+---
+
 ## 8. Variables de Entorno y Secrets
 
 ### Supabase Edge Functions Secrets
@@ -406,6 +620,23 @@ Se configuran en: **Supabase Dashboard → Edge Functions → Secrets**
 | `YCLOUD_SENDER` | Número de WhatsApp Business de YCloud (formato: `+52...`) | `whatsapp.ts` |
 | `DISPATCHER_PHONE` | Número global del despachador si la empresa no tiene uno propio | `whatsapp.ts` |
 | `APP_URL` | URL pública del frontend (para generar links de tracking) | `vapi-webhook` |
+
+### VPS Bot-Worker — Variables en ecosystem.config.cjs
+
+Estas variables viven **sólo en el VPS** y son independientes de los Secrets de Supabase:
+
+| Variable | Descripción |
+|---|---|
+| `OPENAI_API_KEY` | Clave de OpenAI para `gpt-4o-mini` (LLM) y `text-embedding-3-small` (embeddings RAG) |
+| `YCLOUD_API_KEY` | API key de YCloud (igual que en Supabase, pero configurada en PM2) |
+| `YCLOUD_SENDER` | Número WhatsApp Business (`+52963...`) |
+| `SUPABASE_URL` | URL de Supabase (para leer/escribir pedidos, sesiones, empresas) |
+| `SUPABASE_SERVICE_ROLE_KEY` | Service role key de Supabase |
+| `GOOGLE_MAPS_API_KEY` | Geocodificación de direcciones de entrega |
+| `TRACCAR_URL` | URL de la API de Traccar |
+| `TRACCAR_EMAIL` | Email de acceso a Traccar |
+| `TRACCAR_PASSWORD` | Contraseña de Traccar |
+| `PORT` | Puerto donde escucha el bot-worker (`3002`) |
 
 ### Frontend `.env`
 ```
@@ -439,7 +670,49 @@ Los planes se configuran en la tabla `paquetes` de Supabase y se asignan a cada 
 
 ## 10. Guía de Troubleshooting
 
-### 🔴 El bot no contesta la llamada
+### 🔴 El bot de WhatsApp no responde
+
+1. Verificar que el proceso esté corriendo: `pm2 status` en el VPS. El proceso `bot-worker` (ID 4) debe estar en estado `online`.
+2. Ver los últimos logs: `pm2 logs 4 --lines 50 --nostream`
+3. Buscar en logs `[YCLOUD] Mensaje entrante` — si no aparece, YCloud no está apuntando al VPS.
+4. Verificar en el panel de YCloud que el webhook inbound apunte a: `http://74.208.153.209:3002/webhook`
+5. Si el proceso está `errored` o `stopped`: `pm2 restart 4` para levantarlo.
+6. Si el error persiste, revisar si hay un error de Deno en los logs de PM2: `pm2 logs 4 --err --lines 30`
+
+---
+
+### 🔴 Los pedidos no suenan ni aparecen en tiempo real en el dashboard
+
+1. Verificar que la tabla `pedidos` tiene Realtime habilitado en Supabase:
+   ```sql
+   ALTER PUBLICATION supabase_realtime ADD TABLE pedidos;
+   ```
+2. Si ya lo hiciste y sigue sin funcionar, revisar la consola del navegador del dashboard para ver si hay errores de WebSocket.
+3. El canal de Supabase Realtime requiere que el cliente haya interactuado con la página (política de autoplay del navegador). El primer clic en la página activa el WebSocket.
+
+---
+
+### 🟡 El bot responde pero no ejecuta herramientas (tool_calls: 0)
+
+1. Revisar logs del VPS: si `finish_reason: stop` y `tool_calls: 0`, el LLM está respondiendo de memoria.
+2. La descripción de las herramientas en `toolSchemas.ts` debe ser lo suficientemente imperativa.
+3. Para `consultar_catalogo`: verificar que los productos tengan vectores generados. Correr:
+   ```bash
+   deno run -A scripts/backfill_embeddings.ts
+   ```
+4. Para `mostrar_menu_lista`: verificar que el prompt del restaurante NO diga "NUNCA uses mostrar_menu_lista".
+
+---
+
+### 🟡 La lista interactiva de WhatsApp no aparece (se envía pero no llega)
+
+1. En logs del VPS buscar: `[YCLOUD LIST] Enviando lista interactiva`. Contar `items`.
+2. Si `items > 10`, WhatsApp silenciosamente rechaza el mensaje. El límite es estrictamente 10 filas en total.
+3. Verificar que el campo `body` (texto del mensaje) no supere 1024 caracteres.
+
+---
+
+### 🔴 El bot no responde
 
 1. Verificar que Vapi tenga el webhook apuntando a:  
    `https://knghdwpxheenkpuajkxl.supabase.co/functions/v1/vapi-webhook`
@@ -561,7 +834,15 @@ Supabase Dashboard → Table Editor → telnyx_active_calls
 Columna: history → contiene el transcript completo
 ```
 
-### "Quiero deployar cambios al backend"
+### "Quiero deployar cambios al bot de WhatsApp (VPS)"
+```powershell
+# Subir carpeta _shared al VPS
+scp -r "C:\Users\Kaleb\Desktop\estrella-taxis-dashboard\estrella-taxis-backend\supabase\functions\_shared" root@74.208.153.209:/opt/bot-worker/functions/
+# Luego en el VPS:
+pm2 restart 4
+```
+
+### "Quiero deployar cambios al backend (Supabase Edge Functions)"
 ```powershell
 cd estrella-taxis-backend
 npx supabase functions deploy vapi-webhook --no-verify-jwt
@@ -626,8 +907,8 @@ Cuando el LLM (Gemini) decide ejecutar una acción, inyecta un JSON al final de 
 | Herramienta | Función TypeScript | Descripción |
 |---|---|---|
 | `escalar_humano` | `handleEscalarHumano()` | Silencia al bot (cambia sesión a `estado: 'human'`) y notifica al despachador por WhatsApp |
-| `pedir_ubicacion` | `handlePedirUbicacion()` | Envía un botón interactivo de "Compartir Ubicación GPS" al cliente |
-| `consultar_catalogo` | `handleConsultarCatalogo()` | **Búsqueda semántica vectorial (RAG).** Genera un embedding vía Gemini y busca en la tabla `catalogos` usando `pgvector`. Disponible para cualquier giro |
+| `pedir_ubicacion` | `handlePedirUbicacion()` | Envía un botón nativo de WhatsApp para que el cliente comparta su ubicación GPS |
+| `consultar_catalogo` | `handleConsultarCatalogo()` | **Búsqueda semántica vectorial (RAG).** Genera un embedding vía **OpenAI `text-embedding-3-small`** y busca en la tabla `catalogos` usando `pgvector`. Disponible para cualquier giro |
 
 #### 🚕 Herramientas de Taxis (`taxis/tools.ts`)
 
@@ -641,7 +922,9 @@ Cuando el LLM (Gemini) decide ejecutar una acción, inyecta un JSON al final de 
 
 | Herramienta | Función TypeScript | Descripción |
 |---|---|---|
-| `enviar_pedido` | `handleEnviarPedido()` | **Valida estrictamente** que existan pedido y dirección. Inserta en tabla `pedidos`, y envía botones interactivos `[✅ Confirmar]` y `[❌ Rechazar]` a la cocina |
+| `mostrar_menu_lista` | `handleMostrarMenuLista()` | Envía una lista interactiva nativa de WhatsApp (máx 10 items). Siempre se llama después de `consultar_catalogo` |
+| `preguntar_tipo_entrega` | `handlePreguntarTipoEntrega()` | Envía botones nativos de WhatsApp: **🛵 A Domicilio** / **🏬 Pasar a Recoger** |
+| `enviar_pedido` | `handleEnviarPedido()` | **Valida estrictamente** que existan pedido y dirección. Inserta en tabla `pedidos`, y notifica a la cocina |
 | `cotizar_envio` | `handleCotizarEnvio()` | Resuelve la zona de entrega y retorna el costo aproximado de envío |
 
 ---
@@ -681,6 +964,12 @@ Se usa una única tabla universal `catalogos` para soportar cualquier giro sin m
 | `disponible` | BOOLEAN | Si está en `false`, el bot no lo ofrece |
 
 La función SQL `match_catalogos(query_embedding, threshold, count, tenant_id)` realiza la búsqueda por similitud de coseno. El script de migración está en: `estrella-taxis-backend/catalogos_migration.sql`.
+
+> ⚠️ Los vectores se generan con **OpenAI `text-embedding-3-small` (768 dimensiones)**. Si necesitas regenerar los vectores de todos los productos existentes, corre desde tu máquina local:
+> ```powershell
+> cd estrella-taxis-backend
+> deno run -A scripts/backfill_embeddings.ts
+> ```
 
 ---
 

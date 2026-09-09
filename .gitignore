@@ -22,3 +22,10 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Secrets — NUNCA subir al repo
+.env
+.env.*
+ecosystem.config.cjs
+estrella-taxis-backend/ecosystem.config.cjs
+**/serviceAccountKey.json

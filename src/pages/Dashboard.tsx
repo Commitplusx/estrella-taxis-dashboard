@@ -4,7 +4,7 @@ import { useAuth, type EmpresaData } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
 import { 
   CarFront, RadioTower, WifiOff, MapPin, 
-  UtensilsCrossed, ShoppingBag, Bot, Clock, Users, Plus, ArrowRight, MessageSquare, ExternalLink, Sparkles, CheckCircle2, ClipboardList 
+  UtensilsCrossed, ShoppingBag, Bot, Clock, Users, Plus, ArrowRight, MessageSquare, ExternalLink, ClipboardList 
 } from 'lucide-react';
 import { useTraccarSocket } from '../hooks/useTraccarSocket';
 import { Link, useNavigate } from 'react-router-dom';
@@ -14,7 +14,7 @@ function formatRelativeTime(dateStr: string) {
   const now = new Date();
   const diffMins = Math.round((now.getTime() - d.getTime()) / 60000);
   
-  if (diffMins < 1) return 'Hace unos segundos';
+  if (diffMins < 1) return 'Justo ahora';
   if (diffMins < 60) return `Hace ${diffMins} min`;
   const diffHours = Math.floor(diffMins / 60);
   if (diffHours < 24) return `Hace ${diffHours} h`;
@@ -44,146 +44,121 @@ function TaxiDashboardView({ user }: { user: any }) {
 
   const online = devices.filter(d => d.status === 'online').length;
   const offline = devices.filter(d => d.status !== 'online').length;
+  const coverage = devices.length ? Math.round((online / devices.length) * 100) : 0;
 
   return (
-    <div className="h-full overflow-y-auto p-4 sm:p-6 fade-in space-y-6 pb-32 md:pb-10">
-      {/* Greeting */}
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900 tracking-tight">
-          Hola, {user?.name?.split(' ')[0]} 👋
-        </h1>
-        <p className="text-gray-500 text-sm mt-1 capitalize">
+    <div className="h-full overflow-y-auto p-6 md:p-8 space-y-8 pb-32 md:pb-10 font-sans max-w-[1400px] mx-auto">
+      {/* Header Enterprise */}
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-gray-200 pb-5">
+        <div>
+          <h1 className="text-2xl font-semibold text-gray-900 tracking-tight">
+            Resumen de Flotilla
+          </h1>
+          <p className="text-gray-500 text-sm mt-1">
+            Monitoreo en tiempo real de unidades Traccar.
+          </p>
+        </div>
+        <div className="text-sm text-gray-500 font-medium bg-gray-50 px-3 py-1.5 rounded-md border border-gray-200 inline-flex items-center w-max">
+          <Clock size={14} className="mr-2" />
           {new Date().toLocaleDateString('es-MX', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
-        </p>
+        </div>
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-        <div className="col-span-2 bg-gradient-to-br from-blue-600 to-blue-800 rounded-[24px] p-5 sm:p-6 text-white shadow-lg shadow-blue-600/30 flex items-center justify-between relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-2xl -mr-10 -mt-10"></div>
-          <div className="absolute bottom-0 left-0 w-24 h-24 bg-blue-400/20 rounded-full blur-xl -ml-5 -mb-5"></div>
-          <div className="relative z-10">
-            <p className="text-blue-100 font-medium text-sm sm:text-base mb-1">Total de Flotilla</p>
-            <div className="flex items-baseline gap-2">
-              <span className="text-4xl sm:text-5xl font-bold tracking-tight">{loading ? '...' : devices.length}</span>
-              <span className="text-blue-200 text-sm">Taxis registrados</span>
-            </div>
+      {/* Metrics Grid Enterprise */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+        <div className="bg-white border border-gray-200 rounded-lg p-5 shadow-sm">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-sm font-medium text-gray-500">Total Unidades</h3>
+            <CarFront size={16} className="text-gray-400" />
           </div>
-          <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-white/10 border border-white/20 backdrop-blur-sm flex items-center justify-center shrink-0 relative z-10">
-            <CarFront size={28} className="text-white" />
+          <div className="flex items-baseline gap-2">
+            <span className="text-3xl font-semibold text-gray-900 leading-none">{loading ? '-' : devices.length}</span>
           </div>
         </div>
 
-        <div className="bg-white rounded-[20px] p-4 sm:p-5 border border-gray-100 shadow-sm flex flex-col justify-between">
-          <div className="flex items-start justify-between mb-2">
-            <div className="w-10 h-10 rounded-xl bg-green-50 text-green-600 flex items-center justify-center">
-              <RadioTower size={20} />
-            </div>
-            <span className="px-2 py-1 bg-green-50 text-green-600 text-[10px] font-bold uppercase rounded-lg">Online</span>
+        <div className="bg-white border border-gray-200 rounded-lg p-5 shadow-sm">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-sm font-medium text-gray-500">Unidades Online</h3>
+            <RadioTower size={16} className="text-green-500" />
           </div>
-          <div>
-            <p className="text-2xl sm:text-3xl font-bold text-gray-900">{loading ? '...' : online}</p>
-            <p className="text-xs text-gray-500 font-medium mt-0.5">Conectados</p>
+          <div className="flex items-baseline gap-2">
+            <span className="text-3xl font-semibold text-gray-900 leading-none">{loading ? '-' : online}</span>
           </div>
         </div>
 
-        <div className="bg-white rounded-[20px] p-4 sm:p-5 border border-gray-100 shadow-sm flex flex-col justify-between">
-          <div className="flex items-start justify-between mb-2">
-            <div className="w-10 h-10 rounded-xl bg-gray-50 text-gray-500 flex items-center justify-center">
-              <WifiOff size={20} />
-            </div>
-            <span className="px-2 py-1 bg-gray-100 text-gray-500 text-[10px] font-bold uppercase rounded-lg">Offline</span>
+        <div className="bg-white border border-gray-200 rounded-lg p-5 shadow-sm">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-sm font-medium text-gray-500">Unidades Offline</h3>
+            <WifiOff size={16} className="text-gray-400" />
           </div>
-          <div>
-            <p className="text-2xl sm:text-3xl font-bold text-gray-900">{loading ? '...' : offline}</p>
-            <p className="text-xs text-gray-500 font-medium mt-0.5">Desconectados</p>
+          <div className="flex items-baseline gap-2">
+            <span className="text-3xl font-semibold text-gray-900 leading-none">{loading ? '-' : offline}</span>
           </div>
         </div>
 
-        <div className="col-span-2 bg-white rounded-[20px] p-4 sm:p-5 border border-gray-100 shadow-sm flex flex-col justify-center">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-full bg-amber-50 text-amber-500 flex items-center justify-center">
-                <MapPin size={16} />
-              </div>
-              <p className="text-sm font-semibold text-gray-700">Cobertura Activa</p>
-            </div>
-            <p className="text-lg font-bold text-amber-500">{loading || !devices.length ? '0' : Math.round((online / devices.length) * 100)}%</p>
+        <div className="bg-white border border-gray-200 rounded-lg p-5 shadow-sm">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-sm font-medium text-gray-500">Cobertura Activa</h3>
+            <MapPin size={16} className="text-blue-500" />
           </div>
-          <div className="w-full h-2.5 bg-gray-100 rounded-full overflow-hidden">
-            <div 
-              className="h-full bg-amber-500 rounded-full transition-all duration-1000 ease-out" 
-              style={{ width: `${loading || !devices.length ? 0 : Math.round((online / devices.length) * 100)}%` }}
-            ></div>
+          <div className="flex flex-col gap-2">
+            <span className="text-3xl font-semibold text-gray-900 leading-none">{loading ? '-' : `${coverage}%`}</span>
+            <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
+              <div className="h-full bg-blue-600 rounded-full" style={{ width: `${coverage}%` }} />
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Taxis recientes */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-        <div className="px-6 py-5 border-b border-gray-50">
-          <h2 className="text-base font-semibold text-gray-900 tracking-tight">Estado de tu Flotilla</h2>
-        </div>
-        <div className="divide-y divide-gray-50/80">
-          {loading ? (
-            <div className="animate-pulse flex flex-col">
-              {[1, 2, 3, 4, 5].map(i => (
-                <div key={i} className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-gray-50">
-                  <div className="flex items-center gap-4">
-                    <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full sm:rounded-2xl bg-gray-100"></div>
-                    <div className="space-y-2">
-                      <div className="h-4 w-32 bg-gray-200 rounded"></div>
-                      <div className="h-3 w-20 bg-gray-100 rounded"></div>
-                    </div>
-                  </div>
-                  <div className="h-8 w-8 bg-gray-100 rounded-full"></div>
-                </div>
-              ))}
+      {/* Taxis recientes Enterprise Table */}
+      <div>
+        <h2 className="text-base font-semibold text-gray-900 mb-4">Estado de Unidades</h2>
+        <div className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="bg-gray-50 border-b border-gray-200 text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3">Unidad</th>
+                <th className="px-6 py-3">ID Único</th>
+                <th className="px-6 py-3">Estado</th>
+                <th className="px-6 py-3 text-right">Última Señal</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-200">
+              {loading ? (
+                <tr>
+                  <td colSpan={4} className="px-6 py-8 text-center text-sm text-gray-500">Cargando unidades...</td>
+                </tr>
+              ) : devices.length === 0 ? (
+                <tr>
+                  <td colSpan={4} className="px-6 py-8 text-center text-sm text-gray-500">No hay unidades registradas.</td>
+                </tr>
+              ) : (
+                devices.slice(0, 10).map(device => {
+                  const isOnline = device.status === 'online';
+                  return (
+                    <tr key={device.id} className="hover:bg-gray-50 transition-colors">
+                      <td className="px-6 py-3 text-sm font-medium text-gray-900">{device.name}</td>
+                      <td className="px-6 py-3 text-sm text-gray-500 font-mono">{device.uniqueId}</td>
+                      <td className="px-6 py-3">
+                        <div className="flex items-center gap-2">
+                          <div className={`w-2 h-2 rounded-full ${isOnline ? 'bg-green-500' : 'bg-gray-300'}`} />
+                          <span className="text-sm text-gray-700">{isOnline ? 'Online' : 'Offline'}</span>
+                        </div>
+                      </td>
+                      <td className="px-6 py-3 text-sm text-gray-500 text-right">
+                        {device.lastUpdate ? formatRelativeTime(device.lastUpdate) : '-'}
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+          {devices.length > 10 && (
+            <div className="bg-gray-50 px-6 py-3 border-t border-gray-200 text-center">
+              <span className="text-xs text-gray-500">Mostrando 10 unidades recientes.</span>
             </div>
-          ) : devices.slice(0, 8).map(device => {
-            const isOnline = device.status === 'online';
-            return (
-              <div key={device.id} className="flex items-center justify-between px-4 sm:px-6 py-4 hover:bg-slate-50 transition-colors group cursor-pointer">
-                <div className="flex items-center gap-3 sm:gap-4">
-                  <div className="relative">
-                    <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full sm:rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
-                      <CarFront size={20} className="sm:w-6 sm:h-6" />
-                    </div>
-                    <div className="absolute -bottom-1 -right-1 sm:-bottom-1 sm:-right-1">
-                      <div className="relative flex items-center justify-center w-3.5 h-3.5">
-                        {isOnline && <span className="absolute inline-flex h-full w-full rounded-full bg-green-500 opacity-40 animate-ping"></span>}
-                        <span className={`relative inline-flex rounded-full h-3 w-3 border-2 border-white ${isOnline ? 'bg-green-500' : 'bg-gray-400'}`}></span>
-                      </div>
-                    </div>
-                  </div>
-                  <div>
-                    <p className="text-sm sm:text-base font-bold text-gray-900 group-hover:text-blue-600 transition-colors">{device.name}</p>
-                    <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 mt-0.5">
-                      <span className="text-[9px] sm:text-[10px] font-bold text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded tracking-wide uppercase">
-                        ID: {device.uniqueId}
-                      </span>
-                      <span className="text-[10px] sm:text-xs text-gray-400 font-medium">
-                        &bull; {isOnline ? 'Señal Activa' : 'Desconectado'}
-                      </span>
-                      {device.lastUpdate && (
-                        <span className="text-[10px] sm:text-xs text-gray-400 font-medium">
-                          &bull; Última señal: {formatRelativeTime(device.lastUpdate)}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-                <div className="flex items-center gap-3">
-                  <div className="hidden sm:flex flex-col items-end">
-                     <span className={`text-[10px] font-bold uppercase tracking-wider ${isOnline ? 'text-green-600' : 'text-gray-400'}`}>{isOnline ? 'Online' : 'Offline'}</span>
-                  </div>
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors ${isOnline ? 'bg-green-50 text-green-600 shadow-sm shadow-green-100' : 'bg-gray-50 text-gray-400'}`}>
-                    {isOnline ? <RadioTower size={14} /> : <WifiOff size={14} />}
-                  </div>
-                </div>
-              </div>
-            );
-          })}
+          )}
         </div>
       </div>
     </div>
@@ -216,7 +191,6 @@ function BusinessDashboardView({ user, empresaData }: { user: any; empresaData: 
         if (empRes.data) setEmpresaDetails(empRes.data);
         if (usersRes.count) setUserCount(usersRes.count);
 
-        // Intentar obtener pedidos pendientes (no falla si la tabla no existe)
         try {
           const { data: ordersData, error: ordersErr } = await supabase
             .from('pedidos')
@@ -243,246 +217,213 @@ function BusinessDashboardView({ user, empresaData }: { user: any; empresaData: 
     loadData();
   }, [empresaData.id]);
 
+  useEffect(() => {
+    const channel = supabase
+      .channel(`dashboard-pedidos-${empresaData.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'pedidos',
+          filter: `tenant_id=eq.${empresaData.id}`
+        },
+        (payload) => {
+          const nuevoPedido = payload.new as any;
+          setRecentOrders(prev => [nuevoPedido, ...prev].slice(0, 10));
+          setPendingOrdersCount(prev => prev + 1);
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'pedidos',
+          filter: `tenant_id=eq.${empresaData.id}`
+        },
+        (payload) => {
+          const updated = payload.new as any;
+          setRecentOrders(prev => prev.map(o => o.id === updated.id ? updated : o));
+          if (updated.estado === 'entregado' || updated.estado === 'cancelado') {
+            setPendingOrdersCount(prev => Math.max(0, prev - 1));
+          }
+        }
+      )
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [empresaData.id]);
+
   const waPhone = empresaDetails?.telefono_whatsapp?.replace(/\D/g, '');
 
   return (
-    <div className="h-full overflow-y-auto p-4 sm:p-6 fade-in space-y-6 pb-32 md:pb-10">
-      {/* Header y Saludo */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+    <div className="h-full overflow-y-auto p-6 md:p-8 space-y-8 pb-32 md:pb-10 font-sans max-w-[1400px] mx-auto">
+      {/* Header Enterprise */}
+      <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-6 border-b border-gray-200 pb-5">
         <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-bold text-gray-900 tracking-tight">
-              Hola, {user?.name?.split(' ')[0]} 👋
+          <div className="flex items-center gap-3 mb-1">
+            <h1 className="text-2xl font-semibold text-gray-900 tracking-tight">
+              Visión General
             </h1>
-            <span className={`px-2.5 py-0.5 text-xs font-bold uppercase rounded-full tracking-wider border ${
-              isRestaurante 
-                ? 'bg-amber-50 text-amber-700 border-amber-200' 
-                : 'bg-blue-50 text-blue-700 border-blue-200'
-            }`}>
+            <span className="px-2 py-0.5 text-[11px] font-medium uppercase tracking-wider rounded border border-gray-200 bg-gray-50 text-gray-500">
               {empresaData.tipo_negocio}
             </span>
           </div>
-          <p className="text-gray-500 text-sm mt-1">
-            Panel de control de <span className="font-semibold text-gray-800">{empresaData.nombre_empresa}</span> &bull; {new Date().toLocaleDateString('es-MX', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+          <p className="text-gray-500 text-sm">
+            Estadísticas y gestión para <span className="font-medium text-gray-900">{empresaData.nombre_empresa}</span>
           </p>
         </div>
 
-        <div className="flex items-center gap-2.5 self-start sm:self-auto">
+        <div className="flex items-center gap-3">
+          <div className="hidden sm:flex text-sm text-gray-500 font-medium bg-gray-50 px-3 py-1.5 rounded-md border border-gray-200 items-center h-9">
+            <Clock size={14} className="mr-2" />
+            {new Date().toLocaleDateString('es-MX', { year: 'numeric', month: 'short', day: 'numeric' })}
+          </div>
           <button
             onClick={() => navigate('/orders')}
-            className="flex items-center gap-2 px-3.5 py-2.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 rounded-xl text-sm font-semibold transition shadow-sm"
+            className="flex items-center justify-center gap-2 px-4 py-1.5 h-9 bg-white hover:bg-gray-50 text-gray-700 border border-gray-300 rounded-md text-sm font-medium transition-colors shadow-sm"
           >
-            <ClipboardList size={16} className="text-amber-600" />
-            <span>Pedidos en vivo</span>
-            {pendingOrdersCount > 0 && (
-              <span className="ml-0.5 px-1.5 py-0.5 bg-amber-600 text-white rounded-full text-[11px] font-bold">
-                {pendingOrdersCount}
-              </span>
-            )}
+            Tablero de Pedidos
           </button>
           <button
             onClick={() => navigate('/catalog')}
-            className="flex items-center gap-2 px-4 py-2.5 bg-gray-900 hover:bg-black text-white rounded-xl text-sm font-semibold transition shadow-sm"
+            className="flex items-center justify-center gap-2 px-4 py-1.5 h-9 bg-black hover:bg-gray-800 text-white border border-black rounded-md text-sm font-medium transition-colors shadow-sm"
           >
-            <Plus size={16} /> {isRestaurante ? 'Agregar Platillo' : 'Agregar Producto'}
+            <Plus size={16} /> Agregar {isRestaurante ? 'Platillo' : 'Producto'}
           </button>
         </div>
       </div>
 
-      {/* Tarjetas de Métricas Principales */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* Metrics Grid Enterprise */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
         
         {/* Card 1: Pedidos Activos */}
-        <div className="bg-gradient-to-br from-amber-500 to-orange-600 rounded-2xl p-5 text-white shadow-lg shadow-amber-500/20 relative overflow-hidden flex flex-col justify-between">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-white/90">
-              Pedidos Activos
-            </span>
-            <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center backdrop-blur-sm">
-              <ClipboardList size={20} className="text-white" />
-            </div>
+        <div className="bg-white border border-gray-200 rounded-lg p-5 shadow-sm">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-sm font-medium text-gray-500">Pedidos Activos</h3>
+            <ClipboardList size={16} className="text-gray-400" />
           </div>
-          <div className="my-3">
-            <div className="flex items-baseline gap-2">
-              <span className="text-3xl sm:text-4xl font-extrabold tracking-tight">{loading ? '...' : pendingOrdersCount}</span>
-              {pendingOrdersCount > 0 && (
-                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-white text-orange-600 animate-pulse">
-                  En cocina / camino
-                </span>
-              )}
-            </div>
-            <p className="text-xs text-white/90 mt-0.5">
-              {pendingOrdersCount === 0 ? 'Sin pedidos pendientes por ahora' : 'Órdenes en preparación y entrega'}
-            </p>
+          <div className="flex items-baseline gap-2 mb-2">
+            <span className="text-3xl font-semibold text-gray-900 leading-none">{loading ? '-' : pendingOrdersCount}</span>
+            {pendingOrdersCount > 0 && <span className="text-sm text-gray-500">en proceso</span>}
           </div>
-          <Link to="/orders" className="inline-flex items-center gap-1.5 text-xs font-semibold text-white hover:underline mt-1">
-            Ver Tablero en Tiempo Real <ArrowRight size={13} />
+          <Link to="/orders" className="text-xs font-medium text-blue-600 hover:text-blue-700 flex items-center gap-1 w-max">
+            Ver detalles <ArrowRight size={12} />
           </Link>
         </div>
 
         {/* Card 2: Menú / Catálogo */}
-        <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm flex flex-col justify-between">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-gray-400">
-              {isRestaurante ? 'Menú Activo' : 'Catálogo'}
+        <div className="bg-white border border-gray-200 rounded-lg p-5 shadow-sm">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-sm font-medium text-gray-500">Total en {isRestaurante ? 'Menú' : 'Catálogo'}</h3>
+            {isRestaurante ? <UtensilsCrossed size={16} className="text-gray-400"/> : <ShoppingBag size={16} className="text-gray-400"/>}
+          </div>
+          <div className="flex items-baseline gap-2 mb-2">
+            <span className="text-3xl font-semibold text-gray-900 leading-none">{loading ? '-' : items.length}</span>
+            <span className="text-sm text-gray-500">registros</span>
+          </div>
+          <Link to="/catalog" className="text-xs font-medium text-blue-600 hover:text-blue-700 flex items-center gap-1 w-max">
+            Gestionar <ArrowRight size={12} />
+          </Link>
+        </div>
+
+        {/* Card 3: Bot de Atención IA */}
+        <div className="bg-white border border-gray-200 rounded-lg p-5 shadow-sm">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-sm font-medium text-gray-500">Asistente IA</h3>
+            <Bot size={16} className="text-gray-400" />
+          </div>
+          <div className="mb-2">
+            <span className="text-lg font-medium text-gray-900 leading-tight block truncate">
+              {empresaDetails?.nombre_bot || 'No configurado'}
             </span>
-            <div className="w-10 h-10 rounded-xl bg-orange-50 text-orange-600 flex items-center justify-center">
-              {isRestaurante ? <UtensilsCrossed size={20} /> : <ShoppingBag size={20} />}
-            </div>
+            <span className="text-sm text-gray-500 truncate block">
+              {empresaDetails?.telefono_whatsapp || 'Sin WhatsApp'}
+            </span>
           </div>
-          <div className="my-3">
-            <p className="text-3xl font-extrabold tracking-tight text-gray-900">{loading ? '...' : items.length}</p>
-            <p className="text-xs text-gray-500 mt-0.5">
-              {isRestaurante ? 'Platillos registrados' : 'Productos disponibles'}
-            </p>
-          </div>
-          <Link to="/catalog" className="inline-flex items-center gap-1.5 text-xs font-semibold text-orange-600 hover:text-orange-700 mt-1">
-            Gestionar {isRestaurante ? 'Menú' : 'Catálogo'} <ArrowRight size={13} />
+          <Link to="/bot" className="text-xs font-medium text-blue-600 hover:text-blue-700 flex items-center gap-1 w-max mt-1">
+            Configuración <ArrowRight size={12} />
           </Link>
         </div>
 
-        {/* Card 2: Bot de Atención IA */}
-        <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm flex flex-col justify-between">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-gray-400">Asistente IA</span>
-            <div className="w-10 h-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center">
-              <Bot size={20} />
-            </div>
+        {/* Card 4: Usuarios */}
+        <div className="bg-white border border-gray-200 rounded-lg p-5 shadow-sm">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-sm font-medium text-gray-500">Equipo</h3>
+            <Users size={16} className="text-gray-400" />
           </div>
-          <div className="my-3">
-            <div className="flex items-center gap-2">
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
-              <p className="text-base font-bold text-gray-900 truncate">
-                {empresaDetails?.nombre_bot || 'Bot IA'}
-              </p>
-            </div>
-            <p className="text-xs text-gray-500 mt-1 truncate">
-              {empresaDetails?.telefono_whatsapp ? `WA: ${empresaDetails.telefono_whatsapp}` : 'Canal WhatsApp listo'}
-            </p>
+          <div className="flex items-baseline gap-2 mb-2">
+            <span className="text-3xl font-semibold text-gray-900 leading-none">{loading ? '-' : userCount}</span>
+            <span className="text-sm text-gray-500">usuarios</span>
           </div>
-          <Link to="/bot" className="inline-flex items-center gap-1.5 text-xs font-semibold text-purple-600 hover:text-purple-700">
-            Ajustar Bot <ArrowRight size={13} />
-          </Link>
-        </div>
-
-        {/* Card 3: Horario y Políticas */}
-        <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm flex flex-col justify-between">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-gray-400">Atención</span>
-            <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
-              <Clock size={20} />
-            </div>
-          </div>
-          <div className="my-3">
-            <p className="text-xs text-gray-700 font-medium line-clamp-2">
-              {empresaDetails?.prompt_personalizado || 'Sin horario configurado aún'}
-            </p>
-            <p className="text-[11px] text-gray-400 mt-1">
-              {empresaDetails?.ciudad || 'Ubicación local'}
-            </p>
-          </div>
-          <Link to="/bot" className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-600 hover:text-blue-700">
-            Editar Horario <ArrowRight size={13} />
-          </Link>
-        </div>
-
-        {/* Card 4: Usuarios y Accesos */}
-        <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm flex flex-col justify-between">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-gray-400">Equipo</span>
-            <div className="w-10 h-10 rounded-xl bg-gray-50 text-gray-700 flex items-center justify-center">
-              <Users size={20} />
-            </div>
-          </div>
-          <div className="my-3">
-            <p className="text-3xl font-extrabold text-gray-900">{loading ? '...' : userCount}</p>
-            <p className="text-xs text-gray-500 mt-0.5">Usuarios autorizados</p>
-          </div>
-          <Link to="/users" className="inline-flex items-center gap-1.5 text-xs font-semibold text-gray-700 hover:text-gray-900">
-            Ver Usuarios <ArrowRight size={13} />
+          <Link to="/users" className="text-xs font-medium text-blue-600 hover:text-blue-700 flex items-center gap-1 w-max">
+            Administrar accesos <ArrowRight size={12} />
           </Link>
         </div>
 
       </div>
 
-      {/* Banner Destacado: Probar Asistente de Voz / WhatsApp */}
-      {waPhone && (
-        <div className="bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-50 border border-emerald-100 rounded-2xl p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-2xl bg-emerald-500 text-white flex items-center justify-center shadow-md shadow-emerald-500/20 shrink-0">
-              <MessageSquare size={24} />
-            </div>
-            <div>
-              <h3 className="text-sm font-bold text-gray-900">Prueba el Asistente en WhatsApp</h3>
-              <p className="text-xs text-gray-600 mt-0.5">
-                Envía un mensaje para verificar cómo la IA recomienda los platillos de tu menú en tiempo real.
-              </p>
-            </div>
+      <div>
+        {/* Tabla de Pedidos Enterprise */}
+        <div className="w-full">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-base font-semibold text-gray-900">Pedidos en curso</h2>
+            <Link to="/orders" className="text-sm font-medium text-gray-500 hover:text-gray-900">Ver historial</Link>
           </div>
-          <a
-            href={`https://wa.me/${waPhone}?text=Hola,%20me%20gustaria%20saber%20su%20menu`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-sm transition shrink-0"
-          >
-            Abrir WhatsApp <ExternalLink size={14} />
-          </a>
+          
+          <div className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-gray-50 border-b border-gray-200 text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-5 py-3">Cliente</th>
+                  <th className="px-5 py-3 hidden sm:table-cell">Detalle</th>
+                  <th className="px-5 py-3">Estado</th>
+                  <th className="px-5 py-3 text-right">Tiempo</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200">
+                {loading ? (
+                  <tr>
+                    <td colSpan={4} className="px-5 py-8 text-center text-sm text-gray-500">Cargando datos...</td>
+                  </tr>
+                ) : recentOrders.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} className="px-5 py-8 text-center text-sm text-gray-500">No hay pedidos activos.</td>
+                  </tr>
+                ) : (
+                  recentOrders.map(pedido => (
+                    <tr key={pedido.id} className="hover:bg-gray-50 transition-colors">
+                      <td className="px-5 py-3">
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold tracking-wide bg-blue-50 text-blue-700 border border-blue-200 uppercase">
+                          {pedido.cliente_nombre || 'Desconocido'}
+                        </span>
+                      </td>
+                      <td className="px-5 py-3 text-sm text-gray-500 truncate max-w-[200px] hidden sm:table-cell">
+                        {pedido.detalle_pedido}
+                      </td>
+                      <td className="px-5 py-3">
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-bold tracking-wide border uppercase ${
+                          pedido.estado === 'pendiente' ? 'bg-red-50 text-red-700 border-red-200' :
+                          pedido.estado === 'preparando' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                          'bg-emerald-50 text-emerald-700 border-emerald-200'
+                        }`}>
+                          {pedido.estado.replace('_', ' ')}
+                        </span>
+                      </td>
+                      <td className="px-5 py-3 text-sm text-gray-500 text-right font-mono">
+                        {formatRelativeTime(pedido.created_at)}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
-      )}
 
-      {/* Mini-Feed de Pedidos Recientes */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-50 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <ClipboardList size={16} className="text-amber-600" />
-            <h2 className="text-base font-bold text-gray-900 tracking-tight">Últimos Pedidos Activos</h2>
-          </div>
-          <Link to="/orders" className="text-xs font-semibold text-amber-600 hover:underline">
-            Ir al Tablero Kanban &rarr;
-          </Link>
-        </div>
 
-        {loading ? (
-          <div className="p-6 text-center text-gray-400 text-sm animate-pulse">Cargando pedidos...</div>
-        ) : recentOrders.length === 0 ? (
-          <div className="p-10 text-center flex flex-col items-center justify-center">
-            <div className="w-12 h-12 rounded-full bg-gray-50 text-gray-400 flex items-center justify-center mb-3">
-              <CheckCircle2 size={24} />
-            </div>
-            <h3 className="text-sm font-bold text-gray-900">No hay pedidos pendientes</h3>
-            <p className="text-xs text-gray-500 max-w-sm mt-1">
-              Todos los pedidos han sido procesados. La cocina está despejada y esperando nuevas órdenes...
-            </p>
-          </div>
-        ) : (
-          <div className="divide-y divide-gray-50">
-            {recentOrders.map(pedido => (
-              <div key={pedido.id} className="px-6 py-4 flex items-center justify-between hover:bg-amber-50/30 transition group">
-                <div className="min-w-0 flex-1 pr-4">
-                  <div className="flex items-center gap-2 mb-1">
-                    <p className="text-sm font-bold text-gray-900 truncate">{pedido.cliente_nombre || 'Cliente WhatsApp'}</p>
-                    <span className={`px-2 py-0.5 text-[10px] font-bold uppercase rounded-md border ${
-                      pedido.estado === 'pendiente' ? 'bg-red-50 text-red-700 border-red-200' :
-                      pedido.estado === 'preparando' ? 'bg-amber-50 text-amber-700 border-amber-200' :
-                      'bg-blue-50 text-blue-700 border-blue-200'
-                    }`}>
-                      {pedido.estado.replace('_', ' ')}
-                    </span>
-                  </div>
-                  <p className="text-xs text-gray-500 truncate">{pedido.detalle_pedido}</p>
-                </div>
-                <div className="flex flex-col items-end gap-1 shrink-0">
-                  <span className="text-sm font-black text-emerald-600">
-                    {pedido.costo_envio != null ? `$${pedido.costo_envio}` : 'Por cobrar'}
-                  </span>
-                  <span className="text-[10px] font-semibold text-gray-400 flex items-center gap-1">
-                    <Clock size={10}/> {formatRelativeTime(pedido.created_at)}
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
+
       </div>
     </div>
   );
@@ -501,4 +442,3 @@ export default function Dashboard() {
 
   return <TaxiDashboardView user={user} />;
 }
-

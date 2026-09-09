@@ -18,14 +18,24 @@ export interface DispatchData {
 
 // Enviar cualquier mensaje de WhatsApp a cualquier número — usado para el link de tracking al cliente
 export async function sendWhatsApp(to: string, body: string, fromOverride?: string) {
-  if (!YCLOUD_API_KEY) return;
+  if (!YCLOUD_API_KEY) {
+    console.error('[YCLOUD SEND] ABORTADO: YCLOUD_API_KEY no está configurada.');
+    return;
+  }
   const sender = fromOverride || YCLOUD_SENDER;
+  console.log(`[YCLOUD SEND] Enviando a ${to} desde ${sender}. Longitud mensaje: ${body?.length ?? 0}`);
   const res = await fetch('https://api.ycloud.com/v2/whatsapp/messages', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'X-API-Key': YCLOUD_API_KEY },
     body: JSON.stringify({ from: sender, to, type: 'text', text: { body } }),
   });
-  if (!res.ok) console.error('[YCLOUD SEND ERROR]', await res.text());
+  if (!res.ok) {
+    const errText = await res.text();
+    console.error(`[YCLOUD SEND ERROR] HTTP ${res.status} al enviar a ${to}:`, errText);
+    // No lanzamos excepción para que el bot no se rompa, pero sí logueamos completo
+  } else {
+    console.log(`[YCLOUD SEND] ✅ Mensaje enviado exitosamente a ${to}`);
+  }
 }
 
 // Marcar un mensaje entrante como leído (muestra las dos palomitas azules al cliente)
@@ -132,8 +142,12 @@ export async function sendWhatsAppLocationRequest(to: string, body: string, from
 
 // Enviar un mensaje interactivo con lista nativa (hasta 10 elementos)
 export async function sendWhatsAppList(to: string, body: string, buttonText: string, sections: any[], fromOverride?: string) {
-  if (!YCLOUD_API_KEY) return;
+  if (!YCLOUD_API_KEY) {
+    console.error('[YCLOUD LIST] ❌ YCLOUD_API_KEY no está definida. Mensaje de lista NO enviado.');
+    return;
+  }
   const sender = fromOverride || YCLOUD_SENDER;
+  console.log(`[YCLOUD LIST] Enviando lista interactiva a ${to} desde ${sender}. Secciones: ${sections.length}, items: ${sections.reduce((a, s) => a + s.rows.length, 0)}`);
   const payload = {
     from: sender,
     to,
@@ -152,7 +166,12 @@ export async function sendWhatsAppList(to: string, body: string, buttonText: str
     headers: { 'Content-Type': 'application/json', 'X-API-Key': YCLOUD_API_KEY },
     body: JSON.stringify(payload),
   });
-  if (!res.ok) console.error('[YCLOUD SEND LIST ERROR]', await res.text());
+  const resText = await res.text();
+  if (!res.ok) {
+    console.error(`[YCLOUD LIST] ❌ Error ${res.status}:`, resText);
+  } else {
+    console.log(`[YCLOUD LIST] ✅ Lista enviada. Status: ${res.status}`);
+  }
 }
 
 export interface SendTemplateOptions {
@@ -262,5 +281,35 @@ export async function dispatchToHuman(data: DispatchData) {
     }
   } catch (err) {
     console.error('[YCLOUD NETWORK ERROR]', err);
+  }
+}
+
+// Enviar un archivo multimedia (imagen, documento) usando un media ID existente de YCloud
+export async function sendWhatsAppMediaId(to: string, mediaType: 'image' | 'document', mediaId: string, caption?: string, fromOverride?: string) {
+  if (!YCLOUD_API_KEY) return;
+  const sender = fromOverride || YCLOUD_SENDER;
+  
+  const payload: any = {
+    from: sender,
+    to,
+    type: mediaType
+  };
+  
+  payload[mediaType] = { id: mediaId };
+  if (caption && caption.trim().length > 0) {
+    payload[mediaType].caption = caption;
+  }
+
+  const res = await fetch('https://api.ycloud.com/v2/whatsapp/messages', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-API-Key': YCLOUD_API_KEY },
+    body: JSON.stringify(payload),
+  });
+  
+  if (!res.ok) {
+    const errText = await res.text();
+    console.error(`[YCLOUD SEND MEDIA ERROR] HTTP ${res.status} al enviar a ${to}:`, errText);
+  } else {
+    console.log(`[YCLOUD SEND MEDIA] ✅ Multimedia enviado a ${to} (ID: ${mediaId})`);
   }
 }

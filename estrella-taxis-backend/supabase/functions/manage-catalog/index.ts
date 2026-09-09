@@ -28,34 +28,33 @@ serve(async (req) => {
     // 1. Generar texto representativo para el embedding
     const textoRepresentativo = `${nombre}. Precio: ${precio || 'No especificado'}. Detalles: ${detalles?.descripcion || ''}`;
 
-    // 2. Llamar a text-embedding-004 (el modelo actual de Google Gemini para embeddings)
-    const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY');
-    if (!GEMINI_API_KEY) {
-      throw new Error('No GEMINI_API_KEY configured');
+    // 2. Llamar a text-embedding-3-small de OpenAI
+    const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
+    if (!OPENAI_API_KEY) {
+      throw new Error('No OPENAI_API_KEY configured');
     }
 
-    // DEBUG: Consultar la lista de modelos disponibles para ver cómo se llama realmente el de embeddings
-    const debugRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${GEMINI_API_KEY}`);
-    const debugData = await debugRes.json();
-    console.log("Modelos disponibles:", JSON.stringify(debugData.models.map((m: any) => m.name)));
-
-    const geminiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:embedContent?key=${GEMINI_API_KEY}`, {
+    const openaiRes = await fetch(`https://api.openai.com/v1/embeddings`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { 
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${OPENAI_API_KEY}`
+      },
       body: JSON.stringify({
-        model: "models/text-embedding-004",
-        content: { parts: [{ text: textoRepresentativo }] }
+        model: "text-embedding-3-small",
+        input: textoRepresentativo,
+        dimensions: 768
       })
     });
 
-    if (!geminiRes.ok) {
-      const err = await geminiRes.text();
-      console.error("Gemini Error:", err);
+    if (!openaiRes.ok) {
+      const err = await openaiRes.text();
+      console.error("OpenAI Error:", err);
       throw new Error("Failed to generate embedding: " + err);
     }
 
-    const geminiData = await geminiRes.json();
-    const embedding = geminiData.embedding.values;
+    const openaiData = await openaiRes.json();
+    const embedding = openaiData.data[0].embedding;
     console.log("Embedding generado con éxito, longitud:", embedding.length);
 
     // 3. Upsert en Supabase

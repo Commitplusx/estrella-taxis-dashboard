@@ -2,7 +2,7 @@ import { getTaxisPrompt } from '../taxis/prompt.ts';
 import { handleBookTaxi, handleCotizarViaje, handleCancelarViaje } from '../taxis/tools.ts';
 
 import { getRestaurantePrompt } from '../restaurante/prompt.ts';
-import { handleEnviarPedido, handleCotizarEnvio, handlePreguntarTipoEntrega, handleMostrarMenuLista } from '../restaurante/tools.ts';
+import { handleEnviarPedido, handleCotizarEnvio, handlePreguntarTipoEntrega, handleMostrarMenuLista, handleEnviarTicketFacturacion } from '../restaurante/tools.ts';
 
 import { getFarmaciaPrompt } from '../farmacia/prompt.ts';
 import { getGenericoPrompt } from '../otro/prompt.ts';
@@ -66,13 +66,16 @@ export async function routeToolCall(
     else if (executedTool === 'cotizar_envio') {
       finalResponse = await handleCotizarEnvio(supabase, toolData, empresa, ciudadTenant);
     }
+    else if (executedTool === 'enviar_ticket_facturacion') {
+      finalResponse = await handleEnviarTicketFacturacion(toolData, empresa, fromNumber, toNumber);
+    }
     
     // 3. Herramientas Genéricas / Core
     else if (executedTool === 'escalar_humano') {
       finalResponse = await handleEscalarHumano(supabase, toolData, empresa, fromNumber, toNumber);
     } 
     else if (executedTool === 'pedir_ubicacion') {
-      finalResponse = await handlePedirUbicacion(aiResponseText, fromNumber, empresa);
+      finalResponse = await handlePedirUbicacion(aiResponseText, fromNumber, empresa, toNumber);
     }
     else if (executedTool === 'consultar_catalogo') {
       finalResponse = await handleConsultarCatalogo(supabase, toolData, empresa);
