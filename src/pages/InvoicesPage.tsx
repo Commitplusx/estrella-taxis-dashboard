@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import {
   FileText, Phone, Clock, RefreshCw, CheckCircle2,
   XCircle, AlertCircle, MessageSquare, FileCheck, FileClock,
-  FileX, Search, ChevronDown, Receipt
+  FileX, Search, ChevronDown, Receipt, Filter, X
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -73,6 +73,7 @@ export default function InvoicesPage() {
   const [searchTel, setSearchTel] = useState('');
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const [previewFile, setPreviewFile] = useState<{ url: string, type: 'image' | 'pdf' } | null>(null);
 
   const fetchFacturas = async () => {
     if (!empresaId) return;
@@ -415,46 +416,42 @@ export default function InvoicesPage() {
                           </div>
                         </div>
 
-                        {/* Documentos */}
-                        {(factura.media_url || factura.pdf_url) && (
-                          <div className="w-full md:w-64 shrink-0">
-                            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
-                              Documentos
-                            </p>
-                            <div className="space-y-2">
-                              {factura.media_url && (
-                                <a
-                                  href={factura.media_url}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="flex items-center gap-3 p-3 bg-white border border-gray-200 rounded-md hover:border-blue-300 hover:bg-blue-50 transition-colors group"
-                                >
-                                  <div className="w-8 h-8 rounded bg-blue-100 text-blue-600 flex items-center justify-center shrink-0 group-hover:bg-blue-200">
-                                    <FileText size={16} />
-                                  </div>
-                                  <div className="min-w-0 flex-1">
-                                    <p className="text-sm font-medium text-gray-900 truncate">Ticket de Compra</p>
-                                    <p className="text-xs text-gray-500">Ver imagen original</p>
-                                  </div>
-                                </a>
-                              )}
-                              
-                              {factura.pdf_url && (
-                                <a
-                                  href={factura.pdf_url}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="flex items-center gap-3 p-3 bg-white border border-gray-200 rounded-md hover:border-red-300 hover:bg-red-50 transition-colors group"
-                                >
-                                  <div className="w-8 h-8 rounded bg-red-100 text-red-600 flex items-center justify-center shrink-0 group-hover:bg-red-200">
-                                    <FileText size={16} />
-                                  </div>
-                                  <div className="min-w-0 flex-1">
-                                    <p className="text-sm font-medium text-gray-900 truncate">Constancia Fiscal</p>
-                                    <p className="text-xs text-gray-500">Ver PDF adjunto</p>
-                                  </div>
-                                </a>
-                              )}
+                                {/* Documentos */}
+                                {(factura.media_url || factura.pdf_url) && (
+                                  <div className="w-full md:w-64 shrink-0">
+                                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
+                                      Documentos
+                                    </p>
+                                    <div className="space-y-2">
+                                      {factura.media_url && (
+                                        <button
+                                          onClick={() => setPreviewFile({ url: factura.media_url!, type: 'image' })}
+                                          className="w-full flex items-center gap-3 p-3 bg-white border border-gray-200 rounded-md hover:border-blue-300 hover:bg-blue-50 transition-colors group text-left"
+                                        >
+                                          <div className="w-8 h-8 rounded bg-blue-100 text-blue-600 flex items-center justify-center shrink-0 group-hover:bg-blue-200">
+                                            <FileText size={16} />
+                                          </div>
+                                          <div className="min-w-0 flex-1">
+                                            <p className="text-sm font-medium text-gray-900 truncate">Ticket de Compra</p>
+                                            <p className="text-xs text-gray-500">Ver imagen original</p>
+                                          </div>
+                                        </button>
+                                      )}
+                                      
+                                      {factura.pdf_url && (
+                                        <button
+                                          onClick={() => setPreviewFile({ url: factura.pdf_url!, type: 'pdf' })}
+                                          className="w-full flex items-center gap-3 p-3 bg-white border border-gray-200 rounded-md hover:border-red-300 hover:bg-red-50 transition-colors group text-left"
+                                        >
+                                          <div className="w-8 h-8 rounded bg-red-100 text-red-600 flex items-center justify-center shrink-0 group-hover:bg-red-200">
+                                            <FileText size={16} />
+                                          </div>
+                                          <div className="min-w-0 flex-1">
+                                            <p className="text-sm font-medium text-gray-900 truncate">Constancia Fiscal</p>
+                                            <p className="text-xs text-gray-500">Ver PDF adjunto</p>
+                                          </div>
+                                        </button>
+                                      )}
                             </div>
                           </div>
                         )}
@@ -471,6 +468,43 @@ export default function InvoicesPage() {
           </div>
         )}
       </div>
+
+      {/* Modal Visor de Archivos */}
+      {previewFile && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/90 backdrop-blur-sm">
+          <div className="relative w-full max-w-5xl h-[85vh] bg-white rounded-lg shadow-2xl overflow-hidden flex flex-col">
+            {/* Header del Modal */}
+            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 bg-gray-50">
+              <h3 className="font-semibold text-gray-800">
+                {previewFile.type === 'image' ? 'Vista previa del Ticket' : 'Vista previa de Constancia'}
+              </h3>
+              <button
+                onClick={() => setPreviewFile(null)}
+                className="p-1.5 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            
+            {/* Contenido del Modal */}
+            <div className="flex-1 overflow-auto bg-gray-100 flex items-center justify-center p-4">
+              {previewFile.type === 'image' ? (
+                <img 
+                  src={previewFile.url} 
+                  alt="Vista previa" 
+                  className="max-w-full max-h-full object-contain shadow-sm bg-white"
+                />
+              ) : (
+                <iframe 
+                  src={previewFile.url} 
+                  className="w-full h-full bg-white shadow-sm"
+                  title="Visor PDF"
+                />
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
