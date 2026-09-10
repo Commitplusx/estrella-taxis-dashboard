@@ -1,17 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { Outlet, useLocation, NavLink, useNavigate } from 'react-router-dom';
-import { Menu, Map as MapIcon, BarChart3, Car, Settings, Bell, UtensilsCrossed, ShoppingBag, LayoutDashboard, Bot, ClipboardList } from 'lucide-react';
+import { Menu, Map as MapIcon, BarChart3, Car, Settings, Bell, BellOff, UtensilsCrossed, ShoppingBag, LayoutDashboard, Bot, ClipboardList } from 'lucide-react';
 import Sidebar from './Sidebar';
 import MapPage from '../pages/MapPage';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
 import { playNewOrderSound } from '../lib/soundNotification';
+import { usePushNotifications } from '../hooks/usePushNotifications';
 import toast from 'react-hot-toast';
 
 export default function Layout() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { userRole, empresaData, empresaId } = useAuth();
+  const { userRole, empresaData, empresaId, user } = useAuth();
   const isSuperadmin = userRole === 'superadmin';
   const tipoNegocio = empresaData?.tipo_negocio || (isSuperadmin ? 'taxi' : 'otro');
   const isTaxi = isSuperadmin || tipoNegocio === 'taxi';
@@ -19,6 +20,13 @@ export default function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [bottomNavHidden, setBottomNavHidden] = useState(false);
   const [mounted, setMounted] = useState(false);
+
+  // Push notifications: se registra el SW y gestiona suscripciones
+  const { isPushEnabled, isPushSupported, enablePush, disablePush } =
+    usePushNotifications(
+      empresaData?.id ?? null,
+      user?.id ?? null
+    );
 
   // Escucha global de nuevos pedidos en tiempo real para hacer sonar el timbre de comanda
   useEffect(() => {
@@ -35,13 +43,13 @@ export default function Layout() {
           filter: `tenant_id=eq.${empresaId}`
         },
         (payload) => {
-          const nuevoPedido = payload.new as any;
+          const nuevoPedido = payload.new as { cliente_nombre?: string; direccion_entrega?: string; detalle_pedido?: string };
           console.log('[SOUND ALERT] Nuevo pedido recibido:', nuevoPedido);
 
-          // 1. Tocar el timbre sonoro de campana de restaurante
+          // 1. Timbre sonoro
           playNewOrderSound();
 
-          // 2. Notificación flotante interactiva
+          // 2. Notificación flotante interactiva (browser abierto)
           const cliente = nuevoPedido.cliente_nombre || 'Cliente';
           const direccion = nuevoPedido.direccion_entrega || '';
           const esRecoger = direccion.toLowerCase().includes('recoger');
@@ -67,6 +75,15 @@ export default function Layout() {
                     <p className="mt-0.5 text-xs text-gray-600 line-clamp-2">
                       📋 {nuevoPedido.detalle_pedido}
                     </p>
+                    {/* Si el usuario aún no activó push, invitarlo */}
+                    {isPushSupported && !isPushEnabled && Notification.permission !== 'denied' && (
+                      <button
+                        onClick={() => enablePush()}
+                        className="mt-2 text-[10px] font-semibold text-amber-700 underline underline-offset-2 hover:text-amber-900"
+                      >
+                        🔔 Activar notificaciones para cuando el browser esté cerrado
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
@@ -306,6 +323,26 @@ export default function Layout() {
               <div className="relative shrink-0 flex items-center justify-center w-[60px] h-[60px]">
                 <Bell size={26} />
                 <div id="global-bell-badge" className="hidden absolute top-3 right-3 w-3 h-3 bg-red-500 rounded-full border-2 border-white animate-pulse"></div>
+              </div>
+            </button>
+          )}
+
+          {/* Botón Push Notifications (visible en mobile, solo negocios) */}
+          {!isTaxi && isPushSupported && (
+            <button
+              title={isPushEnabled ? 'Desactivar notificaciones push' : 'Activar notificaciones push'}
+              onClick={() => isPushEnabled ? disablePush() : enablePush()}
+              className={`pointer-events-auto rounded-full flex items-center justify-center transition-all duration-500 ease-[cubic-bezier(0.34,1.3,0.64,1)] shrink-0 shadow-[0_12px_40px_rgba(0,0,0,0.12)] border ${
+                isPushEnabled
+                  ? 'w-[60px] h-[60px] bg-amber-500 border-amber-400 text-white'
+                  : 'w-[60px] h-[60px] bg-white border-gray-100 text-gray-500'
+              }`}
+            >
+              <div className="relative flex items-center justify-center w-[60px] h-[60px]">
+                {isPushEnabled ? <Bell size={24} /> : <BellOff size={24} />}
+                {isPushEnabled && (
+                  <span className="absolute top-3 right-3 w-2.5 h-2.5 bg-green-400 rounded-full border-2 border-white animate-pulse" />
+                )}
               </div>
             </button>
           )}

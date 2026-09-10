@@ -101,11 +101,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .catch(() => { setUser(null); setUserRole(null); setEmpresaId(null); setEmpresaData(null); setPaqueteActual(null); })
         .finally(() => setLoading(false));
     } else {
-      // Flujo normal: verificar sesión existente
+      // Flujo normal web: verificar sesión existente mediante cookie
       api.getSession()
-        .then(async (u) => { setUser(u); await loadRole(u); })
-        .catch(() => { setUser(null); setUserRole(null); setEmpresaId(null); setEmpresaData(null); setPaqueteActual(null); })
-        .finally(() => setLoading(false));
+        .then(async (u) => { setUser(u); await loadRole(u); setLoading(false); })
+        .catch(async () => {
+          // Si falló la sesión normal, intentar auto-login con token de localStorage
+          const savedToken = localStorage.getItem('traccar_token');
+          if (savedToken) {
+            try {
+              const u = await api.loginWithToken(savedToken);
+              setUser(u);
+              await loadRole(u);
+              setLoading(false);
+              return;
+            } catch (e) {
+              console.warn('Token persistente inválido, limpiando...', e);
+              localStorage.removeItem('traccar_token');
+            }
+          }
+          // Si no hay token o falló, resetear el estado
+          setUser(null); setUserRole(null); setEmpresaId(null); setEmpresaData(null); setPaqueteActual(null);
+          setLoading(false);
+        });
     }
   }, []);
 
@@ -114,24 +131,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(loggedUser);
     await loadRole(loggedUser);
     
-    // Si estamos dentro de la app Android, generar un token para que se guarde localmente (Auto-login)
-    // @ts-ignore
-    if (window.appInterface) {
-      try {
-        const expiration = new Date();
-        expiration.setMonth(expiration.getMonth() + 6); // 6 meses
-        const res = await fetch(`${BASE_URL}/session/token`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: new URLSearchParams({ expiration: expiration.toISOString() }),
-        });
-        if (res.ok) {
-          const appToken = await res.text();
+    // Generar un token persistente para recordar la sesión por 6 meses
+    try {
+      const expiration = new Date();
+      expiration.setMonth(expiration.getMonth() + 6); // 6 meses
+      const res = await fetch(`${BASE_URL}/session/token`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ expiration: expiration.toISOString() }),
+      });
+      if (res.ok) {
+        const appToken = await res.text();
+        // Guardar para la web
+        localStorage.setItem('traccar_token', appToken);
+        
+        // Si estamos en Android, enviarlo al WebView
+        // @ts-ignore
+        if (window.appInterface) {
           postMessage(`login|${appToken}`);
         }
-      } catch (e) {
-        console.error('Failed to register token in Android App', e);
       }
+    } catch (e) {
+      console.error('Failed to register token for persistent session', e);
     }
   };
 
@@ -142,6 +164,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch (e) {
       console.error('Error during logout:', e);
     } finally {
+      localStorage.removeItem('traccar_token');
       setUser(null);
       setUserRole(null);
       setEmpresaId(null);

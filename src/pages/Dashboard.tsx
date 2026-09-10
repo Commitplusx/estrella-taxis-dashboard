@@ -247,11 +247,11 @@ function BusinessDashboardView({ user, empresaData }: { user: any; empresaData: 
           filter: `tenant_id=eq.${empresaData.id}`
         },
         (payload) => {
-          const updated = payload.new as any;
-          setRecentOrders(prev => prev.map(o => o.id === updated.id ? updated : o));
-          if (updated.estado === 'entregado' || updated.estado === 'cancelado') {
-            setPendingOrdersCount(prev => Math.max(0, prev - 1));
+          const updated = payload.new as Record<string, unknown>;
+          if (updated.estado === 'completado' || updated.estado === 'cancelado') {
+            setPendingOrdersCount((prev) => Math.max(0, prev - 1));
           }
+          setRecentOrders(prev => prev.map(o => o.id === updated.id ? updated : o));
         }
       )
       .subscribe();

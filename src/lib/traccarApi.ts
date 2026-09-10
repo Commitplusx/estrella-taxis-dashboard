@@ -45,6 +45,17 @@ export const api = {
       return res.json();
     }),
 
+  loginWithToken: (token: string) =>
+    fetch(`${BASE_URL}/session`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ token }),
+    }).then(res => {
+      if (!res.ok) throw new Error('Token inválido o expirado');
+      return res.json();
+    }),
+
   getSession: () => request<TraccarUser>('/session'),
 
   logout: async () => {
