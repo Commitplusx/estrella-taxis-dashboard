@@ -293,7 +293,7 @@ export default function InvoicesPage() {
   
                       {/* ID + teléfono */}
                       <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
                         <span className="text-xs font-mono font-bold text-gray-900 bg-gray-100 px-2 py-0.5 rounded">
                           #{factura.id.slice(0, 6).toUpperCase()}
                         </span>
@@ -305,7 +305,7 @@ export default function InvoicesPage() {
                           {factura.media_type === 'document' ? '📄 PDF' : '🖼️ Imagen'}
                         </span>
                       </div>
-                      <div className="flex items-center gap-3 mt-1">
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1">
                         <span className="text-sm font-medium text-gray-900 font-mono">
                           {factura.cliente_tel}
                         </span>
@@ -318,7 +318,7 @@ export default function InvoicesPage() {
                     </div>
 
                     {/* Acciones rápidas */}
-                    <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto w-full sm:w-auto justify-end border-t sm:border-0 pt-3 sm:pt-0 mt-2 sm:mt-0 border-gray-100">
+                    <div className="flex flex-wrap items-center gap-2 shrink-0 self-end sm:self-auto w-full sm:w-auto justify-end border-t sm:border-0 pt-3 sm:pt-0 mt-2 sm:mt-0 border-gray-100">
                       {cleanTel && (
                         <a
                           href={`https://wa.me/${cleanTel}`}
