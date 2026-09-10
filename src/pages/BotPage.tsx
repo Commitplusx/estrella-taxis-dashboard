@@ -156,12 +156,20 @@ export default function BotPage() {
 
     if (editing) {
       const { error } = await supabase.from('empresas').update(payload).eq('id', editing.id);
-      if (error) { toast.error('Error al actualizar.'); }
-      else { toast.success('Empresa actualizada ✅'); }
+      if (error) {
+        toast.error('Error al actualizar: ' + error.message);
+        setSaving(false);
+        return; // No cerrar el form si falló
+      }
+      toast.success('Empresa actualizada ✅');
     } else {
       const { error } = await supabase.from('empresas').insert(payload);
-      if (error) { toast.error('Error al crear. ¿El teléfono ya existe?'); }
-      else { toast.success('Empresa creada 🎉'); }
+      if (error) {
+        toast.error('Error al crear. ¿El teléfono ya existe? ' + error.message);
+        setSaving(false);
+        return; // No cerrar el form si falló
+      }
+      toast.success('Empresa creada 🎉');
     }
 
     setSaving(false);
@@ -177,8 +185,14 @@ export default function BotPage() {
   };
 
   const toggleActivo = async (e: Empresa) => {
-    await supabase.from('empresas').update({ activo: !e.activo }).eq('id', e.id);
-    fetchEmpresas();
+    // Optimistic update: voltear el interruptor inmediatamente
+    setEmpresas(prev => prev.map(emp => emp.id === e.id ? { ...emp, activo: !emp.activo } : emp));
+    const { error } = await supabase.from('empresas').update({ activo: !e.activo }).eq('id', e.id);
+    if (error) {
+      // Revertir si falló
+      setEmpresas(prev => prev.map(emp => emp.id === e.id ? { ...emp, activo: e.activo } : emp));
+      toast.error('Error al cambiar el estado.');
+    }
   };
 
   return (

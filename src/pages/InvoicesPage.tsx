@@ -485,8 +485,14 @@ export default function InvoicesPage() {
 
       {/* Modal Visor de Archivos */}
       {previewFile && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/90 backdrop-blur-sm">
-          <div className="relative w-full max-w-5xl h-[85vh] bg-white rounded-lg shadow-2xl overflow-hidden flex flex-col">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/90 backdrop-blur-sm"
+          onClick={() => setPreviewFile(null)}
+        >
+          <div
+            className="relative w-full max-w-5xl h-[85vh] bg-white rounded-lg shadow-2xl overflow-hidden flex flex-col"
+            onClick={e => e.stopPropagation()}
+          >
             {/* Header del Modal */}
             <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 bg-gray-50">
               <h3 className="font-semibold text-gray-800">

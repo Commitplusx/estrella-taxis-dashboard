@@ -230,8 +230,12 @@ function BusinessDashboardView({ user, empresaData }: { user: any; empresaData: 
         },
         (payload) => {
           const nuevoPedido = payload.new as any;
-          setRecentOrders(prev => [nuevoPedido, ...prev].slice(0, 10));
-          setPendingOrdersCount(prev => prev + 1);
+          setRecentOrders(prev => {
+            // Deduplicar igual que OrdersPage e InvoicesPage
+            if (prev.some(o => o.id === nuevoPedido.id)) return prev;
+            setPendingOrdersCount(c => c + 1);
+            return [nuevoPedido, ...prev].slice(0, 10);
+          });
         }
       )
       .on(

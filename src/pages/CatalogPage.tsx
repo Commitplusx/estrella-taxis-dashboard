@@ -23,7 +23,9 @@ export default function CatalogPage() {
 
   const isRestaurante = empresaData?.tipo_negocio === 'restaurante';
   const defaultCategory = isRestaurante ? 'Platillo' : 'Producto';
-  const categorias_catalogo = empresaData?.categorias_catalogo || [];
+  // Estado local de categorías para evitar mutar el objeto del contexto directamente
+  const [localCategorias, setLocalCategorias] = useState<string[]>(empresaData?.categorias_catalogo || []);
+  const categorias_catalogo = localCategorias;
 
   // Modal State
   const [showModal, setShowModal] = useState(false);
@@ -181,7 +183,9 @@ export default function CatalogPage() {
       const newArr = [...categorias_catalogo, catName];
       const { error } = await supabase.from('empresas').update({ categorias_catalogo: newArr }).eq('id', empresaId);
       if (error) throw error;
-      if (empresaData) empresaData.categorias_catalogo = newArr;
+      // Actualizar estado local en vez de mutar el objeto del contexto
+      setLocalCategorias(newArr);
+      if (empresaData) empresaData.categorias_catalogo = newArr; // sync secundario para otros consumidores
       setNewCategoryName('');
       toast.success('Categoría agregada');
     } catch (e: any) {
@@ -198,9 +202,9 @@ export default function CatalogPage() {
       const newArr = categorias_catalogo.filter(c => c !== catName);
       const { error } = await supabase.from('empresas').update({ categorias_catalogo: newArr }).eq('id', empresaId);
       if (error) throw error;
-      if (empresaData) empresaData.categorias_catalogo = newArr;
-      // También podríamos actualizar todos los catalogos que tuvieran esta categoría para que no queden huérfanos, 
-      // pero por ahora solo borramos de la lista permitida.
+      // Actualizar estado local en vez de mutar el objeto del contexto
+      setLocalCategorias(newArr);
+      if (empresaData) empresaData.categorias_catalogo = newArr; // sync secundario
       toast.success('Categoría eliminada');
     } catch (e: any) {
       toast.error(e.message);
