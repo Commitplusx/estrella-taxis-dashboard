@@ -108,9 +108,9 @@ export default function InvoicesPage() {
   };
 
   useEffect(() => {
-    fetchFacturas();
-
     if (!empresaId) return;
+
+    fetchFacturas();
 
     const channel = supabase
       .channel(`facturas-${empresaId}`)
@@ -121,12 +121,16 @@ export default function InvoicesPage() {
           console.log('[REALTIME PING] Evento recibido en facturas:', payload);
           if (payload.eventType === 'INSERT') {
             setFacturas(prev => {
-              // Evitar duplicar si por alguna razón la BD lo manda doble o ya lo cargó el fetch inicial
               if (prev.some(f => f.id === payload.new.id)) return prev;
               return [payload.new as Factura, ...prev];
             });
+            // Limpiar expandedId si estaba expandida una factura que ya no existe
+            // (no aplica en INSERT pero sí mantenemos consistencia)
           } else if (payload.eventType === 'UPDATE') {
             setFacturas(prev => prev.map(f => f.id === payload.new.id ? (payload.new as Factura) : f));
+          } else if (payload.eventType === 'DELETE') {
+            setFacturas(prev => prev.filter(f => f.id !== payload.old.id));
+            setExpandedId(prev => prev === payload.old.id ? null : prev);
           }
         }
       )

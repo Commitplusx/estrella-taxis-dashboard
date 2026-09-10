@@ -88,7 +88,11 @@ export default function OrdersPage() {
         },
         (payload) => {
           if (payload.eventType === 'INSERT') {
-            setPedidos(prev => [payload.new as Pedido, ...prev]);
+            setPedidos(prev => {
+              // Deduplicar: si el fetch inicial y el evento llegan juntos, evitar tarjeta doble
+              if (prev.some(p => p.id === payload.new.id)) return prev;
+              return [payload.new as Pedido, ...prev];
+            });
           } else if (payload.eventType === 'UPDATE') {
             setPedidos(prev => prev.map(p => p.id === payload.new.id ? (payload.new as Pedido) : p));
           } else if (payload.eventType === 'DELETE') {
