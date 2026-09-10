@@ -183,12 +183,12 @@ export default function OrdersPage() {
         </div>
 
         {/* Acciones */}
-        <div className="mt-auto pt-4 border-t border-gray-100 flex justify-between items-center">
-          <span className="text-sm font-semibold text-gray-900">
+        <div className="mt-auto pt-4 border-t border-gray-100 flex flex-wrap justify-between items-center gap-y-3 gap-x-2">
+          <span className="text-sm font-semibold text-gray-900 shrink-0">
             {pedido.costo_envio != null ? `$${pedido.costo_envio}` : 'Por cobrar'}
           </span>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             {pedido.estado === 'pendiente' && (
               <button onClick={() => updateEstado(pedido.id, 'preparando')} className="px-3 py-1.5 bg-black hover:bg-gray-800 text-white rounded-md text-xs font-semibold transition-colors flex items-center gap-1.5 shadow-sm">
                 <ChefHat size={14} /> Preparar

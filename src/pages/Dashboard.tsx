@@ -373,46 +373,58 @@ function BusinessDashboardView({ user, empresaData }: { user: any; empresaData: 
           </div>
           
           <div className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
-            <table className="w-full text-left border-collapse">
-              <thead>
+            <table className="w-full text-left border-collapse block sm:table">
+              <thead className="hidden sm:table-header-group">
                 <tr className="bg-gray-50 border-b border-gray-200 text-xs font-medium text-gray-500 uppercase tracking-wider">
                   <th className="px-5 py-3">Cliente</th>
-                  <th className="px-5 py-3 hidden sm:table-cell">Detalle</th>
+                  <th className="px-5 py-3">Detalle</th>
                   <th className="px-5 py-3">Estado</th>
                   <th className="px-5 py-3 text-right">Tiempo</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-200">
+              <tbody className="divide-y divide-gray-200 block sm:table-row-group">
                 {loading ? (
-                  <tr>
-                    <td colSpan={4} className="px-5 py-8 text-center text-sm text-gray-500">Cargando datos...</td>
+                  <tr className="block sm:table-row">
+                    <td colSpan={4} className="px-5 py-8 text-center text-sm text-gray-500 block sm:table-cell">Cargando datos...</td>
                   </tr>
                 ) : recentOrders.length === 0 ? (
-                  <tr>
-                    <td colSpan={4} className="px-5 py-8 text-center text-sm text-gray-500">No hay pedidos activos.</td>
+                  <tr className="block sm:table-row">
+                    <td colSpan={4} className="px-5 py-8 text-center text-sm text-gray-500 block sm:table-cell">No hay pedidos activos.</td>
                   </tr>
                 ) : (
                   recentOrders.map(pedido => (
-                    <tr key={pedido.id} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-5 py-3">
-                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold tracking-wide bg-blue-50 text-blue-700 border border-blue-200 uppercase">
-                          {pedido.cliente_nombre || 'Desconocido'}
-                        </span>
+                    <tr key={pedido.id} className="hover:bg-gray-50 transition-colors block sm:table-row p-4 sm:p-0">
+                      <td className="px-0 sm:px-5 py-2 sm:py-3 block sm:table-cell">
+                        <div className="flex items-center justify-between sm:block">
+                          <span className="text-xs font-semibold text-gray-500 sm:hidden uppercase">Cliente: </span>
+                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold tracking-wide bg-blue-50 text-blue-700 border border-blue-200 uppercase">
+                            {pedido.cliente_nombre || 'Desconocido'}
+                          </span>
+                        </div>
                       </td>
-                      <td className="px-5 py-3 text-sm text-gray-500 truncate max-w-[200px] hidden sm:table-cell">
-                        {pedido.detalle_pedido}
+                      <td className="px-0 sm:px-5 py-2 sm:py-3 text-sm text-gray-500 truncate sm:max-w-[200px] block sm:table-cell">
+                        <div className="flex flex-col sm:block">
+                          <span className="text-xs font-semibold text-gray-500 sm:hidden uppercase mb-1">Detalle: </span>
+                          <span className="whitespace-normal sm:whitespace-nowrap">{pedido.detalle_pedido}</span>
+                        </div>
                       </td>
-                      <td className="px-5 py-3">
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-bold tracking-wide border uppercase ${
-                          pedido.estado === 'pendiente' ? 'bg-red-50 text-red-700 border-red-200' :
-                          pedido.estado === 'preparando' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
-                          'bg-emerald-50 text-emerald-700 border-emerald-200'
-                        }`}>
-                          {pedido.estado.replace('_', ' ')}
-                        </span>
+                      <td className="px-0 sm:px-5 py-2 sm:py-3 block sm:table-cell">
+                        <div className="flex items-center justify-between sm:block">
+                          <span className="text-xs font-semibold text-gray-500 sm:hidden uppercase">Estado: </span>
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-bold tracking-wide border uppercase ${
+                            pedido.estado === 'pendiente' ? 'bg-red-50 text-red-700 border-red-200' :
+                            pedido.estado === 'preparando' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                            'bg-emerald-50 text-emerald-700 border-emerald-200'
+                          }`}>
+                            {pedido.estado.replace('_', ' ')}
+                          </span>
+                        </div>
                       </td>
-                      <td className="px-5 py-3 text-sm text-gray-500 text-right font-mono">
-                        {formatRelativeTime(pedido.created_at)}
+                      <td className="px-0 sm:px-5 py-2 sm:py-3 text-sm text-gray-500 sm:text-right font-mono block sm:table-cell border-t sm:border-0 mt-2 sm:mt-0 pt-2 sm:pt-3">
+                        <div className="flex items-center justify-between sm:block">
+                          <span className="text-xs font-semibold text-gray-500 sm:hidden uppercase">Tiempo: </span>
+                          <span>{formatRelativeTime(pedido.created_at)}</span>
+                        </div>
                       </td>
                     </tr>
                   ))

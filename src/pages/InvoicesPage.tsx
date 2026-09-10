@@ -178,74 +178,83 @@ export default function InvoicesPage() {
   return (
     <div className="h-full flex flex-col overflow-hidden bg-white p-6 md:p-8 font-sans max-w-[1400px] mx-auto w-full">
 
-      {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-gray-200 pb-5 shrink-0">
-        <div>
-          <div className="flex items-center gap-3 mb-1">
-            <h1 className="text-2xl font-semibold text-gray-900 tracking-tight">Solicitudes de Facturación</h1>
-            {counts.pendiente > 0 && (
-              <span className="px-2 py-0.5 bg-amber-500 text-white text-[11px] font-bold uppercase tracking-wider rounded">
-                {counts.pendiente} pendientes
+      {/* Wrapper animado para Header y Tabs (se oculta en móviles al expandir factura) */}
+      <div 
+        className={`transition-all duration-300 ease-in-out overflow-hidden shrink-0 flex flex-col ${
+          expandedId 
+            ? 'max-h-0 opacity-0 md:max-h-[500px] md:opacity-100' 
+            : 'max-h-[500px] opacity-100'
+        }`}
+      >
+        {/* Header */}
+        <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-gray-200 pb-5">
+          <div>
+            <div className="flex items-center gap-3 mb-1">
+              <h1 className="text-2xl font-semibold text-gray-900 tracking-tight">Solicitudes de Facturación</h1>
+              {counts.pendiente > 0 && (
+                <span className="px-2 py-0.5 bg-amber-500 text-white text-[11px] font-bold uppercase tracking-wider rounded">
+                  {counts.pendiente} pendientes
+                </span>
+              )}
+            </div>
+            <p className="text-sm text-gray-500">
+              Historial de tickets enviados por clientes vía WhatsApp &bull;{' '}
+              <strong className="font-medium text-gray-900">{empresaData?.nombre_empresa}</strong>
+            </p>
+          </div>
+
+          <div className="flex items-center gap-3">
+            {/* Buscador por teléfono */}
+            <div className="relative">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Buscar por teléfono..."
+                value={searchTel}
+                onChange={e => setSearchTel(e.target.value)}
+                className="pl-8 pr-3 py-1.5 text-sm border border-gray-200 rounded-md bg-white focus:outline-none focus:ring-1 focus:ring-gray-400 w-48"
+              />
+            </div>
+            <button
+              onClick={fetchFacturas}
+              className="flex items-center justify-center gap-2 px-4 py-1.5 bg-white hover:bg-gray-50 text-gray-700 border border-gray-300 rounded-md text-sm font-medium transition-colors shadow-sm h-9"
+            >
+              <RefreshCw size={14} className={loading ? 'animate-spin text-gray-400' : 'text-gray-500'} />
+              Actualizar
+            </button>
+          </div>
+        </div>
+
+        {/* Alerta tabla faltante */}
+        {tableMissing && (
+          <div className="mt-6 bg-red-50 border border-red-200 text-red-800 p-4 rounded-lg text-sm font-medium flex items-center gap-3 shrink-0">
+            <AlertCircle size={18} className="shrink-0" />
+            La tabla <code className="font-mono bg-red-100 px-1 rounded">facturas</code> no existe aún en la base de datos.
+            Aplica la migración <code className="font-mono bg-red-100 px-1 rounded">20260909180000_create_facturas_table.sql</code> en Supabase.
+          </div>
+        )}
+
+        {/* Tabs de estado */}
+        <div className="flex gap-2 overflow-x-auto py-5 hide-scrollbar border-b border-gray-100">
+          {tabs.map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setFiltroEstado(tab.id)}
+              className={`px-4 py-2 rounded-md text-sm font-medium whitespace-nowrap transition-colors flex items-center gap-2 border ${
+                filtroEstado === tab.id
+                  ? 'bg-gray-900 border-gray-900 text-white'
+                  : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50 hover:border-gray-300'
+              }`}
+            >
+              {tab.label}
+              <span className={`px-2 py-0.5 rounded text-xs font-mono ${
+                filtroEstado === tab.id ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-500'
+              }`}>
+                {counts[tab.id]}
               </span>
-            )}
-          </div>
-          <p className="text-sm text-gray-500">
-            Historial de tickets enviados por clientes vía WhatsApp &bull;{' '}
-            <strong className="font-medium text-gray-900">{empresaData?.nombre_empresa}</strong>
-          </p>
+            </button>
+          ))}
         </div>
-
-        <div className="flex items-center gap-3">
-          {/* Buscador por teléfono */}
-          <div className="relative">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Buscar por teléfono..."
-              value={searchTel}
-              onChange={e => setSearchTel(e.target.value)}
-              className="pl-8 pr-3 py-1.5 text-sm border border-gray-200 rounded-md bg-white focus:outline-none focus:ring-1 focus:ring-gray-400 w-48"
-            />
-          </div>
-          <button
-            onClick={fetchFacturas}
-            className="flex items-center justify-center gap-2 px-4 py-1.5 bg-white hover:bg-gray-50 text-gray-700 border border-gray-300 rounded-md text-sm font-medium transition-colors shadow-sm h-9"
-          >
-            <RefreshCw size={14} className={loading ? 'animate-spin text-gray-400' : 'text-gray-500'} />
-            Actualizar
-          </button>
-        </div>
-      </div>
-
-      {/* Alerta tabla faltante */}
-      {tableMissing && (
-        <div className="mt-6 bg-red-50 border border-red-200 text-red-800 p-4 rounded-lg text-sm font-medium flex items-center gap-3 shrink-0">
-          <AlertCircle size={18} className="shrink-0" />
-          La tabla <code className="font-mono bg-red-100 px-1 rounded">facturas</code> no existe aún en la base de datos.
-          Aplica la migración <code className="font-mono bg-red-100 px-1 rounded">20260909180000_create_facturas_table.sql</code> en Supabase.
-        </div>
-      )}
-
-      {/* Tabs de estado */}
-      <div className="flex gap-2 overflow-x-auto py-5 hide-scrollbar shrink-0 border-b border-gray-100">
-        {tabs.map(tab => (
-          <button
-            key={tab.id}
-            onClick={() => setFiltroEstado(tab.id)}
-            className={`px-4 py-2 rounded-md text-sm font-medium whitespace-nowrap transition-colors flex items-center gap-2 border ${
-              filtroEstado === tab.id
-                ? 'bg-gray-900 border-gray-900 text-white'
-                : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50 hover:border-gray-300'
-            }`}
-          >
-            {tab.label}
-            <span className={`px-2 py-0.5 rounded text-xs font-mono ${
-              filtroEstado === tab.id ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-500'
-            }`}>
-              {counts[tab.id]}
-            </span>
-          </button>
-        ))}
       </div>
 
       {/* Contenido */}
@@ -374,8 +383,9 @@ export default function InvoicesPage() {
                       {/* Toggle datos fiscales */}
                       <button
                         onClick={() => setExpandedId(isExpanded ? null : factura.id)}
-                        className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-md transition-colors"
+                        className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-md transition-colors focus:outline-none focus:ring-0"
                         title="Ver datos fiscales"
+                        style={{ WebkitTapHighlightColor: 'transparent' }}
                       >
                         <ChevronDown
                           size={16}
