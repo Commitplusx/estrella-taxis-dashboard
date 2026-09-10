@@ -7,6 +7,7 @@ export interface EmpresaConfig {
   ciudad?: string;
   prompt_personalizado?: string;
   dispatcher_phone?: string;
+  contador_phone?: string;
   waba_number?: string;
   tipo_negocio?: string;
   categorias_catalogo?: string[];

@@ -119,13 +119,18 @@ export const RESTAURANT_TOOLS: Array<Record<string, unknown>> = [
     type: "function",
     function: {
       name: "enviar_ticket_facturacion",
-      description: "Ejecuta esta herramienta SOLO cuando el cliente solicite una factura y envíe un ticket de consumo válido. Esta herramienta redirige el ticket al contador. Si el ticket no es válido o falta información, pide al usuario lo que necesites antes de usar esta herramienta.",
+      description: "Ejecuta esta herramienta cuando el cliente solicite una factura y se cuente con: (1) el ID del ticket/documento de consumo válido, Y (2) los datos fiscales completos (RFC, Razón Social, Código Postal, Régimen Fiscal y Uso de CFDI). Los datos fiscales pueden venir de dos fuentes: extraídos automáticamente de un PDF que el cliente envió (Constancia del SAT), o escritos directamente por el cliente en el chat. NUNCA uses datos fiscales inventados o de ejemplo.",
       parameters: {
         type: "object",
         properties: {
-          media_id: { type: "string", description: "El ID_IMAGEN que recibiste en el contexto del mensaje." }
+          media_id: { type: "string", description: "El ID_IMAGEN estrictamente de la FOTO DEL TICKET DE COMPRA. NUNCA uses aquí el ID del PDF de la Constancia de Situación Fiscal. El contador necesita ver la foto del ticket, no el PDF." },
+          media_url: { type: "string", description: "La URL pública de la foto del ticket (provista en el mensaje del sistema)." },
+          media_type: { type: "string", description: "El TIPO_MEDIA que recibiste en el contexto del mensaje (ej. 'image' o 'document')." },
+          datos_fiscales: { type: "string", description: "ESTRICTAMENTE OBLIGATORIO: Devuelve los datos fiscales (RFC, Nombre, CP, Régimen, Uso CFDI) separados por SALTO DE LÍNEA (\\n). Ejemplo exacto:\nRFC: Valor\nRazón Social: Valor\nCódigo Postal: Valor" },
+          pdf_media_id: { type: "string", description: "OPCIONAL. Si el cliente envió su Constancia de Situación Fiscal en PDF, pon aquí el ID_DOCUMENTO_FISCAL (ID_IMAGEN) de ese PDF para adjuntarlo al contador." },
+          pdf_url: { type: "string", description: "OPCIONAL. La URL pública del PDF (provista en el mensaje del sistema si envió constancia)." }
         },
-        required: ["media_id"]
+        required: ["media_id", "media_url", "media_type", "datos_fiscales"]
       }
     }
   }

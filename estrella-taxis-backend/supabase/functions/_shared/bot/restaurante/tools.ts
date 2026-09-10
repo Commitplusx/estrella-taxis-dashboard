@@ -210,29 +210,66 @@ export async function handleEnviarTicketFacturacion(
   toolData: ToolData,
   empresa: EmpresaConfig,
   fromNumber: string,
-  toNumber: string
+  toNumber: string,
+  supabase: SupabaseAppClient
 ): Promise<string> {
   const mediaId = (toolData.media_id as string) || '';
+  const mediaType = (toolData.media_type as 'image' | 'document') || 'image';
+  const datosFiscales = (toolData.datos_fiscales as string) || 'No especificados';
+  const pdfMediaId = (toolData.pdf_media_id as string) || null;
+
   if (!mediaId) {
-    return 'Lo siento, no pude procesar la imagen del ticket. ¿Podrías volver a enviarla por favor?';
+    return 'Lo siento, no pude procesar el archivo del ticket. ¿Podrías volver a enviarlo por favor?';
   }
 
-  const contadorPhone = (empresa as any).contador_phone || empresa.dispatcher_phone;
+  const contadorPhone = empresa.contador_phone || empresa.dispatcher_phone;
   if (!contadorPhone) {
     return 'Actualmente no tenemos un contador configurado en el sistema para procesar tu factura. Por favor, comunícate con un agente.';
   }
 
-  const caption = `🚨 *Nueva Solicitud de Facturación*\nCliente: ${fromNumber}\n\nPor favor genera la factura y responde a este chat adjuntando el PDF con el siguiente texto exacto en el mensaje:\n#factura ${fromNumber}`;
+  const caption = `🚨 *Nueva Solicitud de Facturación*\nCliente: ${fromNumber}\n\n*Datos Fiscales:*\n${datosFiscales}\n\nPor favor genera la factura y responde a este chat adjuntando el PDF con el siguiente texto exacto en el mensaje:\n#factura ${fromNumber}`;
   
-  try {
-    const { sendWhatsAppMediaId } = await import('../../whatsapp.ts');
-    await sendWhatsAppMediaId(contadorPhone, 'image', mediaId, caption, toNumber);
-    return '¡Gracias! Hemos verificado tu ticket y lo hemos enviado a nuestro equipo de facturación. En cuanto esté lista la factura, te enviaremos el PDF por este mismo medio.';
+    // 1. URLs recibidas directamente del contexto (subidas en process-queue)
+    let mediaUrl = (toolData.media_url as string) || null;
+    let pdfUrl = (toolData.pdf_url as string) || null;
+
+    try {
+      const { sendWhatsAppMediaId } = await import('../../whatsapp.ts');
+      
+      // 2. Enviar la foto del ticket al contador. 
+      // Usamos la URL pública si la logramos subir (recomendado), o el mediaId crudo si falló el upload.
+      await sendWhatsAppMediaId(contadorPhone, mediaType, mediaUrl || mediaId, caption, toNumber);
+
+      // 3. Si el cliente mandó su Constancia (PDF), enviarla también como documento de respaldo
+      if (pdfMediaId) {
+        await sendWhatsAppMediaId(contadorPhone, 'document', pdfUrl || pdfMediaId, '📄 Constancia de Situación Fiscal (Respaldo)', toNumber);
+      }
+
+    // Registrar la solicitud en la base de datos para el panel visual con las URLs públicas
+    const { error: dbError } = await supabase
+      .from('facturas')
+      .insert({
+        tenant_id: empresa.id,
+        cliente_tel: fromNumber,
+        media_id: mediaId,
+        media_type: mediaType,
+        media_url: mediaUrl,
+        pdf_url: pdfUrl,
+        datos_fiscales: datosFiscales,
+        estado: 'pendiente'
+      });
+
+    if (dbError) {
+      console.error('[HANDLERS] Error registrando factura en DB:', dbError.message);
+    }
+
+    return '¡Gracias! Hemos verificado tu ticket y hemos enviado tu información y documentos a nuestro equipo de facturación. En cuanto esté lista la factura, te enviaremos el PDF por este mismo medio.';
   } catch (err) {
     console.error('[HANDLERS] Error enviando ticket de facturacion:', err);
     return 'Hubo un problema de conexión al enviar el ticket a facturación. Un agente te apoyará en breve.';
   }
 }
+
 
 export async function handleMostrarMenuLista(
   toolData: ToolData,

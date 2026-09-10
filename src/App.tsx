@@ -23,6 +23,7 @@ import BotPage from './pages/BotPage';
 import PackagesPage from './pages/PackagesPage';
 import CatalogPage from './pages/CatalogPage';
 import OrdersPage from './pages/OrdersPage';
+import InvoicesPage from './pages/InvoicesPage';
 import TrackPage from './pages/TrackPage';
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
@@ -91,6 +92,7 @@ function AppRoutes() {
           <Route path="/packages" element={<PackagesPage />} />
           <Route path="/catalog" element={<CatalogPage />} />
           <Route path="/orders" element={<OrdersPage />} />
+          <Route path="/invoices" element={<InvoicesPage />} />
         </Route>
         {/* Ruta pública de seguimiento — no requiere login, el cliente la abre desde el WhatsApp */}
         <Route path="/track/:token" element={<TrackPage />} />

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { Map, Users, BarChart3, Settings, Car, LogOut, Bell, Play, Layers, UserCheck, Hexagon, ChevronRight, Wrench, X, Activity, Bot, Package, ShoppingBag, UtensilsCrossed, Pill, Store, LayoutDashboard, ClipboardList } from 'lucide-react';
+import { Map, Users, BarChart3, Settings, Car, LogOut, Bell, Play, Layers, UserCheck, Hexagon, ChevronRight, Wrench, X, Activity, Bot, Package, ShoppingBag, UtensilsCrossed, Pill, Store, LayoutDashboard, ClipboardList, Receipt } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 import { RequireFeature } from './RequireFeature';
@@ -94,6 +94,7 @@ export default function Sidebar({ onClose }: SidebarProps) {
   const commerceMainItems: { to: string; icon: React.ReactNode; label: string; feature?: Feature }[] = [
     { to: '/dashboard', icon: <LayoutDashboard size={18} />, label: 'Panel Principal' },
     { to: '/orders', icon: <ClipboardList size={18} />, label: 'Pedidos Activos' },
+    { to: '/invoices', icon: <Receipt size={18} />, label: 'Facturación' },
     { to: '/catalog', icon: branding.catalogIcon, label: branding.catalogLabel },
     { to: '/bot', icon: <Bot size={18} />, label: 'Bot de Atención IA', feature: 'bot_voz' },
   ];

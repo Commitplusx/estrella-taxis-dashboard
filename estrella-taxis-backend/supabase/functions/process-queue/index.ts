@@ -6,7 +6,7 @@ import { dispatchToHuman, sendWhatsApp, sendWhatsAppCTA, sendWhatsAppLocationReq
 import { getToolsForBusiness } from '../_shared/bot/core/toolSchemas.ts';
 import { buildSystemPrompt, routeToolCall } from '../_shared/bot/core/router.ts';
 import { ToolData, PermisosSistema } from '../_shared/bot/core/types.ts';
-import { verifyImageWithGemini } from '../_shared/bot/core/geminiVision.ts';
+import { verifyImageWithGemini, extractFiscalDataFromPdf } from '../_shared/bot/core/geminiVision.ts';
 import { encode } from "https://deno.land/std@0.177.0/encoding/base64.ts";
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') || '';
@@ -254,12 +254,16 @@ serve(async (req) => {
         }
 
         // --- 1.2 Intercepción de Facturación (Imágenes y Documentos) ---
-        if (msgType === 'image' && mediaId) {
-          // El cliente envía una foto. Verificamos con Gemini Vision si es un ticket válido.
-          console.log(`[FACTURACION] Descargando imagen ${mediaId} para validación visual de Gemini...`);
+        if ((msgType === 'image' || msgType === 'document') && mediaId) {
+          // El cliente envía una foto o archivo. Verificamos con Gemini Vision si es un ticket válido.
+          console.log(`[FACTURACION] Descargando ${msgType} ${mediaId} para validación visual de Gemini...`);
           try {
             const ycloudKey = Deno.env.get('YCLOUD_API_KEY') || '';
-            const imgRes = await fetch(`https://api.ycloud.com/v2/whatsapp/media/${mediaId}`, {
+            const mediaObj = (msgType === 'image' ? msgObj.image : msgObj.document) as Record<string, any>;
+            const mediaUrl = mediaObj.link || `https://api.ycloud.com/v2/whatsapp/media/${mediaId}`;
+            console.log(`[FACTURACION] Objeto media recibido:`, JSON.stringify(mediaObj));
+            console.log(`[FACTURACION] Intentando descargar de: ${mediaUrl}`);
+            const imgRes = await fetch(mediaUrl, {
               headers: { 'X-API-Key': ycloudKey }
             });
             if (imgRes.ok) {
@@ -270,8 +274,10 @@ serve(async (req) => {
               // Manejo seguro por si YCloud devuelve JSON con URL o el stream binario directo
               if (mimeType.includes('application/json')) {
                 const meta = await imgRes.json();
+                console.log(`[FACTURACION] YCloud devolvió JSON. Redirigiendo a: ${meta.url}`);
                 if (meta.url) {
                   const binRes = await fetch(meta.url);
+                  if (!binRes.ok) throw new Error(`Fallo descargando la URL redireccionada: HTTP ${binRes.status}`);
                   buffer = await binRes.arrayBuffer();
                   actualMime = binRes.headers.get('content-type') || 'image/jpeg';
                 } else {
@@ -285,13 +291,53 @@ serve(async (req) => {
               const isTicket = await verifyImageWithGemini(base64Data, actualMime);
               
               const originalText = textBody ? ` (Texto original del cliente: "${textBody}")` : '';
-              
+
               if (isTicket) {
-                textBody = `[SISTEMA: El cliente ha enviado una imagen que FUE VERIFICADA EXITOSAMENTE como un ticket/factura de consumo válido. ID_IMAGEN: ${mediaId}.${originalText} Si el cliente estaba solicitando factura, DEBES usar la herramienta enviar_ticket_facturacion inmediatamente.]`;
+                // Subir a Supabase Storage inmediatamente
+                let uploadedMediaUrl: string | null = null;
+                try {
+                  const extension = msgType === 'document' ? 'pdf' : 'jpg';
+                  const fileName = `${empresa.id}/${Date.now()}_${mediaId}.${extension}`;
+                  const { data: uploadData, error: uploadErr } = await supabase.storage
+                    .from('facturas_media')
+                    .upload(fileName, buffer, { contentType: actualMime });
+                  
+                  if (!uploadErr) {
+                    const { data } = supabase.storage.from('facturas_media').getPublicUrl(fileName);
+                    uploadedMediaUrl = data.publicUrl;
+                    console.log(`[FACTURACION] Archivo subido exitosamente a Storage: ${uploadedMediaUrl}`);
+                  } else {
+                    console.error('[FACTURACION] Error subiendo archivo a Storage:', uploadErr);
+                  }
+                } catch (upErr) {
+                  console.error('[FACTURACION] Exception subiendo a Storage:', upErr);
+                }
+
+                // Si es un PDF, intentar extraer datos fiscales automáticamente con Gemini
+                let datosFiscalesExtraidos: string | null = null;
+                if (msgType === 'document' && actualMime.includes('pdf')) {
+                  console.log('[FACTURACION] Intentando extraer datos fiscales del PDF con Gemini...');
+                  datosFiscalesExtraidos = await extractFiscalDataFromPdf(base64Data);
+                  if (datosFiscalesExtraidos) {
+                    console.log('[FACTURACION] Datos fiscales extraídos exitosamente del PDF.');
+                  } else {
+                    console.log('[FACTURACION] PDF no contiene datos fiscales (es un ticket de compra).');
+                  }
+                }
+
+                if (datosFiscalesExtraidos) {
+                  // El PDF tenía datos fiscales (ej. Constancia de Situación Fiscal del SAT)
+                  textBody = `[SISTEMA: El cliente ha enviado su documento fiscal (Constancia del SAT o similar) y la IA ha extraído sus datos fiscales:\n${datosFiscalesExtraidos}\n\nGUARDA ESTOS DATOS EN TU MEMORIA. Revisa el historial de la conversación: ¿el cliente YA envió la foto/imagen de su TICKET DE COMPRA? \nSi SÍ: Llama a la herramienta enviar_ticket_facturacion usando esos datos fiscales. Pon en "media_id" el ID_IMAGEN de la foto del ticket de compra, y pon en "pdf_media_id" el ID de este documento fiscal (${mediaId}). Pon en "pdf_url" la URL: ${uploadedMediaUrl || ''}. \nSi NO ha enviado la foto del ticket de compra: Pídesela amablemente. \nNUNCA llames a la herramienta usando el ID de este documento fiscal (${mediaId}) como "media_id", el contador necesita ver la foto del ticket.]`;
+                } else {
+                  // Es un ticket de compra (no contiene datos fiscales) — pedir datos normalmente
+                  textBody = `[SISTEMA: El cliente ha enviado la foto de su TICKET DE COMPRA. ID_IMAGEN: ${mediaId} TIPO_MEDIA: ${msgType}.${originalText} Revisa el historial: ¿ya tienes sus datos fiscales completos (ya sea porque envió su Constancia en PDF o los escribió en texto)? \nSi SÍ: Llama a la herramienta enviar_ticket_facturacion usando este ID_IMAGEN (${mediaId}) como "media_id", los datos fiscales que ya tienes, e incluye su URL pública: ${uploadedMediaUrl || ''} en el campo "media_url". Si envió un PDF, incluye su ID como "pdf_media_id" y su URL en "pdf_url". \nSi NO tienes los datos fiscales: Pídele amablemente que te escriba sus datos o te envíe su Constancia de Situación Fiscal en PDF.]`;
+                }
               } else {
-                textBody = `[SISTEMA: El cliente envió una imagen (ID_IMAGEN: ${mediaId}), pero la IA visual ha determinado que NO es un ticket de consumo (puede ser una receta médica, selfie, meme, billete, etc).${originalText} Evalúa el contexto: si pidió factura, indícale que la imagen no es un ticket válido. Si es otro negocio (ej. farmacia) y mandó una receta, procésala normalmente como receta.]`;
+                textBody = `[SISTEMA: El cliente envió una imagen/documento (ID_IMAGEN: ${mediaId} TIPO_MEDIA: ${msgType}), pero la IA visual ha determinado que NO es un ticket de consumo (puede ser una receta médica, selfie, meme, billete, etc).${originalText} Evalúa el contexto: si pidió factura, indícale que el archivo no es un ticket válido. Si es otro negocio (ej. farmacia) y mandó una receta, procésala normalmente como receta.]`;
               }
             } else {
+              const errorText = await imgRes.text();
+              console.error(`[FACTURACION] Error descargando imagen. HTTP ${imgRes.status}:`, errorText);
               textBody = `[SISTEMA: El cliente envió una imagen (ID_IMAGEN: ${mediaId}), pero hubo un error descargándola para verificarla. Texto del cliente: "${textBody}"]`;
             }
           } catch (e) {
@@ -769,14 +815,6 @@ ${pendingTrip.destino}
             return new Response('Duplicated in DB', { status: 200 });
           }
 
-          // Bug Fix: VERIFICAR MODO HUMANO ANTES de cualquier procesamiento de LLM
-          // (Antes esto estaba DESPUÉS de adquirir el lock, lo que causaba que el bot
-          // procesara el mensaje igualmente si el humano contestaba durante el debounce)
-          if (session.estado === 'human') {
-            console.log(`[COEXISTENCE] La sesión de ${fromNumber} está en modo HUMANO. El bot no interviene.`);
-            return new Response('Human mode - silenced', { status: 200 });
-          }
-
           if (textBody.toLowerCase().includes('/reset')) {
             await supabase.from('whatsapp_sessions').update({ estado: 'bot', history: [] }).eq('phone', fromNumber).eq('waba_number', toNumber);
             await sendWhatsApp(fromNumber, "🔄 Memoria borrada. ¡Empecemos de nuevo! ¿En qué te ayudo?", toNumber);
@@ -789,6 +827,14 @@ ${pendingTrip.destino}
             await sendWhatsApp(fromNumber, "🤖 Modo bot reactivado. El asistente retomará la conversación con el cliente.", toNumber);
             console.log(`[COEXISTENCE] Sesión ${fromNumber} devuelta a modo BOT por comando /bot.`);
             return new Response('Bot mode restored', { status: 200 });
+          }
+
+          // Bug Fix: VERIFICAR MODO HUMANO ANTES de cualquier procesamiento de LLM
+          // (Antes esto estaba DESPUÉS de adquirir el lock, lo que causaba que el bot
+          // procesara el mensaje igualmente si el humano contestaba durante el debounce)
+          if (session.estado === 'human') {
+            console.log(`[COEXISTENCE] La sesión de ${fromNumber} está en modo HUMANO. El bot no interviene.`);
+            return new Response('Human mode - silenced', { status: 200 });
           }
 
           // Comando /configurar (Easter egg para impresionar)
@@ -1029,7 +1075,7 @@ ${pendingTrip.destino}
                 : ragContext;
               const secondPassMessages = [
                 messagesForOpenAI[0], // CRÍTICO: Siempre mantener el System Prompt
-                ...messagesForOpenAI.slice(1).slice(-5), // Últimos 5 mensajes de contexto
+                ...messagesForOpenAI.slice(1).slice(-15), // Últimos 15 mensajes de contexto para no olvidar imágenes
                 { role: 'assistant', content: `[Consultando catálogo...]` },
                 {
                   role: 'user',

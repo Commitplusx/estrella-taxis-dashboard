@@ -67,7 +67,7 @@ export async function routeToolCall(
       finalResponse = await handleCotizarEnvio(supabase, toolData, empresa, ciudadTenant);
     }
     else if (executedTool === 'enviar_ticket_facturacion') {
-      finalResponse = await handleEnviarTicketFacturacion(toolData, empresa, fromNumber, toNumber);
+      finalResponse = await handleEnviarTicketFacturacion(toolData, empresa, fromNumber, toNumber, supabase);
     }
     
     // 3. Herramientas Genéricas / Core

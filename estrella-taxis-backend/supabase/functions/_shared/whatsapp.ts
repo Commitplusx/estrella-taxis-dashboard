@@ -295,7 +295,13 @@ export async function sendWhatsAppMediaId(to: string, mediaType: 'image' | 'docu
     type: mediaType
   };
   
-  payload[mediaType] = { id: mediaId };
+  // Si mediaId empieza con http, es una URL pública (link), de lo contrario es un ID interno.
+  if (mediaId.startsWith('http')) {
+    payload[mediaType] = { link: mediaId };
+  } else {
+    payload[mediaType] = { id: mediaId };
+  }
+  
   if (caption && caption.trim().length > 0) {
     payload[mediaType].caption = caption;
   }
