@@ -26,6 +26,7 @@ interface Empresa {
   activo: boolean;
   paquete_id: string | null;
   paquete?: Paquete;
+  ignored_phones?: string[] | null;
   created_at: string;
 }
 
@@ -60,6 +61,7 @@ export default function BotPage() {
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<Empresa | null>(null);
   const [vinculandoEmpresa, setVinculandoEmpresa] = useState<Empresa | null>(null);
+  const [managingExceptions, setManagingExceptions] = useState<Empresa | null>(null);
   const [form, setForm] = useState(defaultForm);
   const [saving, setSaving] = useState(false);
 
@@ -305,6 +307,10 @@ export default function BotPage() {
                     <Bot size={18} className={emp.activo ? 'text-green-500' : 'text-gray-400'} />
                     <span className="hidden lg:inline">{emp.activo ? 'Desactivar' : 'Activar'}</span>
                   </button>
+                  <button onClick={() => setManagingExceptions(emp)} className="flex items-center justify-center gap-2 w-full p-2.5 text-sm font-medium text-gray-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors" title="Excepciones">
+                    <Phone size={18} className="text-gray-400" />
+                    <span className="hidden lg:inline">Excepciones</span>
+                  </button>
                   <button onClick={() => setVinculandoEmpresa(emp)} className="flex items-center justify-center gap-2 w-full p-2.5 text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors" title="Usuarios">
                     <Users size={18} className="text-gray-400" />
                     <span className="hidden lg:inline">Usuarios</span>
@@ -463,6 +469,14 @@ export default function BotPage() {
           onClose={() => setVinculandoEmpresa(null)} 
         />
       )}
+
+      {/* Modal Excepciones (Ignorados) */}
+      {managingExceptions && (
+        <ManageExceptionsModal 
+          empresa={managingExceptions} 
+          onClose={() => { setManagingExceptions(null); fetchEmpresas(); }} 
+        />
+      )}
     </div>
   );
 }
@@ -601,6 +615,136 @@ function VincularUsuariosModal({ empresa, onClose }: { empresa: Empresa; onClose
               })}
             </div>
           )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Modal: Excepciones (Ignorados) ──────────────────────────────────────────
+function ManageExceptionsModal({ empresa, onClose }: { empresa: Empresa; onClose: () => void }) {
+  const [phones, setPhones] = useState<string[]>(empresa.ignored_phones || []);
+  const [newPhone, setNewPhone] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const handleAdd = async () => {
+    const p = newPhone.trim();
+    if (!p) return;
+    if (phones.includes(p)) {
+      toast.error('El número ya está en la lista.');
+      return;
+    }
+    const newPhonesList = [...phones, p];
+    
+    // Guardado inmediato y optimista
+    setPhones(newPhonesList);
+    setNewPhone('');
+    
+    setSaving(true);
+    const { error } = await supabase.from('empresas').update({ ignored_phones: newPhonesList }).eq('id', empresa.id);
+    setSaving(false);
+    
+    if (error) {
+      toast.error('Error al guardar excepción: ' + error.message);
+      // Revertir
+      setPhones(phones);
+    } else {
+      toast.success('Número bloqueado añadido.');
+    }
+  };
+
+  const handleRemove = async (index: number) => {
+    const pToRemove = phones[index];
+    const newPhonesList = phones.filter((_, i) => i !== index);
+    
+    // Guardado inmediato y optimista
+    setPhones(newPhonesList);
+    
+    setSaving(true);
+    const { error } = await supabase.from('empresas').update({ ignored_phones: newPhonesList }).eq('id', empresa.id);
+    setSaving(false);
+    
+    if (error) {
+      toast.error('Error al remover excepción.');
+      // Revertir
+      setPhones([...newPhonesList, pToRemove]);
+    } else {
+      toast.success('Número desbloqueado.');
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
+        <div className="flex items-center justify-between p-4 sm:p-5 border-b border-gray-100 bg-gray-50/80">
+          <div>
+            <h3 className="text-lg font-bold text-gray-900 leading-tight">Excepciones del Bot</h3>
+            <p className="text-sm text-gray-500 mt-0.5">El bot ignorará por completo estos números.</p>
+          </div>
+          <button onClick={onClose} className="p-2 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50" disabled={saving}>
+            <X size={20} />
+          </button>
+        </div>
+
+        <div className="p-4 sm:p-5 flex-1 overflow-y-auto">
+          <div className="flex gap-2 mb-6">
+            <input 
+              className="flex-1 border border-gray-300 rounded-lg px-3.5 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm" 
+              value={newPhone} 
+              onChange={e => setNewPhone(e.target.value)} 
+              placeholder="Ej. +521234567890"
+              disabled={saving}
+              onKeyDown={e => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  handleAdd();
+                }
+              }}
+            />
+            <button 
+              onClick={handleAdd}
+              disabled={saving || !newPhone.trim()}
+              className="px-4 py-2 bg-gray-900 text-white rounded-lg text-sm font-medium hover:bg-black transition-colors flex items-center gap-2 border border-transparent disabled:opacity-50"
+            >
+              <Plus size={16} /> Agregar
+            </button>
+          </div>
+          
+          {phones.length > 0 ? (
+            <div className="flex flex-wrap gap-2">
+              {phones.map((phone, i) => (
+                <span key={i} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium bg-red-50 text-red-700 border border-red-100 shadow-sm">
+                  <Phone size={12} className="text-red-400" />
+                  <span className="font-mono">{phone}</span>
+                  <button 
+                    onClick={() => handleRemove(i)}
+                    disabled={saving}
+                    className="p-0.5 hover:bg-red-200 rounded-full transition-colors ml-1 disabled:opacity-50"
+                    title="Desbloquear"
+                  >
+                    <X size={14} />
+                  </button>
+                </span>
+              ))}
+            </div>
+          ) : (
+            <div className="text-sm text-gray-400 bg-gray-50 border border-dashed border-gray-200 rounded-lg p-6 text-center">
+              No hay números bloqueados.
+            </div>
+          )}
+        </div>
+
+        <div className="p-4 sm:p-5 border-t border-gray-100 bg-white flex justify-between items-center gap-3 shrink-0">
+          <div className="text-xs text-gray-400 flex items-center gap-1.5">
+            {saving ? (
+              <span className="text-blue-500 animate-pulse">Guardando...</span>
+            ) : (
+              <span>Se guarda automáticamente</span>
+            )}
+          </div>
+          <button onClick={onClose} disabled={saving} className="px-5 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
+            Cerrar
+          </button>
         </div>
       </div>
     </div>
