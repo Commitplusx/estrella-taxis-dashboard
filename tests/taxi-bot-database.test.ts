@@ -1,0 +1,717 @@
+import {LIFECYCLES,type Lifecycle}from'../estrella-taxis-backend/supabase/functions/_shared/bot/taxis/stateMachine.ts';
+import {conversationPhase}from'../estrella-taxis-backend/supabase/functions/_shared/bot/taxis/stateMachine.ts';
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {readFileSync}from'node:fs';
+import {PGlite}from'@electric-sql/pglite';
+import {emptyDraft,parseSession,record}from'../estrella-taxis-backend/supabase/functions/_shared/bot/taxis/contracts.ts';
+import {TaxiEngine}from'../estrella-taxis-backend/supabase/functions/_shared/bot/taxis/engine.ts';
+import {coordinateTaxi,type TaxiServices}from'../estrella-taxis-backend/supabase/functions/_shared/bot/taxis/coordinator.ts';
+import {createTaxiServices}from'../estrella-taxis-backend/supabase/functions/_shared/bot/taxis/services.ts';
+import {parseZones}from'../estrella-taxis-backend/supabase/functions/_shared/bot/taxis/adminContracts.ts';
+import {taxiH3Scope}from'../estrella-taxis-backend/supabase/functions/_shared/bot/taxis/h3.ts';
+import type{TaxiChannel,TaxiInbound}from'../estrella-taxis-backend/supabase/functions/_shared/bot/taxis/contracts.ts';
+import type{TrackingStore}from'../estrella-taxis-backend/supabase/functions/_shared/tracking/store.ts';
+import type{Fetcher}from'../estrella-taxis-backend/supabase/functions/_shared/tracking/http.ts';
+import {parseInterpretation}from'../estrella-taxis-backend/supabase/functions/_shared/bot/taxis/policy.ts';
+import {parseQualityDetail,parseQualityPage}from'../estrella-taxis-backend/supabase/functions/_shared/bot/taxis/qualityContracts.ts';
+import {createTaxiInterpreter,TAXI_INTERPRETER_CONTRACT}from'../estrella-taxis-backend/supabase/functions/_shared/bot/taxis/interpreter.ts';
+import {fingerprint}from'../estrella-taxis-backend/supabase/functions/_shared/tracking/contracts.ts';
+const sql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261027220000_taxi_bot_transactions.sql',import.meta.url),'utf8');
+const h3CatalogSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20260901110001_create_h3_zonas.sql',import.meta.url),'utf8');
+const h3PricingSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261027223402_taxi_bot_h3_pricing.sql',import.meta.url),'utf8');
+const adminSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261028145826_taxi_bot_admin_zones.sql',import.meta.url),'utf8');
+const traceSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261028160342_taxi_bot_trace_state_quality.sql',import.meta.url),'utf8');
+const accessSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261029165842_taxi_customer_access.sql',import.meta.url),'utf8');
+const tenant='11111111-1111-4111-8111-111111111111',other='22222222-2222-4222-8222-222222222222',waba='+529630000001',customer='+529630000002',driverPhone='+529630000003';
+async function fixture(){
+  const db=new PGlite();await db.exec(`CREATE ROLE anon;CREATE ROLE authenticated;CREATE ROLE service_role BYPASSRLS;
+    CREATE TABLE empresas(id uuid PRIMARY KEY,tipo_negocio text DEFAULT 'taxi');INSERT INTO empresas(id)VALUES('${tenant}'),('${other}');
+    CREATE TABLE webhook_queue(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),payload jsonb,status text,processed_at timestamptz);
+    CREATE TABLE conductores(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),tenant_id uuid,device_id integer UNIQUE,telefono_whatsapp text,nombre text,activo boolean DEFAULT true);
+    CREATE TABLE viajes(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),token text UNIQUE NOT NULL,tenant_id uuid,device_id integer,taxi_name text,cliente_tel text NOT NULL,cliente_nombre text,origen text NOT NULL,destino text NOT NULL,origen_lat double precision,origen_lng double precision,estado text NOT NULL,conductores_contactados integer[]DEFAULT '{}',created_at timestamptz DEFAULT now());
+    ALTER TABLE viajes ENABLE ROW LEVEL SECURITY;CREATE POLICY legacy_open ON viajes FOR ALL USING(true)WITH CHECK(true);GRANT ALL ON viajes TO anon,authenticated,service_role;`);
+  await db.exec(h3CatalogSql);await db.exec(sql);await db.query("INSERT INTO taxi_bot_channels(tenant_id,waba,enabled,name,city,center_lat,center_lng,radius_km,dispatcher)VALUES($1,$2,true,'Base de prueba','Comitán',16.25,-92.13,20,$3)",[tenant,waba,'+529630000099']);await db.exec(h3PricingSql);await db.exec(adminSql);await db.exec(traceSql);
+  await db.exec(accessSql);
+  // These legacy protocol fixtures explicitly act as customers too. Driver-only access has separate tests below.
+  await db.query('INSERT INTO taxi_bot_allowed_customers(tenant_id,phone)VALUES($1,$2),($1,$3),($1,$4)',[tenant,customer,driverPhone,'+529630000004']);
+  await db.query("INSERT INTO conductores(tenant_id,device_id,telefono_whatsapp,nombre)VALUES($1,1,$2,'Unidad 1'),($1,2,'+529630000004','Unidad 2'),($3,3,'+529630000005','Ajena')",[tenant,driverPhone,other]);
+  const scalar=async(query:string,args:unknown[]=[])=>Object.values((await db.query<Record<string,unknown>>(query,args)).rows[0])[0];
+  const obj=(v:unknown)=>{assert.ok(record(v));return v;};
+  const enqueue=async(content='Un taxi',from=customer,id=crypto.randomUUID())=>{
+    const message={id,from,to:waba,at:new Date().toISOString(),type:'text',text:content,button:null,location:null};
+    const result=obj(await scalar('SELECT taxi_bot_enqueue($1,$2,$3,$4,$5)',[tenant,waba,message,'a'.repeat(64),{type:'whatsapp.inbound_message',whatsappInboundMessage:{id,from,to:waba}}]));
+    await db.query("UPDATE taxi_bot_events SET received_at=clock_timestamp()-interval '2 seconds'WHERE id=$1",[result.eventId]);return result;
+  };
+  const begin=async(id:unknown)=>{const c=obj(await scalar('SELECT taxi_bot_begin($1)',[id]));if(c.state==='proceed'){const session=parseSession(c.session);await scalar('SELECT taxi_bot_trace_start($1,$2,$3,$4)',[c.eventId,c.lease,session.revision,{version:'taxi-trace-v1',engineVersion:'fixture',model:'fixture-model',promptHash:'a'.repeat(64),phaseBefore:conversationPhase(session,Date.now())}]);}return c;};
+  const draft={...emptyDraft(),name:'Persona Prueba',origin:{text:'Centro',lat:16.25,lng:-92.13,placeId:null},destination:{text:'Terminal',lat:16.26,lng:-92.14,placeId:null},quoteCents:null,confirmation:crypto.randomUUID(),expiresAt:new Date(Date.now()+600000).toISOString()};
+  const decision=(action:string='draft')=>({action,draft,confirmation:null,tripId:null,offerId:null,candidates:[],messages:[],reason:'fixture'});
+  const commit=async(id:unknown,claim:Record<string,unknown>,d:Record<string,unknown>)=>{const s=obj(claim.session);return obj(await scalar('SELECT taxi_bot_commit($1,$2,$3,$4)',[id,claim.lease,s.revision,d]));};
+  const prepare=async(from=customer)=>{const event=await enqueue('A nombre de Persona Prueba',from),claim=await begin(event.eventId);assert.equal(claim.state,'proceed');await commit(event.eventId,claim,decision());return draft;};
+  const confirm=async(from=customer,candidates=[{deviceId:1,name:'Unidad 1'},{deviceId:2,name:'Unidad 2'}])=>{const e=await enqueue('Sí, mándalo',from),claim=await begin(e.eventId);return{event:e,claim,result:await commit(e.eventId,claim,{...decision('confirm'),confirmation:draft.confirmation,candidates})};};
+  const seedH3=async()=>{
+    const scope=taxiH3Scope(draft.origin,draft.destination);
+    await db.query("UPDATE taxi_bot_channels SET pricing_mode='h3_zone_max'WHERE waba=$1",[waba]);
+    await db.query("INSERT INTO h3_zonas(h3_index,precio,resolucion,nombre)VALUES($1,45,10,'Zona sintética origen'),($2,65,10,'Zona sintética destino')",[scope.originCell,scope.destinationCell]);
+    await db.query('INSERT INTO taxi_bot_h3_cells(tenant_id,waba,h3_index)VALUES($1,$2,$3),($1,$2,$4)',[tenant,waba,scope.originCell,scope.destinationCell]);
+    return scope;
+  };
+  const admin=async(action:string,payload:Record<string,unknown>,expected=0,request=crypto.randomUUID(),company=tenant,number=waba)=>obj(await scalar('SELECT taxi_bot_admin_apply($1,$2,$3,$4,$5,$6,$7)',[company,number,42,request,expected,action,payload]));
+  return{db,scalar,obj,enqueue,begin,decision,commit,prepare,confirm,draft,seedH3,admin};
+}
+
+test('customer access: an empty list rejects intake before creating events, sessions or queue rows',async()=>{
+ const f=await fixture();try{
+  await f.db.exec('DELETE FROM taxi_bot_allowed_customers');
+  const result=await f.enqueue('Hola');assert.equal(result.ignored,true);
+  for(const table of ['taxi_bot_events','taxi_bot_sessions','webhook_queue'])assert.equal(await f.scalar('SELECT count(*)::int FROM '+table),0);
+ }finally{await f.db.close();}
+});
+test('customer access: only the selected company authorizes a phone, including the Mexican legacy prefix',async()=>{
+ const f=await fixture();try{
+  assert.equal(await f.scalar('SELECT taxi_bot_customer_allowed($1,$2)',[tenant,customer]),true);
+  assert.equal(await f.scalar('SELECT taxi_bot_customer_allowed($1,$2)',[tenant,'+521'+customer.slice(3)]),true);
+  assert.equal(await f.scalar('SELECT taxi_bot_customer_allowed($1,$2)',[other,customer]),false);
+  assert.equal((await f.enqueue('Hola','+529630000088')).ignored,true);
+  assert.ok((await f.enqueue()).eventId);
+ }finally{await f.db.close();}
+});
+test('customer access: removing a queued customer closes the event before starting the model',async()=>{
+ const f=await fixture();try{
+  const e=await f.enqueue();await f.db.query('DELETE FROM taxi_bot_allowed_customers WHERE phone=$1',[customer]);
+  const never=async():Promise<never>=>{throw new Error('No model, alias, GPS, price, transport or table read allowed');};
+  const services:TaxiServices={interpret:never,resolve:never,quote:never,candidates:never};
+  const store:TrackingStore={read:never,writeScores:never,rpc:async(name,args)=>{assert.equal(name,'taxi_bot_begin');return f.scalar('SELECT taxi_bot_begin($1)',[args.p_event]);}};
+  const engine=new TaxiEngine(store,services,{webhookSecret:'fixture-secret',workerSecret:'fixture-worker-secret-at-least-32-characters',ycloudKey:'fixture-key',now:()=>Date.now()},never);
+  assert.equal(await engine.process(String(e.eventId)),'blocked');
+  assert.equal(await f.scalar('SELECT count(*)::int FROM taxi_bot_sessions'),0);assert.equal(await f.scalar('SELECT status FROM webhook_queue'),'done');
+ }finally{await f.db.close();}
+});
+test('customer access: revocation during interpretation cannot commit a trip or outgoing message',async()=>{
+ const f=await fixture();try{
+  await f.prepare();const event=await f.enqueue('Sí'),claim=await f.begin(event.eventId);
+  await f.db.query('DELETE FROM taxi_bot_allowed_customers WHERE phone=$1',[customer]);
+  await assert.rejects(f.commit(event.eventId,claim,{...f.decision('confirm'),confirmation:f.draft.confirmation,candidates:[{deviceId:1,name:'Unidad 1'}]}),/taxi_customer_not_authorized/);
+  assert.equal(await f.scalar('SELECT count(*)::int FROM viajes'),0);assert.equal(await f.scalar('SELECT count(*)::int FROM taxi_bot_outbox'),0);
+ }finally{await f.db.close();}
+});
+test('customer access: pending and already-claimed outputs are checked again before a provider call',async()=>{
+ const f=await fixture();try{
+  await f.scalar('SELECT taxi_bot_emit($1,$2,$3,$4,$5)',[tenant,waba,customer,'Mensaje sintético','access-output']);
+  const claimed=(await f.db.query<Record<string,unknown>>('SELECT * FROM taxi_bot_outbox_claim($1,$2)',[tenant,waba])).rows;
+  assert.equal(claimed.length,1);await f.db.query('DELETE FROM taxi_bot_allowed_customers WHERE phone=$1',[customer]);
+  let providerCalls=0;const never=async():Promise<never>=>{throw new Error('No interpretation');};
+  const store:TrackingStore={read:never,writeScores:never,rpc:async(name,args)=>{
+   if(name==='taxi_bot_outbox_claim')return claimed;
+   if(name==='taxi_bot_outbox_permitted')return f.scalar('SELECT taxi_bot_outbox_permitted($1,$2)',[args.p_id,args.p_lease]);
+   assert.equal(name,'taxi_bot_outbox_complete');return f.scalar('SELECT taxi_bot_outbox_complete($1,$2,$3,$4,$5)',[args.p_id,args.p_lease,args.p_state,args.p_provider,args.p_error]);
+  }};
+  const engine=new TaxiEngine(store,{interpret:never,resolve:never,quote:never,candidates:never},{webhookSecret:'fixture-secret',workerSecret:'fixture-worker-secret-at-least-32-characters',ycloudKey:'fixture-key',now:()=>Date.now()},async()=>{providerCalls++;throw new Error('Provider must not be called');});
+  await engine.drain(tenant,waba);assert.equal(providerCalls,0);assert.equal(await f.scalar('SELECT state FROM taxi_bot_outbox'),'failed');
+  await f.scalar('SELECT taxi_bot_emit($1,$2,$3,$4,$5)',[tenant,waba,customer,'Otra prueba','access-output-2']);
+  assert.equal((await f.db.query('SELECT * FROM taxi_bot_outbox_claim($1,$2)',[tenant,waba])).rows.length,0);
+ }finally{await f.db.close();}
+});
+test('customer access: a driver-only phone can only answer its own valid offer buttons',async()=>{
+ const f=await fixture();try{
+  await f.prepare();await f.confirm();const offer=(await f.db.query<Record<string,unknown>>('SELECT * FROM taxi_bot_offers WHERE device_id=1')).rows[0];
+  await f.db.query('DELETE FROM taxi_bot_allowed_customers WHERE phone=$1',[driverPhone]);
+  const message={id:crypto.randomUUID(),from:'+521'+driverPhone.slice(3),to:waba,at:new Date().toISOString(),type:'button',text:'Aceptar',button:'txa_'+offer.id,location:null};
+  assert.equal(await f.scalar('SELECT taxi_bot_inbound_allowed($1,$2,$3)',[tenant,waba,message]),true);
+  for(const changed of [{...message,from:'+529630000088'},{...message,type:'text',button:null},{...message,button:'txa_'+crypto.randomUUID()}])assert.equal(await f.scalar('SELECT taxi_bot_inbound_allowed($1,$2,$3)',[tenant,waba,changed]),false);
+  const e=f.obj(await f.scalar('SELECT taxi_bot_enqueue($1,$2,$3,$4,$5)',[tenant,waba,message,'a'.repeat(64),{}]));
+  await f.db.query("UPDATE taxi_bot_events SET received_at=now()-interval '2 seconds'WHERE id=$1",[e.eventId]);const claim=await f.begin(e.eventId);
+  await f.commit(e.eventId,claim,{...f.decision('driver_accept'),offerId:offer.id});assert.equal(await f.scalar('SELECT estado FROM viajes'),'en_camino');
+ }finally{await f.db.close();}
+});
+test('customer access: writes are versioned, idempotent and tenant-scoped; clearing the list stays closed',async()=>{
+ const f=await fixture();try{
+  const request=crypto.randomUUID(),write=(phones:string[],revision=0,id=request)=>f.scalar('SELECT taxi_bot_customer_access_apply($1,$2,$3,$4,$5)',[tenant,42,id,revision,phones]);
+  const saved=f.obj(await write([customer]));assert.equal(saved.restricted,true);assert.deepEqual(await write([customer]),saved);
+  assert.equal(f.obj(await write([driverPhone])).state,'request_conflict');assert.equal(f.obj(await write([customer],0,crypto.randomUUID())).state,'revision_conflict');
+  assert.equal(await f.scalar('SELECT count(*)::int FROM taxi_bot_customer_access_operations'),1);
+  assert.equal(f.obj(await write([],1,crypto.randomUUID())).revision,2);assert.equal(await f.scalar('SELECT taxi_bot_customer_allowed($1,$2)',[tenant,customer]),false);
+  for(const role of ['anon','authenticated']){await f.db.exec('SET ROLE '+role);await assert.rejects(f.scalar('SELECT * FROM taxi_bot_allowed_customers'),/permission denied/);await assert.rejects(f.scalar('SELECT taxi_bot_customer_access_read($1)',[tenant]),/permission denied/);await f.db.exec('RESET ROLE');}
+ }finally{await f.db.close();}
+});
+
+test('taxi admin SQL: a base price overrides its cell without changing the shared catalog or another base',async()=>{
+  const f=await fixture();try{
+    const scope=await f.seedH3(),otherWaba='+529630000077';
+    await f.db.query("INSERT INTO taxi_bot_channels(tenant_id,waba,name,city,center_lat,center_lng,radius_km,enabled,dispatcher)VALUES($1,$2,'Otra base','Comitán',16.25,-92.13,20,true,'+529630000099')",[other,otherWaba]);
+    await f.db.query('INSERT INTO taxi_bot_h3_cells(tenant_id,waba,h3_index)VALUES($1,$2,$3),($1,$2,$4)',[other,otherWaba,scope.originCell,scope.destinationCell]);
+    assert.equal((await f.admin('upsert_zones',{cells:[scope.destinationCell],label:'Centro de mi base',cents:8500})).state,'saved');
+    assert.equal(f.obj(await f.scalar('SELECT taxi_bot_h3_quote($1,$2,$3,$4)',[tenant,waba,scope.originCell,scope.destinationCell])).cents,8500);
+    assert.equal(f.obj(await f.scalar('SELECT taxi_bot_h3_quote($1,$2,$3,$4)',[other,otherWaba,scope.originCell,scope.destinationCell])).cents,6500);
+    assert.equal(String(await f.scalar('SELECT precio FROM h3_zonas WHERE h3_index=$1',[scope.destinationCell])),'65');
+  }finally{await f.db.close();}
+});
+
+test('taxi admin SQL: response loss and replay apply a price once; changed request or revision cannot overwrite it',async()=>{
+  const f=await fixture();try{
+    const scope=await f.seedH3(),id=crypto.randomUUID(),payload={cells:[scope.originCell],label:'Centro',cents:4900};
+    const first=await f.admin('upsert_zones',payload,0,id);assert.equal(first.state,'saved');assert.deepEqual(await f.admin('upsert_zones',payload,0,id),first);
+    assert.equal(await f.scalar('SELECT revision FROM taxi_bot_channels'),1);assert.equal(await f.scalar('SELECT count(*)::int FROM taxi_bot_admin_operations'),1);
+    assert.equal((await f.admin('upsert_zones',{...payload,cents:5900},0,id)).state,'request_conflict');
+    assert.equal((await f.admin('upsert_zones',{...payload,cents:5900},0)).state,'revision_conflict');assert.equal(await f.scalar('SELECT price_cents FROM taxi_bot_h3_cells WHERE h3_index=$1',[scope.originCell]),4900);
+  }finally{await f.db.close();}
+});
+
+test('taxi admin SQL: a new private cell can be priced without inserting or changing a global zone',async()=>{
+  const f=await fixture();try{
+    const scope=await f.seedH3(),cell=taxiH3Scope(f.draft.origin,{...f.draft.destination,lat:16.27,lng:-92.15}).destinationCell;
+    assert.equal((await f.admin('upsert_zones',{cells:[cell],label:'Nueva zona',cents:7900})).state,'saved');
+    assert.equal(await f.scalar('SELECT count(*)::int FROM h3_zonas'),2);
+    assert.equal(f.obj(await f.scalar('SELECT taxi_bot_h3_quote($1,$2,$3,$4)',[tenant,waba,scope.originCell,cell])).cents,7900);
+    const page=f.obj(await f.scalar('SELECT taxi_bot_admin_read($1,$2,$3,$4)',[tenant,waba,'zones',{search:'Nueva'}]));assert.ok(Array.isArray(page.zones));assert.equal(page.zones.length,1);
+    assert.equal((await f.admin('remove_zones',{cells:[cell]},1)).state,'saved');assert.equal(f.obj(await f.scalar('SELECT taxi_bot_h3_quote($1,$2,$3,$4)',[tenant,waba,scope.originCell,cell])).state,'uncovered');
+  }finally{await f.db.close();}
+});
+
+test('taxi admin SQL: preview works on a paused channel while live booking stays disabled',async()=>{
+  const f=await fixture();try{
+    const scope=await f.seedH3();await f.db.exec('UPDATE taxi_bot_channels SET enabled=false');
+    assert.equal(f.obj(await f.scalar('SELECT taxi_bot_admin_read($1,$2,$3,$4)',[tenant,waba,'quote',scope])).cents,6500);
+    assert.equal(f.obj(await f.scalar('SELECT taxi_bot_h3_quote($1,$2,$3,$4)',[tenant,waba,scope.originCell,scope.destinationCell])).state,'channel_unavailable');
+    await f.db.exec('SET ROLE anon');await assert.rejects(f.scalar('SELECT taxi_bot_admin_read($1,$2,$3,$4)',[tenant,waba,'zones',{}]),/permission denied/);await assert.rejects(f.admin('remove_zones',{cells:[scope.originCell]}),/permission denied/);
+  }finally{await f.db.close();}
+});
+
+test('taxi admin SQL: taking human control invalidates an in-flight bot turn before it can create a trip',async()=>{
+  const f=await fixture();try{
+    await f.prepare();const e=await f.enqueue('Sí'),claim=await f.begin(e.eventId),session=parseSession(claim.session);
+    assert.equal((await f.admin('takeover',{customer},session.revision)).state,'saved');
+    await assert.rejects(f.commit(e.eventId,claim,{...f.decision('confirm'),confirmation:f.draft.confirmation}),/stale taxi operation/);
+    assert.equal(await f.scalar('SELECT mode FROM taxi_bot_sessions'),'human');assert.equal(await f.scalar('SELECT count(*)::int FROM viajes'),0);
+    assert.equal(await f.scalar("SELECT draft->>'confirmation'FROM taxi_bot_sessions"),null);assert.equal(await f.scalar("SELECT count(*)::int FROM taxi_bot_events WHERE state='processing'"),0);
+  }finally{await f.db.close();}
+});
+
+test('taxi admin SQL: manual replies require human ownership and enqueue once without claiming delivery',async()=>{
+  const f=await fixture();try{
+    await f.prepare();assert.equal((await f.admin('send',{customer,text:'Mensaje sintético de prueba'},1)).state,'send_forbidden');
+    await f.admin('takeover',{customer},1);const id=crypto.randomUUID(),payload={customer,text:'Mensaje sintético de prueba'};
+    assert.equal((await f.admin('send',payload,2,id)).state,'queued');assert.equal((await f.admin('send',payload,2,id)).state,'queued');
+    assert.equal(await f.scalar("SELECT count(*)::int FROM taxi_bot_outbox WHERE dedupe_key LIKE 'admin:%'"),1);assert.equal(await f.scalar('SELECT state FROM taxi_bot_outbox'),'pending');
+    const result=f.obj(await f.scalar('SELECT taxi_bot_admin_read($1,$2,$3,$4)',[tenant,waba,'operations',{customer}]));assert.ok(Array.isArray(result.sessions));const session=f.obj(result.sessions[0]);assert.ok(Array.isArray(session.history));assert.ok(session.history.some((h)=>f.obj(h).content===payload.text));
+    await f.db.exec("UPDATE taxi_bot_sessions SET last_source_at=clock_timestamp()-interval '25 hours'");assert.equal((await f.admin('send',{customer,text:'Otro mensaje'},3)).state,'send_forbidden');
+    assert.equal((await f.admin('resume',{customer},3)).state,'saved');assert.equal(await f.scalar('SELECT mode FROM taxi_bot_sessions'),'bot');assert.equal(await f.scalar("SELECT draft->>'confirmation'FROM taxi_bot_sessions"),null);
+  }finally{await f.db.close();}
+});
+test('taxi SQL: durable dedupe, rollback and replay create one trip and one notification set',async()=>{
+  const f=await fixture();try{
+    const id=crypto.randomUUID(),e=await f.enqueue('hola',customer,id),again=await f.enqueue('hola',customer,id);assert.equal(e.queueId,again.queueId);assert.equal(again.duplicate,true);
+    await assert.rejects(f.scalar('SELECT taxi_bot_enqueue($1,$2,$3,$4,$5)',[tenant,waba,{id,from:customer,to:waba,at:new Date().toISOString()},'b'.repeat(64),{}]),/identity conflict/);
+    const claim=await f.begin(e.eventId);await f.commit(e.eventId,claim,f.decision());
+    const created=await f.confirm();assert.ok(created.result.tripId);assert.equal(await f.scalar('SELECT count(*)::int FROM viajes'),1);
+    assert.equal((await f.begin(created.event.eventId)).state,'replay');
+    await f.commit(created.event.eventId,created.claim,{...f.decision('confirm'),confirmation:f.draft.confirmation});assert.equal(await f.scalar('SELECT count(*)::int FROM viajes'),1);
+  }finally{await f.db.close();}
+});
+test('taxi SQL: changed summaries invalidate old confirmation and forged reply recipients roll back',async()=>{
+  const f=await fixture();try{
+    await f.prepare();const e=await f.enqueue('Mejor otro destino'),claim=await f.begin(e.eventId);
+    await assert.rejects(f.commit(e.eventId,claim,{...f.decision(),messages:[{to:driverPhone,text:'forged'}]}),/recipient/);
+    const changed={...f.draft,confirmation:crypto.randomUUID()};await f.commit(e.eventId,claim,{...f.decision(),draft:changed});
+    const next=await f.enqueue('sí'),nextClaim=await f.begin(next.eventId);
+    await assert.rejects(f.commit(next.eventId,nextClaim,{...f.decision('confirm'),confirmation:f.draft.confirmation}),/not current/);
+    assert.equal(await f.scalar('SELECT count(*)::int FROM viajes'),0);
+  }finally{await f.db.close();}
+});
+
+test('taxi SQL: a pin awaiting its role persists without a usable confirmation and survives a new worker turn',async()=>{
+  const f=await fixture();try{
+    await f.prepare();const e=await f.enqueue('pin'),claim=await f.begin(e.eventId);
+    const pending={place:{text:'Ubicación compartida',lat:16.255,lng:-92.135,placeId:null},expiresAt:new Date(Date.now()+600000).toISOString()};
+    const draft={...f.draft,awaitingLocation:'choice',pendingLocation:pending};
+    await assert.rejects(f.commit(e.eventId,claim,{...f.decision(),draft}),/invalid summary/);
+    await f.commit(e.eventId,claim,{...f.decision(),draft:{...draft,confirmation:null,expiresAt:null}});
+    const next=await f.enqueue('Es el origen'),nextClaim=await f.begin(next.eventId),session=parseSession(nextClaim.session);
+    assert.equal(session.draft.pendingLocation?.place.lat,16.255);assert.equal(session.draft.confirmation,null);
+    await assert.rejects(f.commit(next.eventId,nextClaim,{...f.decision('confirm'),confirmation:f.draft.confirmation}),/not current/);
+    assert.equal(await f.scalar('SELECT count(*)::int FROM viajes'),0);
+  }finally{await f.db.close();}
+});
+
+test('taxi SQL: a summary without an expiry is rejected both on creation and confirmation',async()=>{
+  const f=await fixture();try{
+    const e=await f.enqueue('resumen'),claim=await f.begin(e.eventId);
+    await assert.rejects(f.commit(e.eventId,claim,{...f.decision(),draft:{...f.draft,expiresAt:null}}),/invalid summary/);
+    await f.commit(e.eventId,claim,f.decision());
+    await f.db.exec("UPDATE taxi_bot_sessions SET draft=jsonb_set(draft,'{expiresAt}','null')");
+    const next=await f.enqueue('Sí'),nextClaim=await f.begin(next.eventId);
+    await assert.rejects(f.commit(next.eventId,nextClaim,{...f.decision('confirm'),confirmation:f.draft.confirmation}),/not current/);
+    assert.equal(await f.scalar('SELECT count(*)::int FROM viajes'),0);
+  }finally{await f.db.close();}
+});
+
+test('taxi H3 SQL: exact scoped endpoints use the higher live catalog price, including two endpoints in one cell',async()=>{
+  const f=await fixture();try{
+    assert.equal(await f.scalar('SELECT pricing_mode FROM taxi_bot_channels'),'road_distance','An upgrade must preserve the old channel rule.');
+    await f.db.query("INSERT INTO taxi_bot_channels(tenant_id,waba,name,city,center_lat,center_lng,radius_km)VALUES($1,'+529630000088','Otra base sintética','Comitán',16.25,-92.13,20)",[tenant]);
+    assert.equal(await f.scalar("SELECT pricing_mode FROM taxi_bot_channels WHERE waba='+529630000088'"),'h3_zone_max');assert.equal(await f.scalar("SELECT count(*)::int FROM taxi_bot_h3_cells WHERE waba='+529630000088'"),0);
+    const scope=await f.seedH3();
+    const quote=f.obj(await f.scalar('SELECT taxi_bot_h3_quote($1,$2,$3,$4)',[tenant,waba,scope.originCell,scope.destinationCell]));assert.equal(quote.cents,6500);assert.equal(quote.state,'priced');
+    const same=f.obj(await f.scalar('SELECT taxi_bot_h3_quote($1,$2,$3,$3)',[tenant,waba,scope.originCell]));assert.equal(same.cents,4500);
+    await f.db.query('UPDATE h3_zonas SET precio=75.50 WHERE h3_index=$1',[scope.destinationCell]);
+    const updated=f.obj(await f.scalar('SELECT taxi_bot_h3_quote($1,$2,$3,$4)',[tenant,waba,scope.originCell,scope.destinationCell]));assert.equal(updated.cents,7550);
+    assert.equal(await f.scalar('SELECT count(*)::int FROM viajes'),0);
+  }finally{await f.db.close();}
+});
+
+test('taxi H3 SQL: a missing endpoint, another tenant or another channel never borrows a global zone price',async()=>{
+  const f=await fixture();try{
+    const scope=await f.seedH3();
+    await f.db.query('DELETE FROM taxi_bot_h3_cells WHERE h3_index=$1',[scope.destinationCell]);
+    const quote=f.obj(await f.scalar('SELECT taxi_bot_h3_quote($1,$2,$3,$4)',[tenant,waba,scope.originCell,scope.destinationCell]));assert.equal(quote.state,'uncovered');assert.equal(quote.cents,undefined);
+    for(const args of [[other,waba],[tenant,'+529630000055']]){
+      assert.equal(f.obj(await f.scalar('SELECT taxi_bot_h3_quote($1,$2,$3,$4)',[...args,scope.originCell,scope.destinationCell])).state,'channel_unavailable');
+    }
+    assert.equal(await f.scalar('SELECT count(*)::int FROM h3_zonas'),2);
+    await assert.rejects(f.db.query('INSERT INTO taxi_bot_h3_cells(tenant_id,waba,h3_index)VALUES($1,$2,$3)',[other,waba,scope.originCell]),/foreign key/);
+  }finally{await f.db.close();}
+});
+
+test('taxi H3 SQL: invalid resolution, amount or fraction leaves a pending fare instead of rounding or defaulting',async()=>{
+  const f=await fixture();try{
+    const scope=await f.seedH3();
+    for(const price of ['NaN','Infinity','-1','0','19.999','100001']){
+      await f.db.query('UPDATE h3_zonas SET precio=$1::numeric WHERE h3_index=$2',[price,scope.destinationCell]);
+      assert.equal(f.obj(await f.scalar('SELECT taxi_bot_h3_quote($1,$2,$3,$4)',[tenant,waba,scope.originCell,scope.destinationCell])).state,'invalid_zone');
+    }
+    await f.db.query('UPDATE h3_zonas SET precio=65,resolucion=9 WHERE h3_index=$1',[scope.destinationCell]);
+    assert.equal(f.obj(await f.scalar('SELECT taxi_bot_h3_quote($1,$2,$3,$4)',[tenant,waba,scope.originCell,scope.destinationCell])).state,'invalid_zone');
+    await assert.rejects(f.scalar('SELECT taxi_bot_h3_quote($1,$2,$3,$4)',[tenant,waba,'invalid-cell',scope.destinationCell]),/invalid taxi H3 cell/);
+  }finally{await f.db.close();}
+});
+
+test('taxi H3 SQL: quote and bindings are private and a disabled or distance-priced channel cannot return H3 prices',async()=>{
+  const f=await fixture();try{
+    const scope=await f.seedH3();
+    await f.db.exec('SET ROLE anon');await assert.rejects(f.scalar('SELECT count(*) FROM taxi_bot_h3_cells'),/permission denied/);await assert.rejects(f.scalar('SELECT taxi_bot_h3_quote($1,$2,$3,$4)',[tenant,waba,scope.originCell,scope.destinationCell]),/permission denied/);await f.db.exec('RESET ROLE');
+    await f.db.exec('SET ROLE service_role');assert.equal(f.obj(await f.scalar('SELECT taxi_bot_h3_quote($1,$2,$3,$4)',[tenant,waba,scope.originCell,scope.destinationCell])).cents,6500);await f.db.exec('RESET ROLE');
+    for(const update of ["pricing_mode='road_distance'","pricing_mode='h3_zone_max',enabled=false"]){
+      await f.db.exec('UPDATE taxi_bot_channels SET '+update);assert.equal(f.obj(await f.scalar('SELECT taxi_bot_h3_quote($1,$2,$3,$4)',[tenant,waba,scope.originCell,scope.destinationCell])).state,'channel_unavailable');
+    }
+  }finally{await f.db.close();}
+});
+
+test('taxi H3 SQL: changing a shown price before commit rolls back the trip and every side effect',async()=>{
+  const f=await fixture();try{
+    const scope=await f.seedH3(),e=await f.enqueue('Resumen H3'),claim=await f.begin(e.eventId);
+    await f.commit(e.eventId,claim,{...f.decision(),draft:{...f.draft,quoteCents:6500,quoteH3:scope}});
+    const confirm=await f.enqueue('Sí'),cc=await f.begin(confirm.eventId);
+    await f.db.query('UPDATE h3_zonas SET precio=75 WHERE h3_index=$1',[scope.destinationCell]);
+    await assert.rejects(f.commit(confirm.eventId,cc,{...f.decision('confirm'),confirmation:f.draft.confirmation,candidates:[{deviceId:1,name:'Unidad 1'}]}),/tariff changed/);
+    assert.equal(await f.scalar('SELECT count(*)::int FROM viajes'),0);assert.equal(await f.scalar('SELECT count(*)::int FROM taxi_bot_offers'),0);assert.equal(await f.scalar('SELECT count(*)::int FROM taxi_bot_outbox'),0);
+    await f.commit(confirm.eventId,cc,{...f.decision(),draft:{...f.draft,quoteCents:7500,quoteH3:scope,confirmation:crypto.randomUUID()}});
+    const next=await f.enqueue('Sí'),nc=await f.begin(next.eventId),stored=parseSession(nc.session);
+    await f.commit(next.eventId,nc,{...f.decision('confirm'),confirmation:stored.draft.confirmation,candidates:[{deviceId:1,name:'Unidad 1'}]});
+    assert.equal(await f.scalar('SELECT bot_quote_cents FROM viajes'),7500);assert.equal(await f.scalar('SELECT count(*)::int FROM viajes'),1);
+  }finally{await f.db.close();}
+});
+
+test('taxi H3 SQL: complete legacy consent without H3 scope cannot bypass the new review',async()=>{
+  const f=await fixture();try{
+    await f.seedH3();await f.prepare();await assert.rejects(f.confirm(),/H3 review required/);assert.equal(await f.scalar('SELECT count(*)::int FROM viajes'),0);
+  }finally{await f.db.close();}
+});
+
+test('taxi H3 integration: real service quote → current summary → recheck → SQL commit keeps the exact amount',async()=>{
+  const f=await fixture();try{
+    const scope=await f.seedH3(),event=await f.enqueue('Soy Persona Prueba, de Centro a Terminal'),claim=await f.begin(event.eventId);
+    const channel:TaxiChannel={tenantId:tenant,waba,enabled:true,name:'Base sintética',city:'Comitán',centerLat:16.25,centerLng:-92.13,radiusKm:20,dispatcher:'+529630000099',model:'fixture',baseCents:null,perKmCents:null,pricingMode:'h3_zone_max'};
+    const store:TrackingStore={read:async()=>{throw new Error('Undeclared catalog read.');},writeScores:async()=>{throw new Error('No score writes.');},rpc:async(name,args)=>{
+      assert.equal(name,'taxi_bot_h3_quote');return f.scalar('SELECT taxi_bot_h3_quote($1,$2,$3,$4)',[args.p_tenant,args.p_waba,args.p_origin,args.p_destination]);
+    }};
+    const noProvider:Fetcher=async()=>{throw new Error('No Maps/model call is declared for this deterministic fixture.');};
+    const services=createTaxiServices(store,noProvider,{mapsKey:'',modelKey:'',traccarUrl:'https://tracking.test/api',traccarEmail:'fixture@example.invalid',traccarPassword:'not-a-real-password'});
+    const current='Soy Persona Prueba, de Centro a Terminal';services.interpret=async(text)=>{assert.equal(text,current);return parseInterpretation({intent:'provide',fields:{name:{value:'Persona Prueba',evidence:current},origin:{value:'Centro',evidence:current},destination:{value:'Terminal',evidence:current}}},text);};
+    services.resolve=async(text)=>{assert.ok(text==='Centro'||text==='Terminal');return{kind:'resolved',place:text==='Centro'?f.draft.origin:f.draft.destination};};
+    services.candidates=async()=>[{deviceId:1,name:'Unidad 1'}];
+    const inbound:TaxiInbound={id:crypto.randomUUID(),from:customer,to:waba,at:new Date().toISOString(),type:'text',text:current,button:null,location:null};
+    const summary=await coordinateTaxi([inbound],parseSession(claim.session),channel,services,Date.now());assert.equal(summary.action,'draft');assert.equal(summary.draft.quoteCents,6500);assert.deepEqual(summary.draft.quoteH3,scope);
+    await f.commit(event.eventId,claim,{...summary});assert.equal(await f.scalar('SELECT count(*)::int FROM viajes'),0);
+    const confirmed=await f.enqueue('Sí'),cc=await f.begin(confirmed.eventId),decision=await coordinateTaxi([{...inbound,id:crypto.randomUUID(),text:'Sí'}],parseSession(cc.session),channel,services,Date.now());assert.equal(decision.action,'confirm');
+    await f.commit(confirmed.eventId,cc,{...decision});assert.equal(await f.scalar('SELECT bot_quote_cents FROM viajes'),6500);assert.deepEqual(await f.scalar('SELECT bot_quote_h3 FROM viajes'),scope);assert.equal(await f.scalar('SELECT count(*)::int FROM taxi_bot_offers'),1);
+    assert.match(String(await f.scalar("SELECT body->>'text' FROM taxi_bot_outbox WHERE dedupe_key LIKE 'offer:%'")),/65/);
+  }finally{await f.db.close();}
+});
+test('taxi SQL: only the offered driver accepts, first acceptance wins and duplicate acceptance is harmless',async()=>{
+  const f=await fixture();try{
+    await f.prepare();await f.confirm();const offers=(await f.db.query<Record<string,unknown>>('SELECT * FROM taxi_bot_offers ORDER BY device_id')).rows;assert.equal(offers.length,2);
+    const forged=await f.enqueue('botón',customer),fc=await f.begin(forged.eventId);await f.commit(forged.eventId,fc,{...f.decision('driver_accept'),offerId:offers[0].id});assert.equal(await f.scalar("SELECT count(*)::int FROM viajes WHERE estado='en_camino'"),0);
+    for(const [index,phone]of[driverPhone,'+529630000004'].entries()){
+      const e=await f.enqueue('botón',phone),c=await f.begin(e.eventId);await f.commit(e.eventId,c,{...f.decision('driver_accept'),offerId:offers[index].id});
+    }
+    assert.equal(await f.scalar("SELECT device_id FROM viajes WHERE estado='en_camino'"),1);
+    assert.equal(await f.scalar("SELECT count(*)::int FROM taxi_bot_outbox WHERE dedupe_key LIKE 'trip-assigned:%'"),1);
+    const again=await f.enqueue('botón',driverPhone),gc=await f.begin(again.eventId);await f.commit(again.eventId,gc,{...f.decision('driver_accept'),offerId:offers[0].id});assert.equal(await f.scalar("SELECT count(*)::int FROM viajes WHERE estado='en_camino'"),1);
+  }finally{await f.db.close();}
+});
+test('taxi SQL: tenant scope, private trips and protocol guards cannot be bypassed by old routes',async()=>{
+  const f=await fixture();try{
+    await f.prepare();await f.confirm(customer,[{deviceId:3,name:'Ajena'}]);assert.equal(await f.scalar('SELECT count(*)::int FROM taxi_bot_offers'),0);
+    await f.db.exec('SET ROLE anon');assert.equal(await f.scalar('SELECT count(*)::int FROM viajes'),0);await assert.rejects(f.scalar('SELECT taxi_bot_begin(gen_random_uuid())'),/permission denied/);await f.db.exec('RESET ROLE');
+    await f.db.exec('SET ROLE service_role');await assert.rejects(f.scalar("UPDATE viajes SET estado='en_camino'RETURNING id"),/protocol owns/);await f.db.exec('RESET ROLE');
+    const e=await f.enqueue('cancela',driverPhone),c=await f.begin(e.eventId),trip=await f.scalar('SELECT id FROM viajes');await f.commit(e.eventId,c,{...f.decision('cancel'),tripId:trip});assert.equal(await f.scalar('SELECT estado FROM viajes'),'buscando_conductor');
+  }finally{await f.db.close();}
+});
+test('taxi SQL: outbox acceptance is distinct from delivery; uncertain sends are never resent automatically',async()=>{
+  const f=await fixture();try{
+    const e=await f.enqueue('hola'),claim=await f.begin(e.eventId);await f.commit(e.eventId,claim,{...f.decision('reply'),messages:[{to:customer,text:'Hola'}]});
+    const rows=(await f.db.query<Record<string,unknown>>('SELECT * FROM taxi_bot_outbox_claim($1,$2)',[tenant,waba])).rows;assert.equal(rows.length,1);const m=rows[0];
+    assert.equal(await f.scalar('SELECT taxi_bot_outbox_complete($1,$2,$3,$4,$5)',[m.id,m.lease,'accepted','provider-fixture',null]),true);
+    assert.equal(await f.scalar('SELECT state FROM taxi_bot_outbox'),'accepted');
+    assert.equal(await f.scalar('SELECT taxi_bot_provider_status($1,$2,$3,$4,$5)',[m.id,'provider-fixture',waba,driverPhone,'read']),false);
+    assert.equal(await f.scalar('SELECT taxi_bot_provider_status($1,$2,$3,$4,$5)',[m.id,'provider-fixture',waba,customer,'read']),true);
+    assert.equal(await f.scalar('SELECT taxi_bot_provider_status($1,$2,$3,$4,$5)',[m.id,'provider-fixture',waba,customer,'accepted']),false);
+    const next=await f.enqueue('Otro mensaje'),nextClaim=await f.begin(next.eventId);await f.commit(next.eventId,nextClaim,{...f.decision('reply'),messages:[{to:customer,text:'Segundo mensaje'}]});
+    const sending=(await f.db.query<Record<string,unknown>>('SELECT * FROM taxi_bot_outbox_claim($1,$2)',[tenant,waba])).rows;assert.equal(sending.length,1);
+    await f.db.query("UPDATE taxi_bot_outbox SET lease_until=clock_timestamp()-interval '1 second'WHERE id=$1",[sending[0].id]);
+    assert.equal((await f.db.query('SELECT * FROM taxi_bot_outbox_claim($1,$2)',[tenant,waba])).rows.length,0);assert.equal(await f.scalar('SELECT state FROM taxi_bot_outbox WHERE id=$1',[sending[0].id]),'uncertain');assert.equal(await f.scalar('SELECT state FROM taxi_bot_outbox WHERE id=$1',[m.id]),'read');
+  }finally{await f.db.close();}
+});
+test('taxi SQL: human ownership survives subsequent replies and interpreter failures',async()=>{
+  const f=await fixture();try{
+    const e=await f.enqueue('persona real'),claim=await f.begin(e.eventId);await f.commit(e.eventId,claim,f.decision('human'));
+    const n=await f.enqueue('hola'),nc=await f.begin(n.eventId);assert.equal(f.obj(nc.session).mode,'human');await f.commit(n.eventId,nc,{...f.decision('reply'),messages:[{to:customer,text:'Should not send'}]});
+    assert.equal(await f.scalar('SELECT mode FROM taxi_bot_sessions'),'human');assert.equal(await f.scalar("SELECT count(*)::int FROM taxi_bot_outbox WHERE body->>'text'='Should not send'"),0);
+  }finally{await f.db.close();}
+});
+
+test('taxi SQL: a new correction during a confirmation supersedes the turn before any trip commit',async()=>{
+  const f=await fixture();try{
+    await f.prepare();const first=await f.enqueue('sí'),claim=await f.begin(first.eventId);assert.equal(claim.state,'proceed');
+    await f.enqueue('No, mejor otro destino');
+    const result=await f.commit(first.eventId,claim,{...f.decision('confirm'),confirmation:f.draft.confirmation,candidates:[{deviceId:1,name:'Unidad 1'}]});
+    assert.equal(result.state,'superseded');assert.equal(await f.scalar('SELECT count(*)::int FROM viajes'),0);
+    const next=await f.begin(first.eventId);assert.equal(next.state,'proceed');assert.ok(Array.isArray(next.messages));assert.equal(next.messages.length,2);
+    await f.commit(first.eventId,next,{...f.decision(),draft:{...f.draft,confirmation:null,expiresAt:null}});
+    assert.equal(await f.scalar("SELECT count(*)::int FROM taxi_bot_events WHERE state='completed'"),3);
+  }finally{await f.db.close();}
+});
+test('taxi SQL: expired offers cannot assign, a driver cannot take two trips and only its accepted offer finishes',async()=>{
+  const f=await fixture();try{
+    await f.prepare();await f.confirm();const first=(await f.db.query<Record<string,unknown>>('SELECT id,trip_id FROM taxi_bot_offers WHERE device_id=1')).rows[0];
+    await f.db.query("UPDATE taxi_bot_offers SET expires_at=clock_timestamp()-interval '1 second'WHERE id=$1",[first.id]);
+    const e=await f.enqueue('botón',driverPhone),c=await f.begin(e.eventId);await f.commit(e.eventId,c,{...f.decision('driver_accept'),offerId:first.id});assert.equal(await f.scalar("SELECT count(*)::int FROM viajes WHERE estado='en_camino'"),0);
+    await f.db.query("UPDATE taxi_bot_offers SET expires_at=clock_timestamp()+interval '1 minute'WHERE id=$1",[first.id]);
+    const accepted=await f.enqueue('botón',driverPhone),ac=await f.begin(accepted.eventId);await f.commit(accepted.eventId,ac,{...f.decision('driver_accept'),offerId:first.id});
+    const secondCustomer='+529630000008';await f.db.query('INSERT INTO taxi_bot_allowed_customers(tenant_id,phone)VALUES($1,$2)',[tenant,secondCustomer]);await f.prepare(secondCustomer);await f.confirm(secondCustomer,[{deviceId:1,name:'Unidad 1'}]);
+    assert.equal(await f.scalar('SELECT count(*)::int FROM taxi_bot_offers WHERE device_id=1'),1);
+    const forged=await f.enqueue('botón','+529630000004'),fc=await f.begin(forged.eventId);await f.commit(forged.eventId,fc,{...f.decision('driver_finish'),offerId:first.id});assert.equal(await f.scalar("SELECT count(*)::int FROM viajes WHERE estado='completado'"),0);
+    const finished=await f.enqueue('botón',driverPhone),finishClaim=await f.begin(finished.eventId);await f.commit(finished.eventId,finishClaim,{...f.decision('driver_finish'),offerId:first.id});assert.equal(await f.scalar("SELECT count(*)::int FROM viajes WHERE estado='completado'"),1);
+  }finally{await f.db.close();}
+});
+test('taxi SQL: messages to one recipient leave the outbox in durable order',async()=>{
+  const f=await fixture();try{
+    const e=await f.enqueue('hola'),claim=await f.begin(e.eventId);await f.commit(e.eventId,claim,{...f.decision('reply'),messages:[{to:customer,text:'Primero'},{to:customer,text:'Segundo'}]});
+    const first=(await f.db.query<Record<string,unknown>>('SELECT * FROM taxi_bot_outbox_claim($1,$2)',[tenant,waba])).rows;assert.equal(first.length,1);
+    assert.equal(f.obj(first[0].body).text,'Primero');
+    assert.equal((await f.db.query('SELECT * FROM taxi_bot_outbox_claim($1,$2)',[tenant,waba])).rows.length,0);
+    await f.scalar('SELECT taxi_bot_outbox_complete($1,$2,$3,$4,$5)',[first[0].id,first[0].lease,'accepted','fixture-1',null]);
+    assert.equal((await f.db.query('SELECT * FROM taxi_bot_outbox_claim($1,$2)',[tenant,waba])).rows.length,1);
+  }finally{await f.db.close();}
+});
+test('taxi SQL: timeout and attempts exhaustion leave durable human notifications without retrying side effects',async()=>{
+  const f=await fixture();try{
+    await f.prepare();await f.confirm();await f.db.exec("BEGIN;SELECT set_config('app.taxi_bot_write','on',true);UPDATE viajes SET created_at=clock_timestamp()-interval '13 minutes';COMMIT;");
+    assert.equal(await f.scalar('SELECT taxi_bot_maintain()'),1);assert.equal(await f.scalar('SELECT taxi_bot_maintain()'),0);assert.equal(await f.scalar('SELECT estado FROM viajes'),'cancelado_timeout');
+    const e=await f.enqueue('No entiendo');await f.db.query('UPDATE taxi_bot_events SET attempts=3 WHERE id=$1',[e.eventId]);
+    assert.equal((await f.begin(e.eventId)).state,'replay');assert.equal(await f.scalar('SELECT mode FROM taxi_bot_sessions WHERE customer=$1',[customer]),'human');
+    assert.equal(await f.scalar("SELECT count(*)::int FROM taxi_bot_outbox WHERE dedupe_key LIKE 'attempts-customer:%'"),1);
+  }finally{await f.db.close();}
+});
+test('taxi SQL: expired offers and superseded summaries are discarded before provider submission',async()=>{
+  const f=await fixture();try{
+    const initial=await f.enqueue('datos'),claim=await f.begin(initial.eventId);
+    await f.commit(initial.eventId,claim,{...f.decision(),messages:[{to:customer,text:'Resumen anterior',buttons:[{id:'txc_'+f.draft.confirmation,title:'Confirmar viaje'}]}]});
+    const correction=await f.enqueue('corrección'),cc=await f.begin(correction.eventId);await f.commit(correction.eventId,cc,{...f.decision(),draft:{...f.draft,confirmation:crypto.randomUUID()}});
+    await f.db.query('SELECT * FROM taxi_bot_outbox_claim($1,$2)',[tenant,waba]);assert.equal(await f.scalar("SELECT state FROM taxi_bot_outbox WHERE body->>'text'='Resumen anterior'"),'failed');
+    // Prepare a fresh summary and expire its resulting driver offer before sending.
+    await f.prepare();await f.confirm();await f.db.exec("UPDATE taxi_bot_offers SET expires_at=clock_timestamp()-interval '1 second'");
+    const claimed=(await f.db.query<Record<string,unknown>>('SELECT * FROM taxi_bot_outbox_claim($1,$2)',[tenant,waba])).rows;
+    assert.equal(claimed.some((r)=>String(r.dedupe_key).startsWith('offer:')),false);assert.equal(await f.scalar("SELECT state FROM taxi_bot_outbox WHERE dedupe_key LIKE 'offer:%'LIMIT 1"),'failed');
+  }finally{await f.db.close();}
+});
+test('taxi SQL: operator resume checks revision and does not revive old confirmation',async()=>{
+  const f=await fixture();try{
+    const e=await f.enqueue('humano'),claim=await f.begin(e.eventId);await f.commit(e.eventId,claim,f.decision('human'));
+    const revision=await f.scalar('SELECT revision FROM taxi_bot_sessions');assert.equal(await f.scalar('SELECT taxi_bot_resume($1,$2,$3,$4)',[other,waba,customer,revision]),false);
+    assert.equal(await f.scalar('SELECT taxi_bot_resume($1,$2,$3,$4)',[tenant,waba,customer,Number(revision)+1]),false);
+    assert.equal(await f.scalar('SELECT taxi_bot_resume($1,$2,$3,$4)',[tenant,waba,customer,revision]),true);
+    assert.equal(await f.scalar("SELECT draft->>'confirmation'FROM taxi_bot_sessions"),null);
+    await f.db.exec('SET ROLE anon');await assert.rejects(f.scalar('SELECT taxi_bot_resume($1,$2,$3,$4)',[tenant,waba,customer,revision]),/permission denied/);
+  }finally{await f.db.close();}
+});
+test('taxi SQL: service-only functions and live conversation limits remain enforced',async()=>{
+  const f=await fixture();try{
+    await f.db.exec('SET ROLE service_role');
+    const signatures=(await f.db.query<{signature:string}>("SELECT p.oid::regprocedure::text signature FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='public'AND p.proname LIKE 'taxi_bot_%'AND p.proname<>'taxi_bot_owns_tenant'")).rows;
+    for(const fn of signatures)assert.equal(await f.scalar("SELECT has_function_privilege('anon',$1,'EXECUTE')",[fn.signature]),false);
+    await f.db.exec('RESET ROLE');
+    await f.db.query('INSERT INTO taxi_bot_allowed_customers(tenant_id,phone)VALUES($1,$2),($1,$3),($1,$4)',[tenant,'+529630000011','+529630000012','+529630000013']);
+    const a=await f.enqueue('uno','+529630000011'),b=await f.enqueue('dos','+529630000012'),d=await f.enqueue('tres','+529630000013');
+    assert.equal((await f.begin(a.eventId)).state,'proceed');assert.equal((await f.begin(b.eventId)).state,'proceed');assert.equal((await f.begin(d.eventId)).state,'limited');
+  }finally{await f.db.close();}
+});
+
+test('taxi end-to-end: signed webhook → durable queue → real tool decoder → summary → one trip → provider ACK → driver acceptance',async()=>{
+  const f=await fixture();try{
+    const rpcArgs:Record<string,string[]>={taxi_bot_outbox_permitted:['p_id','p_lease'],taxi_bot_trace_start:['p_event','p_lease','p_revision','p_meta'],taxi_bot_trace_fail:['p_event','p_lease','p_code','p_packet'],taxi_bot_enqueue:['p_tenant','p_waba','p_message','p_hash','p_payload'],taxi_bot_begin:['p_event'],taxi_bot_commit:['p_event','p_lease','p_revision','p_decision'],taxi_bot_outbox_complete:['p_id','p_lease','p_state','p_provider','p_error'],taxi_bot_maintain:[]};
+    const store:TrackingStore={
+      read:async(table,q)=>{
+        if(table==='taxi_bot_channels')return(await f.db.query<Record<string,unknown>>('SELECT * FROM taxi_bot_channels WHERE waba=$1',[q.get('waba')?.slice(3)])).rows;
+        if(table==='empresas')return[{id:tenant,activo:true,tipo_negocio:'taxi',paquete:{activo:true,incluye_whatsapp:true,incluye_bot:false}}];
+        if(table==='taxi_bot_outbox')return(await f.db.query<Record<string,unknown>>("SELECT tenant_id,waba FROM taxi_bot_outbox WHERE state IN('pending','sending')ORDER BY created_at LIMIT 100")).rows;
+        throw new Error('Unexpected fixture read '+table);
+      },writeScores:async()=>{throw new Error('Taxi must not write driving scores.');},
+      rpc:async(name,args)=>{
+        if(name==='taxi_bot_pending')return(await f.db.query<Record<string,unknown>>('SELECT * FROM taxi_bot_pending()')).rows;
+        if(name==='taxi_bot_outbox_claim')return(await f.db.query<Record<string,unknown>>('SELECT * FROM taxi_bot_outbox_claim($1,$2)',[args.p_tenant,args.p_waba])).rows;
+        const keys=rpcArgs[name];if(!keys)throw new Error('Unexpected fixture RPC '+name);
+        return f.scalar('SELECT '+name+'('+keys.map((_,i)=>'$'+(i+1)).join(',')+')',keys.map((key)=>args[key]));
+      }
+    };
+    const current='Soy Persona Prueba, de Centro a Terminal';let modelCalls=0,providerCalls=0;
+    const modelProvider:Fetcher=async(url,init)=>{
+      modelCalls++;assert.equal(String(url),'https://api.deepseek.com/chat/completions');
+      const body:unknown=JSON.parse(String(init?.body));assert.ok(record(body)&&Array.isArray(body.tools)&&Array.isArray(body.messages));
+      const turn:unknown=body.messages[1];assert.ok(record(turn)&&typeof turn.content==='string');const input:unknown=JSON.parse(turn.content);assert.ok(record(input));
+      assert.equal(input.current,current,'No undeclared model decision may be automatically approved.');
+      return new Response(JSON.stringify({choices:[{finish_reason:'tool_calls',message:{role:'assistant',content:null,tool_calls:[{id:'call_sql',type:'function',function:{name:'actualizar_recorrido',arguments:JSON.stringify({fields:{name:{value:'Persona Prueba',evidence:current},origin:{value:'Centro',evidence:current},destination:{value:'Terminal',evidence:current}}})}}]}}],usage:{prompt_tokens:250,completion_tokens:70}}),{status:200});
+    };
+    const services:TaxiServices={interpret:(text,s,c,signal,observe)=>createTaxiInterpreter(modelProvider,'fixture-model-key',c.model,observe)(text,s,c,signal),resolve:async(text)=>({kind:'resolved',place:{text,lat:text==='Centro'?16.25:16.26,lng:text==='Centro'?-92.13:-92.14,placeId:null}}),quote:async()=>null,candidates:async()=>[{deviceId:1,name:'Unidad 1'}]};
+    const transport:Fetcher=async(url,init)=>{assert.equal(String(url),'https://api.ycloud.com/v2/whatsapp/messages');assert.equal(init?.method,'POST');providerCalls++;const body:unknown=JSON.parse(String(init?.body));assert.ok(record(body));assert.match(String(body.externalId),/^taxi:/);return new Response(JSON.stringify({id:'provider-fixture-'+providerCalls}),{status:202});};
+    const secret='fixture-signature-secret-not-real',workerSecret='fixture-worker-secret-at-least-32-characters';
+    const engine=new TaxiEngine(store,services,{webhookSecret:secret,workerSecret,ycloudKey:'fixture-key',now:()=>Date.now()},transport);
+    async function inbound(content:string,from=customer,id=crypto.randomUUID(),button:string|null=null){
+      const at=new Date().toISOString(),raw=JSON.stringify({createTime:at,type:'whatsapp.inbound_message',whatsappInboundMessage:{id,from,to:waba,type:button?'interactive':'text',...(button?{interactive:{button_reply:{id:button}}}:{text:{body:content}})}});
+      const timestamp=String(Math.floor(Date.now()/1000)),key=await crypto.subtle.importKey('raw',new TextEncoder().encode(secret),{name:'HMAC',hash:'SHA-256'},false,['sign']);
+      const hash=[...new Uint8Array(await crypto.subtle.sign('HMAC',key,new TextEncoder().encode(timestamp+'.'+raw)))].map((b)=>b.toString(16).padStart(2,'0')).join('');
+      const result=await engine.inbound(raw,`t=${timestamp},s=${hash}`);assert.equal(result?.status,200);
+      await f.db.exec("UPDATE taxi_bot_events SET received_at=clock_timestamp()-interval '2 seconds'WHERE state='pending'");return{raw,hash,timestamp,id};
+    }
+    const initial=await inbound(current);await engine.tick();assert.equal(modelCalls,1);assert.equal(await f.scalar('SELECT count(*)::int FROM viajes'),0);
+    assert.equal(await f.scalar("SELECT meta->>'engineVersion'FROM taxi_bot_turn_traces LIMIT 1"),'taxi-bot-v3-tools');
+    assert.equal(await f.scalar("SELECT meta->>'promptHash'FROM taxi_bot_turn_traces LIMIT 1"),await fingerprint(TAXI_INTERPRETER_CONTRACT));
+    const summary=f.obj(await f.scalar('SELECT draft FROM taxi_bot_sessions WHERE customer=$1',[customer]));assert.ok(summary.confirmation);
+    await engine.inbound(initial.raw,`t=${initial.timestamp},s=${initial.hash}`);await engine.tick();assert.equal(modelCalls,1);
+    await inbound('',customer,crypto.randomUUID(),'txc_'+summary.confirmation);await engine.tick();assert.equal(await f.scalar('SELECT count(*)::int FROM viajes'),1);assert.equal(modelCalls,1);
+    assert.ok(providerCalls>=3);assert.equal(await f.scalar("SELECT count(*)::int FROM taxi_bot_outbox WHERE state='delivered'"),0);
+    const offer=await f.scalar('SELECT id FROM taxi_bot_offers LIMIT 1');await inbound('',driverPhone,crypto.randomUUID(),'txa_'+offer);await engine.tick();assert.equal(await f.scalar('SELECT estado FROM viajes'),'en_camino');
+    assert.equal(await f.scalar("SELECT count(*)::int FROM taxi_bot_outbox WHERE dedupe_key LIKE 'trip-assigned:%'"),1);
+    await assert.rejects(engine.inbound(initial.raw,'t=0,s='+'0'.repeat(64)),/Firma/);
+    assert.equal(await engine.authorized(null),false);assert.equal(await engine.authorized(workerSecret),true);
+  }finally{await f.db.close();}
+});
+
+test('taxi admin SQL: the existing 2541-cell catalog is paginated separately from base coverage',async()=>{
+  const f=await fixture();try{
+    const localCatalog=readFileSync(new URL('../estrella-taxis-backend/supabase/h3_limpio.sql',import.meta.url),'utf8');
+    await f.db.exec(localCatalog);
+    const seen=new Set<string>();let after:string|undefined;
+    for(let pageNumber=0;pageNumber<27;pageNumber++){
+      const page=parseZones(await f.scalar('SELECT taxi_bot_admin_read($1,$2,$3,$4)',[tenant,waba,'zones',{source:'catalog',...(after?{after}:{})}]));
+      assert.equal(page.totalCells,2541);assert.equal(page.totalAreas,94);assert.ok(page.zones.length<=100);
+      for(const z of page.zones){assert.equal(z.assigned,false);assert.equal(seen.has(z.cell),false);seen.add(z.cell);}
+      if(!page.hasMore)break;after=page.zones.at(-1)?.cell;
+    }
+    assert.equal(seen.size,2541);assert.equal(await f.scalar('SELECT count(*)::int FROM taxi_bot_h3_cells'),0);
+    const base=parseZones(await f.scalar('SELECT taxi_bot_admin_read($1,$2,$3,$4)',[tenant,waba,'zones',{}]));assert.equal(base.totalCells,0);
+    const search=parseZones(await f.scalar('SELECT taxi_bot_admin_read($1,$2,$3,$4)',[tenant,waba,'zones',{source:'catalog',search:'Pilita Seca'}]));
+    assert.ok(search.zones.length>0);assert.ok(search.zones.every((z)=>z.label==='Pilita Seca'));
+    const viewport=parseZones(await f.scalar('SELECT taxi_bot_admin_read($1,$2,$3,$4)',[tenant,waba,'zones',{source:'catalog',cells:[...seen].slice(0,3)}]));assert.equal(viewport.zones.length,3);assert.equal(viewport.totalCells,2541);
+  }finally{await f.db.close();}
+});
+test('taxi admin SQL: catalog assignment preserves original prices, custom overrides and tenant isolation',async()=>{
+  const f=await fixture();try{
+    const scope=await f.seedH3(),request=crypto.randomUUID(),payload={cells:[scope.originCell,scope.destinationCell]};
+    await f.db.exec('DELETE FROM taxi_bot_h3_cells');
+    assert.equal((await f.admin('assign_catalog',payload,0,request)).state,'saved');
+    assert.equal((await f.admin('assign_catalog',payload,0,request)).state,'saved');
+    assert.equal(await f.scalar('SELECT revision FROM taxi_bot_channels'),1);assert.equal(await f.scalar('SELECT count(*)::int FROM taxi_bot_h3_cells'),2);
+    assert.equal(f.obj(await f.scalar('SELECT taxi_bot_h3_quote($1,$2,$3,$4)',[tenant,waba,scope.originCell,scope.destinationCell])).cents,6500);
+    await f.admin('upsert_zones',{cells:[scope.originCell],label:'Precio propio',cents:9000},1);
+    assert.equal((await f.admin('assign_catalog',payload,2)).state,'saved');assert.equal(await f.scalar('SELECT price_cents FROM taxi_bot_h3_cells WHERE h3_index=$1',[scope.originCell]),9000);
+    const page=parseZones(await f.scalar('SELECT taxi_bot_admin_read($1,$2,$3,$4)',[tenant,waba,'zones',{source:'catalog'}]));assert.ok(page.zones.every((z)=>z.assigned));assert.equal(page.zones.find((z)=>z.cell===scope.originCell)?.cents,4500);
+    const invalid=taxiH3Scope(f.draft.origin,{...f.draft.destination,lat:16.27,lng:-92.15}).destinationCell;
+    assert.equal((await f.admin('assign_catalog',{cells:[scope.originCell,invalid]},3)).state,'invalid_catalog');assert.equal(await f.scalar('SELECT revision FROM taxi_bot_channels'),3);assert.equal(await f.scalar('SELECT count(*)::int FROM h3_zonas'),2);
+    await assert.rejects(f.scalar('SELECT taxi_bot_admin_read($1,$2,$3,$4)',[other,waba,'zones',{source:'catalog'}]),/channel not found/);
+    assert.equal(await f.scalar('SELECT count(*)::int FROM taxi_bot_h3_cells WHERE tenant_id=$1',[other]),0);
+  }finally{await f.db.close();}
+});
+
+test('taxi admin SQL: a coverage change between review and commit rolls back trip, offers and notifications',async()=>{
+  const f=await fixture();try{
+    const scope=await f.seedH3();Object.assign(f.draft,{quoteCents:6500,quoteH3:scope});await f.prepare();
+    const e=await f.enqueue('Sí'),claim=await f.begin(e.eventId),before=await f.scalar('SELECT count(*)::int FROM taxi_bot_outbox');
+    const payload={name:'Base de prueba',city:'Comitán',dispatcher:'+529630000099',centerLat:16.25,centerLng:-92.13,radiusKm:0.1,pricingMode:'h3_zone_max',baseCents:null,perKmCents:null,enabled:true};
+    assert.equal((await f.admin('configure',payload)).state,'saved');
+    await assert.rejects(f.commit(e.eventId,claim,{...f.decision('confirm'),confirmation:f.draft.confirmation,candidates:[{deviceId:1,name:'Unidad 1'}]}),/taxi coverage changed/);
+    assert.equal(await f.scalar('SELECT count(*)::int FROM viajes'),0);assert.equal(await f.scalar('SELECT count(*)::int FROM taxi_bot_offers'),0);assert.equal(await f.scalar('SELECT count(*)::int FROM taxi_bot_outbox'),before);
+  }finally{await f.db.close();}
+});
+
+test('taxi trace SQL: commit and replay keep one completed trace tied to the original inputs',async()=>{
+ const f=await fixture();try{
+  const e=await f.enqueue('Soy Persona Prueba'),claim=await f.begin(e.eventId);
+  assert.equal(await f.scalar('SELECT state FROM taxi_bot_turn_traces'),'running');
+  await f.commit(e.eventId,claim,f.decision());assert.equal(await f.scalar('SELECT state FROM taxi_bot_turn_traces'),'committed');
+  assert.equal((await f.commit(e.eventId,claim,f.decision())).state,'replay');assert.equal(await f.scalar('SELECT count(*)::int FROM taxi_bot_turn_traces'),1);
+  assert.equal(await f.scalar('SELECT cardinality(event_ids)FROM taxi_bot_turn_traces'),1);assert.equal(await f.scalar('SELECT phase_after FROM taxi_bot_turn_traces'),'review');
+  assert.equal(await f.scalar('SELECT taxi_bot_trace_fail($1,$2,$3,$4)',[e.eventId,claim.lease,'external_failure',null]),false);assert.equal(await f.scalar('SELECT state FROM taxi_bot_turn_traces'),'committed');
+  await assert.rejects(f.scalar('SELECT taxi_bot_trace_start($1,$2,$3,$4)',[e.eventId,claim.lease,0,{version:'taxi-trace-v1'}]),/stale trace start/);
+ }finally{await f.db.close();}
+});
+test('taxi trace SQL: failures and lease recovery preserve distinct attempts instead of erasing the first error',async()=>{
+ const f=await fixture();try{
+  const e=await f.enqueue('datos'),claim=await f.begin(e.eventId);
+  assert.equal(await f.scalar('SELECT taxi_bot_trace_fail($1,$2,$3,$4)',[e.eventId,claim.lease,'storage_unavailable',null]),true);
+  await f.db.exec("UPDATE taxi_bot_sessions SET lease_until=clock_timestamp()-interval '1 second'");
+  const next=await f.begin(e.eventId);assert.equal(next.state,'proceed');assert.notEqual(next.lease,claim.lease);
+  await f.commit(e.eventId,next,f.decision());assert.equal(await f.scalar("SELECT count(*)::int FROM taxi_bot_turn_traces WHERE state='error'"),1);assert.equal(await f.scalar("SELECT count(*)::int FROM taxi_bot_turn_traces WHERE state='committed'"),1);
+  assert.equal(await f.scalar('SELECT count(*)::int FROM taxi_bot_quality_contacts'),1);
+ }finally{await f.db.close();}
+});
+test('taxi trace SQL: invalid telemetry is rejected atomically instead of storing arbitrary payloads',async()=>{
+ const f=await fixture();try{
+  const e=await f.enqueue('datos'),claim=await f.begin(e.eventId);
+  const invalid=[{}, {version:'taxi-trace-v1',steps:[],durationMs:-1},{version:'taxi-trace-v1',steps:[],durationMs:0,secret:'not permitted'}, {version:'taxi-trace-v1',steps:[{phase:'interpret'}],durationMs:0}, {version:'taxi-trace-v1',steps:[],durationMs:0,interpretationPrivate:{intent:'provide',fields:{name:{value:42,evidence:'42'}}}}];
+  for(const audit of invalid){assert.equal(await f.scalar('SELECT taxi_bot_trace_packet_valid($1)',[audit]),false);await assert.rejects(f.commit(e.eventId,claim,{...f.decision('confirm'),confirmation:f.draft.confirmation,audit}),/invalid trace packet/);}
+  assert.equal(await f.scalar('SELECT count(*)::int FROM viajes'),0);assert.equal(await f.scalar('SELECT count(*)::int FROM taxi_bot_outbox'),0);assert.equal(await f.scalar('SELECT state FROM taxi_bot_turn_traces'),'running');
+ }finally{await f.db.close();}
+});
+test('taxi trace SQL: a correction marks the attempt superseded and its next batch has both source events',async()=>{
+ const f=await fixture();try{
+  const e=await f.enqueue('datos'),claim=await f.begin(e.eventId);await f.enqueue('Mejor otra recogida');
+  assert.equal((await f.commit(e.eventId,claim,f.decision())).state,'superseded');assert.equal(await f.scalar('SELECT state FROM taxi_bot_turn_traces'),'superseded');
+  const next=await f.begin(e.eventId);await f.commit(e.eventId,next,f.decision());assert.equal(await f.scalar("SELECT cardinality(event_ids)FROM taxi_bot_turn_traces WHERE state='committed'"),2);assert.equal(await f.scalar('SELECT count(*)::int FROM viajes'),0);
+ }finally{await f.db.close();}
+});
+test('taxi lifecycle SQL: all state pairs agree with the declared graph and terminal states cannot reopen',async()=>{
+ const f=await fixture();try{
+  await f.prepare();await f.confirm();await f.db.exec("BEGIN;SELECT set_config('app.taxi_bot_write','on',true)");
+  const rows:{kind:Lifecycle;table:string;column:string;id:unknown;paths:Record<string,string[]>}[]=[
+   {kind:'trip',table:'viajes',column:'estado',id:await f.scalar('SELECT id FROM viajes LIMIT 1'),paths:{buscando_conductor:[],en_camino:['en_camino'],completado:['en_camino','completado'],cancelado:['cancelado'],cancelado_timeout:['cancelado_timeout']}},
+   {kind:'offer',table:'taxi_bot_offers',column:'state',id:await f.scalar('SELECT id FROM taxi_bot_offers LIMIT 1'),paths:{offered:[],accepted:['accepted'],rejected:['rejected'],revoked:['revoked'],expired:['expired'],finished:['accepted','finished']}},
+   {kind:'delivery',table:'taxi_bot_outbox',column:'state',id:await f.scalar('SELECT id FROM taxi_bot_outbox LIMIT 1'),paths:{pending:[],sending:['sending'],uncertain:['sending','uncertain'],accepted:['sending','accepted'],delivered:['sending','delivered'],read:['sending','read'],failed:['failed']}}];
+  let pairs=0;
+  for(const row of rows)for(const[before,path]of Object.entries(row.paths))for(const after of[...Object.keys(row.paths),'unknown']){
+   await f.db.exec('SAVEPOINT trial');for(const state of path)await f.db.query('UPDATE '+row.table+' SET '+row.column+'=$1 WHERE id=$2',[state,row.id]);
+   const beforeCount=await f.scalar('SELECT count(*)::int FROM taxi_bot_lifecycle_audit');await f.db.exec('SAVEPOINT change');
+   const allowed=before===after||LIFECYCLES[row.kind][before].includes(after);
+   if(allowed){await f.db.query('UPDATE '+row.table+' SET '+row.column+'=$1 WHERE id=$2',[after,row.id]);assert.equal(await f.scalar('SELECT '+row.column+' FROM '+row.table+' WHERE id=$1',[row.id]),after);}
+   else{await assert.rejects(f.db.query('UPDATE '+row.table+' SET '+row.column+'=$1 WHERE id=$2',[after,row.id]));await f.db.exec('ROLLBACK TO change');assert.equal(await f.scalar('SELECT '+row.column+' FROM '+row.table+' WHERE id=$1',[row.id]),before);assert.equal(await f.scalar('SELECT count(*)::int FROM taxi_bot_lifecycle_audit'),beforeCount);}
+   await f.db.exec('ROLLBACK TO trial');pairs++;
+  }
+  assert.equal(pairs,128);await f.db.exec('ROLLBACK');
+ }finally{await f.db.close();}
+});
+test('taxi quality SQL: aggregate views are scoped, bounded and keep review signals separate from confirmed errors',async()=>{
+ const f=await fixture();try{
+  await f.prepare();const from=new Date(Date.now()-86400000).toISOString(),to=new Date(Date.now()+1000).toISOString();
+  const result=f.obj(await f.scalar('SELECT taxi_bot_quality_read($1,$2,$3,$4)',[tenant,waba,'overview',{from,to}]));assert.equal(result.attempts,1);assert.equal(result.interpretationAttempts,0);assert.equal(result.confirmedInterpretationErrors,0);assert.equal(result.blindAccuracyMeasured,false);assert.ok(!JSON.stringify(result).includes(customer));
+  await assert.rejects(f.scalar('SELECT taxi_bot_quality_read($1,$2,$3,$4)',[other,waba,'overview',{from,to}]),/channel not found/);
+  await assert.rejects(f.scalar('SELECT taxi_bot_quality_read($1,$2,$3,$4)',[tenant,waba,'overview',{from:'2020-01-01',to}]),/window/);
+  await f.db.exec('SET ROLE anon');await assert.rejects(f.scalar('SELECT taxi_bot_quality_read($1,$2,$3,$4)',[tenant,waba,'overview',{from,to}]),/permission denied/);
+ }finally{await f.db.close();}
+});
+test('taxi quality SQL: human labels are idempotent, isolated and cannot move holdout contacts into training',async()=>{
+ const f=await fixture();try{
+  await f.db.exec("UPDATE taxi_bot_quality_secret SET salt='fixed-fixture-partition-secret'");
+  const expected={intent:'provide',fields:{name:{value:'Persona Prueba',evidence:'Soy Persona Prueba'}}};
+  const folds=['train','holdout'];let trainId:unknown;
+  for(const fold of folds){
+   const number=await f.scalar("SELECT '+52963'||lpad(n::text,7,'0')FROM generate_series(10,200)n WHERE CASE WHEN(('x'||substr(encode(sha256(convert_to('fixed-fixture-partition-secret'||'|'||$1||'|'||$2||'|'||'+52963'||lpad(n::text,7,'0'),'UTF8')),'hex'),1,8))::bit(32)::bigint%10)<7 THEN 'train'WHEN(('x'||substr(encode(sha256(convert_to('fixed-fixture-partition-secret'||'|'||$1||'|'||$2||'|'||'+52963'||lpad(n::text,7,'0'),'UTF8')),'hex'),1,8))::bit(32)::bigint%10)<9 THEN 'validation'ELSE 'holdout'END=$3 LIMIT 1",[tenant,waba,fold]);assert.equal(typeof number,'string');
+   await f.db.query('INSERT INTO taxi_bot_allowed_customers(tenant_id,phone)VALUES($1,$2)',[tenant,number]);
+   const e=await f.enqueue('Soy Persona Prueba',String(number)),claim=await f.begin(e.eventId);await f.commit(e.eventId,claim,f.decision());
+   const trace=await f.scalar('SELECT id FROM taxi_bot_turn_traces WHERE event_id=$1',[e.eventId]),id=crypto.randomUUID();
+   const args=[tenant,waba,trace,42,id,0,'correct',expected];const saved=f.obj(await f.scalar('SELECT taxi_bot_quality_review($1,$2,$3,$4,$5,$6,$7,$8)',args));assert.equal(saved.cohort,fold);assert.equal(saved.revision,1);
+   assert.deepEqual(await f.scalar('SELECT taxi_bot_quality_review($1,$2,$3,$4,$5,$6,$7,$8)',args),saved);
+   assert.equal(f.obj(await f.scalar('SELECT taxi_bot_quality_review($1,$2,$3,$4,$5,$6,$7,$8)',[tenant,waba,trace,42,crypto.randomUUID(),0,'correct',expected])).state,'revision_conflict');
+   if(fold==='train')trainId=trace;
+  }
+  const exported=f.obj(await f.scalar('SELECT taxi_bot_quality_read($1,$2,$3,$4)',[tenant,waba,'export',{}]));assert.equal(exported.synthetic,null);assert.equal(exported.source,'reviewed_whatsapp_events');assert.ok(Array.isArray(exported.cases));assert.equal(exported.cases.length,1);const row=f.obj(exported.cases[0]);assert.equal(row.cohort,'train');assert.equal(row.reviewer,42);assert.equal(String(row.contextHash).length,64);assert.equal(String(row.expectedHash).length,64);
+  assert.equal(await f.scalar('SELECT count(*)::int FROM taxi_bot_quality_reviews'),2);assert.equal(await f.scalar('SELECT count(*)::int FROM taxi_bot_quality_contacts'),2);assert.equal(await f.scalar('SELECT count(*)::int FROM taxi_bot_quality_contacts WHERE inspected_at IS NOT NULL'),2);
+  assert.equal(f.obj(await f.scalar('SELECT taxi_bot_quality_review($1,$2,$3,$4,$5,$6,$7,$8)',[tenant,waba,trainId,42,crypto.randomUUID(),1,'incomplete',null])).state,'saved');
+  const noTraining=f.obj(await f.scalar('SELECT taxi_bot_quality_read($1,$2,$3,$4)',[tenant,waba,'export',{}]));assert.deepEqual(noTraining.cases,[]);
+ }finally{await f.db.close();}
+});
+test('taxi trace SQL: retention is bounded and abandoned attempts remain distinguishable from successful commits',async()=>{
+ const f=await fixture();try{
+  const e=await f.enqueue('datos');await f.begin(e.eventId);
+  await f.db.exec("UPDATE taxi_bot_turn_traces SET started_at=clock_timestamp()-interval '4 minutes'");await f.scalar('SELECT taxi_bot_trace_maintain()');assert.equal(await f.scalar('SELECT state FROM taxi_bot_turn_traces'),'abandoned');
+  await f.db.exec("INSERT INTO taxi_bot_turn_traces(event_id,tenant_id,waba,lease,revision,contact_hash,event_ids,source_hashes,meta,phase_before,context_private,started_at)SELECT event_id,tenant_id,waba,gen_random_uuid(),revision,contact_hash,event_ids,source_hashes,meta,phase_before,context_private,clock_timestamp()-interval '31 days'FROM taxi_bot_turn_traces CROSS JOIN generate_series(1,201)");
+  await f.scalar('SELECT taxi_bot_trace_maintain()');assert.equal(await f.scalar("SELECT count(*)::int FROM taxi_bot_turn_traces WHERE started_at<clock_timestamp()-interval '30 days'"),1);assert.equal(await f.scalar('SELECT count(*)::int FROM taxi_bot_quality_contacts'),1);
+ }finally{await f.db.close();}
+});
+
+test('taxi engine trace SQL: a lost commit response cannot overwrite committed history or repeat model work',async()=>{
+ const f=await fixture();try{
+  const e=await f.enqueue('Hola');let modelCalls=0,commitCalls=0;
+  const keys:Record<string,string[]>={taxi_bot_begin:['p_event'],taxi_bot_trace_start:['p_event','p_lease','p_revision','p_meta'],taxi_bot_trace_fail:['p_event','p_lease','p_code','p_packet'],taxi_bot_commit:['p_event','p_lease','p_revision','p_decision']};
+  const store:TrackingStore={read:async(table)=>{if(table==='taxi_bot_channels')return(await f.db.query<Record<string,unknown>>('SELECT * FROM taxi_bot_channels')).rows;if(table==='empresas')return[{id:tenant,activo:true,tipo_negocio:'taxi',paquete:{activo:true,incluye_whatsapp:true}}];throw new Error('Unexpected table');},writeScores:async()=>{throw new Error('No score writes');},rpc:async(name,args)=>{const order=keys[name];assert.ok(order,'Every fixture RPC must be declared');const result=await f.scalar('SELECT '+name+'('+order.map((_,i)=>'$'+(i+1)).join(',')+')',order.map((key)=>args[key]));if(name==='taxi_bot_commit'){commitCalls++;throw new Error('Simulated lost HTTP response after the real commit');}return result;}};
+  const never=async():Promise<never>=>{throw new Error('Unexpected service');};const services:TaxiServices={interpret:async(current)=>{modelCalls++;assert.equal(current,'Hola');return{intent:'smalltalk',fields:{}};},resolve:never,quote:never,candidates:never};
+  const engine=new TaxiEngine(store,services,{webhookSecret:'fixture-signature-secret',workerSecret:'fixture-worker-secret-at-least-32-characters',ycloudKey:'fixture-key',now:()=>Date.now()},never);
+  await assert.rejects(engine.process(String(e.eventId)),/lost HTTP response/);
+  assert.equal(await f.scalar('SELECT state FROM taxi_bot_turn_traces'),'committed');assert.equal(await f.scalar('SELECT state FROM taxi_bot_events'),'completed');assert.equal(await f.scalar('SELECT count(*)::int FROM taxi_bot_outbox'),1);
+  assert.equal(await engine.process(String(e.eventId)),'replay');assert.equal(modelCalls,1);assert.equal(commitCalls,1);assert.equal(await f.scalar('SELECT count(*)::int FROM taxi_bot_turn_traces'),1);
+ }finally{await f.db.close();}
+});
+
+test('taxi trace SQL: derived phases match TypeScript and one lease cannot silently change its prompt version',async()=>{
+ const f=await fixture();try{
+  const now=Date.now();let combinations=0;
+  for(let fields=0;fields<8;fields++)for(const mode of['bot','human']as const)for(const state of[null,'buscando_conductor','en_camino']as const)for(const review of['fresh','expired','absent','choice']as const){
+   const draft={...emptyDraft(),name:fields&1?'Persona Prueba':null,origin:fields&2?f.draft.origin:null,destination:fields&4?f.draft.destination:null,confirmation:review==='absent'||review==='choice'?null:f.draft.confirmation,expiresAt:review==='absent'||review==='choice'?null:new Date(now+(review==='expired'?-1:60000)).toISOString(),awaitingLocation:review==='choice'?'choice' as const:null};
+   const active=state?{id:'44444444-4444-4444-8444-444444444444',state,taxiName:null}:null;
+   assert.equal(await f.scalar('SELECT taxi_bot_phase($1,$2,$3,$4)',[mode,draft,state,new Date(now).toISOString()]),conversationPhase({revision:0,mode,draft,history:[],active},now));combinations++;
+  }
+  assert.equal(combinations,192);
+  const e=await f.enqueue('datos'),claim=await f.begin(e.eventId),meta=f.obj(await f.scalar('SELECT meta FROM taxi_bot_turn_traces'));
+  assert.equal(await f.scalar('SELECT taxi_bot_trace_start($1,$2,$3,$4)',[e.eventId,claim.lease,0,meta]),true);
+  await assert.rejects(f.scalar('SELECT taxi_bot_trace_start($1,$2,$3,$4)',[e.eventId,claim.lease,0,{...meta,promptHash:'b'.repeat(64)}]),/trace start conflict/);
+  await assert.rejects(f.scalar('SELECT taxi_bot_trace_start($1,$2,$3,$4)',[e.eventId,claim.lease,0,{...meta,secret:'not permitted'}]),/metadata/);assert.equal(await f.scalar('SELECT count(*)::int FROM taxi_bot_turn_traces'),1);
+ }finally{await f.db.close();}
+});
+
+test('taxi training export SQL: cursor pagination has a byte budget and cannot drop or repeat reviewed cases',async()=>{
+ const f=await fixture();try{
+  const contact='f'.repeat(64);await f.db.query("INSERT INTO taxi_bot_quality_contacts(tenant_id,waba,contact_hash,cohort)VALUES($1,$2,$3,'train')",[tenant,waba,contact]);
+  await f.db.query("INSERT INTO taxi_bot_quality_cases(tenant_id,waba,contact_hash,cohort,label,revision,reviewer,source_hashes,context_private,expected_private)SELECT $1,$2,$3,'train','correct',1,42,'[]',jsonb_build_object('before',jsonb_build_object('history',repeat('x',70000))),jsonb_build_object('intent','smalltalk','fields','{}'::jsonb)FROM generate_series(1,30)",[tenant,waba,contact]);
+  const seen=new Set<string>();let after:string|undefined;let pages=0;
+  for(let i=0;i<30;i++){
+   const page=f.obj(await f.scalar('SELECT taxi_bot_quality_read($1,$2,$3,$4)',[tenant,waba,'export',after?{after}:{}]));assert.ok(Array.isArray(page.cases));assert.ok(page.cases.length<=25);assert.ok(Buffer.byteLength(JSON.stringify(page))<1100000);
+   for(const value of page.cases){const row=f.obj(value);assert.equal(typeof row.id,'string');assert.equal(seen.has(String(row.id)),false);seen.add(String(row.id));after=String(row.id);}
+   pages++;if(!page.hasMore)break;assert.ok(page.cases.length>0,'Byte limit must still allow progress');
+  }
+  assert.equal(seen.size,30);assert.ok(pages>1);
+ }finally{await f.db.close();}
+});
+
+test('taxi quality panel SQL: keyset paging preserves tied microseconds, bounds pages and exposes no message content',async()=>{
+ const f=await fixture();try{
+  await f.prepare();
+  await f.db.exec("UPDATE taxi_bot_turn_traces SET started_at='2026-10-28T12:00:00.123456Z';INSERT INTO taxi_bot_turn_traces(event_id,tenant_id,waba,lease,revision,contact_hash,event_ids,source_hashes,meta,phase_before,context_private,started_at)SELECT event_id,tenant_id,waba,gen_random_uuid(),revision,contact_hash,event_ids,source_hashes,meta,phase_before,context_private,started_at FROM taxi_bot_turn_traces CROSS JOIN generate_series(1,45)");
+  const input={from:'2026-10-28T00:00:00Z',to:'2026-10-29T00:00:00Z'};let after:{startedAt:string;id:string}|undefined;const ids=new Set<string>();let pages=0;
+  while(pages<4){const raw=await f.scalar('SELECT taxi_bot_quality_read($1,$2,$3,$4)',[tenant,waba,'attempts',{...input,...(after?{after}:{})}]),page=parseQualityPage(raw);assert.ok(page.items.length<=20);assert.ok(!JSON.stringify(raw).includes(customer));assert.ok(!JSON.stringify(raw).includes('Persona Prueba'));
+   for(const item of page.items){assert.equal(ids.has(item.id),false);ids.add(item.id);assert.ok(item.startedAt.includes('.123456'));after={startedAt:item.startedAt,id:item.id};}
+   pages++;if(!page.hasMore)break;
+  }
+  assert.equal(pages,3);assert.equal(ids.size,46);assert.equal(await f.scalar('SELECT count(*)::int FROM taxi_bot_quality_contacts WHERE inspected_at IS NOT NULL'),0);
+  await assert.rejects(f.scalar('SELECT taxi_bot_quality_read($1,$2,$3,$4)',[other,waba,'attempts',input]),/channel not found/);
+  await assert.rejects(f.scalar('SELECT taxi_bot_quality_read($1,$2,$3,$4)',[tenant,waba,'attempts',{...input,after:{}}]),/cursor/);
+ }finally{await f.db.close();}
+});
+test('taxi quality panel SQL: private case and saved correction match the strict UI contract',async()=>{
+ const f=await fixture();try{
+  await f.prepare();const traceId=String(await f.scalar('SELECT id FROM taxi_bot_turn_traces'));
+  const read=()=>f.scalar('SELECT taxi_bot_quality_read($1,$2,$3,$4)',[tenant,waba,'trace',{traceId}]);
+  const detail=parseQualityDetail(await read());assert.equal(detail.id,traceId);assert.equal(detail.messages[0].text,'A nombre de Persona Prueba');assert.equal(detail.review,null);assert.equal(detail.proposal,null);
+  const expected={intent:'provide',fields:{name:{value:'Persona Prueba',evidence:'A nombre de Persona Prueba'}}};
+  assert.equal(f.obj(await f.scalar('SELECT taxi_bot_quality_review($1,$2,$3,$4,$5,$6,$7,$8)',[tenant,waba,traceId,42,crypto.randomUUID(),0,'interpretation_error',expected])).state,'saved');
+  const reviewed=parseQualityDetail(await read());assert.equal(reviewed.review?.revision,1);assert.deepEqual(reviewed.review?.expected,expected);assert.equal(await f.scalar('SELECT count(*)::int FROM taxi_bot_quality_contacts WHERE inspected_at IS NOT NULL'),1);
+ }finally{await f.db.close();}
+});

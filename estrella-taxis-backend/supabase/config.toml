@@ -2,7 +2,7 @@
 # https://supabase.com/docs/guides/local-development/cli/config
 # A string used to distinguish different Supabase projects on the same host. Defaults to the
 # working directory name when running `supabase init`.
-project_id = "estrella-taxis-backend"
+project_id = "stellar-tracking"
 
 [api]
 enabled = true
@@ -426,8 +426,26 @@ entrypoint = "./functions/log-command/index.ts"
 
 [functions.calculate-driving-scores]
 enabled = true
+# Both tracking handlers authenticate the Traccar session and device scope themselves.
 verify_jwt = false
 entrypoint = "./functions/calculate-driving-scores/index.ts"
+
+[functions.ai-insights]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/ai-insights/index.ts"
+
+# Dedicated taxi protocol. The webhook verifies YCloud HMAC; the consumer requires
+# x-taxi-worker-secret. Disabled/unmatched channels fail closed before legacy code.
+[functions.ycloud-webhook]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/ycloud-webhook/index.ts"
+
+[functions.process-queue]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/process-queue/index.ts"
 
 [functions.generate-fillers]
 enabled = true
@@ -445,3 +463,6 @@ enabled = true
 verify_jwt = false
 entrypoint = "./functions/manage-catalog/index.ts"
 
+
+[functions.taxi-bot-admin]
+verify_jwt = false

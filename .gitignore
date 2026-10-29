@@ -29,3 +29,11 @@ dist-ssr
 ecosystem.config.cjs
 estrella-taxis-backend/ecosystem.config.cjs
 **/serviceAccountKey.json
+
+# Local verification, extracted references and CLI state
+.codex-tmp/
+.impeccable/review/
+Robins/
+**/.temp/
+**/.vercel/
+!.env.example

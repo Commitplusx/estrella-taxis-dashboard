@@ -1,4 +1,4 @@
-import React from 'react';
+import React, {lazy,Suspense} from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { AuthProvider, useAuth } from './context/AuthContext';
@@ -25,6 +25,7 @@ import CatalogPage from './pages/CatalogPage';
 import OrdersPage from './pages/OrdersPage';
 import InvoicesPage from './pages/InvoicesPage';
 import TrackPage from './pages/TrackPage';
+const TaxiBotAdminPage=lazy(()=>import('./pages/TaxiBotAdminPage'));
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
@@ -89,6 +90,8 @@ function AppRoutes() {
           <Route path="/users" element={<UsersPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/bot" element={<BotPage />} />
+          <Route path="/taxi-bot" element={<TaxiOnlyRoute><Suspense fallback={<p className="p-8">Cargando panel del bot…</p>}><TaxiBotAdminPage/></Suspense></TaxiOnlyRoute>} />
+          <Route path="/zonas-tarifas" element={<TaxiOnlyRoute><Suspense fallback={<p className="p-8">Cargando zonas y tarifas…</p>}><TaxiBotAdminPage zoneEditor/></Suspense></TaxiOnlyRoute>} />
           <Route path="/packages" element={<PackagesPage />} />
           <Route path="/catalog" element={<CatalogPage />} />
           <Route path="/orders" element={<OrdersPage />} />
@@ -103,6 +106,8 @@ function AppRoutes() {
 }
 
 export default function App() {
+  if(import.meta.env.DEV&&window.location.pathname==='/zonas-tarifas-diseno')return <Suspense fallback={<p className="p-8">Cargando zonas y tarifas…</p>}><TaxiBotAdminPage preview zoneEditor/></Suspense>;
+  if(import.meta.env.DEV&&window.location.pathname==='/taxi-bot-diseno')return <Suspense fallback={<p className="p-8">Cargando vista de diseño…</p>}><TaxiBotAdminPage preview/></Suspense>;
   return (
     <AuthProvider>
       <BrowserRouter>

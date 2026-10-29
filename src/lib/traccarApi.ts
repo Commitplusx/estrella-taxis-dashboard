@@ -3,6 +3,7 @@
 //  Todas las llamadas pasan por aquí con credentials
 // =====================================================
 
+import { readJson } from '../../estrella-taxis-backend/supabase/functions/_shared/tracking/http.ts';
 export const BASE_URL = '/api'; // Usa el proxy de Vite en Local y el de Vercel en Producción
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
@@ -110,8 +111,21 @@ export const api = {
     return request<TraccarEvent[]>(`/reports/events?${q}&type=${types}`);
   },
 
-  getRoute: (params: ReportParams) =>
-    request<TraccarPosition[]>(`/reports/route?${buildReportQuery(params)}`),
+  getRoute: async (params: ReportParams, signal?:AbortSignal) => {
+    const response=await fetch(`${BASE_URL}/reports/route?${buildReportQuery(params)}`,{credentials:'include',headers:{Accept:'application/json'},signal:signal?AbortSignal.any([signal,AbortSignal.timeout(15000)]):AbortSignal.timeout(15000)});
+    if (!response.ok) throw new Error(response.status===401?'La sesión de tracking venció.':'No pudimos consultar la ruta del GPS.');
+    const raw=await readJson(response,4194304);
+    if (!Array.isArray(raw) || raw.length>25000) throw new Error('La ruta supera el límite de datos. Reduce el periodo.');
+    return raw.map((item):TraccarPosition=>{
+      if (!item || typeof item!=='object' || !('id' in item) || typeof item.id!=='number' || !('deviceId' in item) || typeof item.deviceId!=='number' || !('latitude' in item) || typeof item.latitude!=='number' || !('longitude' in item) || typeof item.longitude!=='number' || !('fixTime' in item) || typeof item.fixTime!=='string') throw new Error('El GPS devolvió una posición no válida.');
+      const value:Record<string,unknown>=item;
+      if(typeof value.speed!=='number' || !Number.isFinite(value.speed) || value.speed<0)throw new Error('La ruta contiene una velocidad no válida.');
+      return {id:item.id,deviceId:item.deviceId,latitude:item.latitude,longitude:item.longitude,fixTime:item.fixTime,
+        serverTime:typeof value.serverTime==='string'?value.serverTime:item.fixTime,altitude:typeof value.altitude==='number'?value.altitude:0,speed:value.speed,
+        valid:typeof value.valid==='boolean'?value.valid:undefined,outdated:typeof value.outdated==='boolean'?value.outdated:undefined,
+        course:typeof value.course==='number'?value.course:0,address:typeof value.address==='string'?value.address:'',attributes:typeof value.attributes==='object' && value.attributes!==null && !Array.isArray(value.attributes)?value.attributes:{}};
+    });
+  },
 
   // ── Usuarios (solo Admin) ─────────────────────────
   getUsers: () => request<TraccarUser[]>('/users'),
@@ -257,6 +271,8 @@ export type TraccarDevice = {
 export type TraccarPosition = {
   id: number;
   deviceId: number;
+  valid?:boolean;
+  outdated?:boolean;
   deviceUniqueId?: string;
   serverTime: string;
   fixTime: string;

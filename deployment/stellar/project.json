@@ -1,0 +1,23 @@
+{
+  "name": "Stellar Tracking",
+  "projectId": "izrsxygazsalfhpaualj",
+  "organizationId": "zttiaomkvlgbhntgwral",
+  "organizationName": "Estrella orgs",
+  "region": "us-east-1",
+  "quotedCostUsdMonthly": 0,
+  "blockedDestinations": ["knghdwpxheenkpuajkxl", "jdrrkpvodnqoljycixbg", "jsuufgmhukfzhpgceowk", "zqwiqhdvwkvoufkdjbhm", "ynqphaxvoauzmqsempis"],
+  "sourceRoot": "estrella-taxis-backend",
+  "bootstrap": "deployment/stellar/supabase/migrations/20261029142013_stellar_independent_bootstrap.sql",
+  "runtimeHardening": [
+    "deployment/stellar/supabase/migrations/20261029142807_stellar_private_runtime.sql",
+    "deployment/stellar/supabase/migrations/20261029143500_stellar_relation_indexes.sql"
+  ],
+  "reviewedMigrations": [
+    "20261027190000_tracking_ai_integrity.sql",
+    "20261027220000_taxi_bot_transactions.sql",
+    "20261027223402_taxi_bot_h3_pricing.sql",
+    "20261028145826_taxi_bot_admin_zones.sql",
+    "20261028160342_taxi_bot_trace_state_quality.sql",
+    "20261029165842_taxi_customer_access.sql"
+  ]
+}

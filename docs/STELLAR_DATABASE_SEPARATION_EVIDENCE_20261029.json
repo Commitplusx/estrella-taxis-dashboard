@@ -1,0 +1,432 @@
+{
+  "recordedAtUtc": "2026-10-29T14:44:30.3039048Z",
+  "projectId": "ynqphaxvoauzmqsempis",
+  "organization": "Estrella envios",
+  "organizationId": "mbyjnogrvtptsdpgwtqr",
+  "region": "us-east-1",
+  "quotedCostUsdMonthly": 0,
+  "activation": "disabled_pending_private_configuration_and_channel_driver_mapping",
+  "migrations": [
+    {
+      "remoteVersion": "20261029142438",
+      "name": "stellar_independent_bootstrap",
+      "source": "deployment/stellar/supabase/migrations/20261029142013_stellar_independent_bootstrap.sql",
+      "sha256": "65cd207e7ad2a95f668bb1a43224f00778516424405e4d739eab6a75ce5971af"
+    },
+    {
+      "remoteVersion": "20261029142439",
+      "name": "tracking_ai_integrity",
+      "source": "estrella-taxis-backend/supabase/migrations/20261027190000_tracking_ai_integrity.sql",
+      "sha256": "201e95ae776d8afc4d790ed0ceb51324836b9840e3243592f81e55bd4e19d128"
+    },
+    {
+      "remoteVersion": "20261029142441",
+      "name": "taxi_bot_transactions",
+      "source": "estrella-taxis-backend/supabase/migrations/20261027220000_taxi_bot_transactions.sql",
+      "sha256": "20adb0d20a4e984a74c3ec78d0e94af240c936855559dca7467796e5b77529f0"
+    },
+    {
+      "remoteVersion": "20261029142442",
+      "name": "taxi_bot_h3_pricing",
+      "source": "estrella-taxis-backend/supabase/migrations/20261027223402_taxi_bot_h3_pricing.sql",
+      "sha256": "5e6c6cc500f16407d97bc034c7f88725c4d0f0e44f9273650c41f6c59d8e1465"
+    },
+    {
+      "remoteVersion": "20261029142443",
+      "name": "taxi_bot_admin_zones",
+      "source": "estrella-taxis-backend/supabase/migrations/20261028145826_taxi_bot_admin_zones.sql",
+      "sha256": "bd2bd45bf740d67460755929d918dfa20d7b3962774e41a763298d4acbcbec41"
+    },
+    {
+      "remoteVersion": "20261029142444",
+      "name": "taxi_bot_trace_state_quality",
+      "source": "estrella-taxis-backend/supabase/migrations/20261028160342_taxi_bot_trace_state_quality.sql",
+      "sha256": "40aff24486807465f445aa4233e5f37dddf473c9b7a2505b803fb8777c40c9eb"
+    },
+    {
+      "remoteVersion": "20261029142903",
+      "name": "stellar_private_runtime",
+      "source": "deployment/stellar/supabase/migrations/20261029142807_stellar_private_runtime.sql",
+      "sha256": "28901c945ab93b8c2e726eecbed84538b2129bea7e7ee54419a202f7f149d0d5"
+    },
+    {
+      "remoteVersion": "20261029143559",
+      "name": "stellar_relation_indexes",
+      "source": "deployment/stellar/supabase/migrations/20261029143500_stellar_relation_indexes.sql",
+      "sha256": "fa616eef750e6247f8b50db170e101e642943adc62bfb2a42881d5350271cd30"
+    }
+  ],
+  "edgeFunctions": [
+    {
+      "name": "ycloud-webhook",
+      "version": 1,
+      "status": "ACTIVE",
+      "files": [
+        {
+          "path": "ycloud-webhook/index.ts",
+          "sha256": "8264deec4e824537a3f3915dd56b2d2b7fd6e6e495de62eaddb6e40e5fe627af"
+        },
+        {
+          "path": "_shared/bot/taxis/runtime.ts",
+          "sha256": "3e1667d4badda2842664c27d141ab6c514df378fe485e55e73ebb63442e4cd4c"
+        },
+        {
+          "path": "_shared/tracking/http.ts",
+          "sha256": "85764359443be35e8dfbe22dd3e535564bf969444f12292b4e9eff568afe9075"
+        },
+        {
+          "path": "_shared/tracking/contracts.ts",
+          "sha256": "87955c6254674f049d9046d48b1be8f5c4d6226f454b334fa09abf870e2f750c"
+        },
+        {
+          "path": "_shared/tracking/store.ts",
+          "sha256": "95add739576573316707f7e603c69600b8f7995b9e1a7f8bea42dd4d8bd7ecad"
+        },
+        {
+          "path": "_shared/bot/taxis/engine.ts",
+          "sha256": "c1d8a38e6d3785eb454f145ee89ed5fc504937f768727685193d5614cd5cd233"
+        },
+        {
+          "path": "_shared/bot/taxis/trace.ts",
+          "sha256": "794cab7978c4f1d2bc3f5efa4a105888904377331988e1229274004b4c63e276"
+        },
+        {
+          "path": "_shared/bot/taxis/contracts.ts",
+          "sha256": "d0d8c1d35e8bb789bee38b34450e4496f2b7d31010ceaeadc5fd6d81f991ad12"
+        },
+        {
+          "path": "_shared/bot/taxis/h3.ts",
+          "sha256": "b85bd35b94323634e1a9a74e2c3fe8ecac941a290e2eb8acf2fc91b9a8517e68"
+        },
+        {
+          "path": "_shared/bot/taxis/coordinator.ts",
+          "sha256": "b28b36b9b9f0ea73b25dd30aef61d37c253e9f93b7cc72ce37abdb373bd768c3"
+        },
+        {
+          "path": "_shared/bot/taxis/stateMachine.ts",
+          "sha256": "1703cada201a245d5c455d366e3202a89ae3550a63737f2dae0d66dbc88a3ed6"
+        },
+        {
+          "path": "_shared/bot/taxis/policy.ts",
+          "sha256": "b7a3d77abfd7890bb5b664304018c8084595c0a9ce393a2438f3220643405cb1"
+        },
+        {
+          "path": "_shared/algorithms/headingMatcher.ts",
+          "sha256": "1593c4f6da3cfbcfb416666fa398fb31e99ea9b6b163ff17c55794aa302bac09"
+        },
+        {
+          "path": "_shared/tracking/fleetTypes.ts",
+          "sha256": "516467f5ce77487e45362a1be606d367b31ce23b79199e433034fe730e00da8d"
+        },
+        {
+          "path": "_shared/bot/taxis/interpreter.ts",
+          "sha256": "3307b515ecb4ea8b21810cdb85cc43e02498edd7bb34494da11698f52a4bb234"
+        },
+        {
+          "path": "_shared/bot/taxis/conversationTools.ts",
+          "sha256": "34afb9a66cf28f05261b95a755bf3ea59bdfff8187e8f1d459ad5a6c05c9dceb"
+        },
+        {
+          "path": "_shared/bot/taxis/transport.ts",
+          "sha256": "465578cbd92fd66dcee3cda6970b9ad815ae63eccc7e251777beb0fe4d789805"
+        },
+        {
+          "path": "_shared/bot/taxis/services.ts",
+          "sha256": "4983cf2bfc55a4afce389553f98e5e53faebb84a0f0f5f1c37225ad175352aa9"
+        },
+        {
+          "path": "_shared/tracking/auth.ts",
+          "sha256": "bdbc6062906a06cfaf0189b2a84997fe010ffee108205899f672dec7fc8b8a79"
+        },
+        {
+          "path": "ycloud-webhook/deno.json",
+          "sha256": "c2e6865101c767d010391f27380d33f4c55e137e5e27f56e937040d07d8d3a53"
+        }
+      ]
+    },
+    {
+      "name": "process-queue",
+      "version": 1,
+      "status": "ACTIVE",
+      "files": [
+        {
+          "path": "process-queue/index.ts",
+          "sha256": "e318256e7f65af22956aa686bc26ac2548cf7e4ea8be2fb7d3cfb7ae3edcbbb4"
+        },
+        {
+          "path": "_shared/bot/taxis/runtime.ts",
+          "sha256": "3e1667d4badda2842664c27d141ab6c514df378fe485e55e73ebb63442e4cd4c"
+        },
+        {
+          "path": "_shared/tracking/http.ts",
+          "sha256": "85764359443be35e8dfbe22dd3e535564bf969444f12292b4e9eff568afe9075"
+        },
+        {
+          "path": "_shared/tracking/contracts.ts",
+          "sha256": "87955c6254674f049d9046d48b1be8f5c4d6226f454b334fa09abf870e2f750c"
+        },
+        {
+          "path": "_shared/tracking/store.ts",
+          "sha256": "95add739576573316707f7e603c69600b8f7995b9e1a7f8bea42dd4d8bd7ecad"
+        },
+        {
+          "path": "_shared/bot/taxis/engine.ts",
+          "sha256": "c1d8a38e6d3785eb454f145ee89ed5fc504937f768727685193d5614cd5cd233"
+        },
+        {
+          "path": "_shared/bot/taxis/trace.ts",
+          "sha256": "794cab7978c4f1d2bc3f5efa4a105888904377331988e1229274004b4c63e276"
+        },
+        {
+          "path": "_shared/bot/taxis/contracts.ts",
+          "sha256": "d0d8c1d35e8bb789bee38b34450e4496f2b7d31010ceaeadc5fd6d81f991ad12"
+        },
+        {
+          "path": "_shared/bot/taxis/h3.ts",
+          "sha256": "b85bd35b94323634e1a9a74e2c3fe8ecac941a290e2eb8acf2fc91b9a8517e68"
+        },
+        {
+          "path": "_shared/bot/taxis/coordinator.ts",
+          "sha256": "b28b36b9b9f0ea73b25dd30aef61d37c253e9f93b7cc72ce37abdb373bd768c3"
+        },
+        {
+          "path": "_shared/bot/taxis/stateMachine.ts",
+          "sha256": "1703cada201a245d5c455d366e3202a89ae3550a63737f2dae0d66dbc88a3ed6"
+        },
+        {
+          "path": "_shared/bot/taxis/policy.ts",
+          "sha256": "b7a3d77abfd7890bb5b664304018c8084595c0a9ce393a2438f3220643405cb1"
+        },
+        {
+          "path": "_shared/algorithms/headingMatcher.ts",
+          "sha256": "1593c4f6da3cfbcfb416666fa398fb31e99ea9b6b163ff17c55794aa302bac09"
+        },
+        {
+          "path": "_shared/tracking/fleetTypes.ts",
+          "sha256": "516467f5ce77487e45362a1be606d367b31ce23b79199e433034fe730e00da8d"
+        },
+        {
+          "path": "_shared/bot/taxis/interpreter.ts",
+          "sha256": "3307b515ecb4ea8b21810cdb85cc43e02498edd7bb34494da11698f52a4bb234"
+        },
+        {
+          "path": "_shared/bot/taxis/conversationTools.ts",
+          "sha256": "34afb9a66cf28f05261b95a755bf3ea59bdfff8187e8f1d459ad5a6c05c9dceb"
+        },
+        {
+          "path": "_shared/bot/taxis/transport.ts",
+          "sha256": "465578cbd92fd66dcee3cda6970b9ad815ae63eccc7e251777beb0fe4d789805"
+        },
+        {
+          "path": "_shared/bot/taxis/services.ts",
+          "sha256": "4983cf2bfc55a4afce389553f98e5e53faebb84a0f0f5f1c37225ad175352aa9"
+        },
+        {
+          "path": "_shared/tracking/auth.ts",
+          "sha256": "bdbc6062906a06cfaf0189b2a84997fe010ffee108205899f672dec7fc8b8a79"
+        },
+        {
+          "path": "process-queue/deno.json",
+          "sha256": "c2e6865101c767d010391f27380d33f4c55e137e5e27f56e937040d07d8d3a53"
+        }
+      ]
+    },
+    {
+      "name": "taxi-bot-admin",
+      "version": 1,
+      "status": "ACTIVE",
+      "files": [
+        {
+          "path": "taxi-bot-admin/index.ts",
+          "sha256": "1d1647824fb649533a9ecde6e3a78b1b1c4aac53dafd8e05d94791fd7205a6c0"
+        },
+        {
+          "path": "_shared/tracking/auth.ts",
+          "sha256": "bdbc6062906a06cfaf0189b2a84997fe010ffee108205899f672dec7fc8b8a79"
+        },
+        {
+          "path": "_shared/tracking/contracts.ts",
+          "sha256": "87955c6254674f049d9046d48b1be8f5c4d6226f454b334fa09abf870e2f750c"
+        },
+        {
+          "path": "_shared/tracking/http.ts",
+          "sha256": "85764359443be35e8dfbe22dd3e535564bf969444f12292b4e9eff568afe9075"
+        },
+        {
+          "path": "_shared/tracking/store.ts",
+          "sha256": "95add739576573316707f7e603c69600b8f7995b9e1a7f8bea42dd4d8bd7ecad"
+        },
+        {
+          "path": "taxi-bot-admin/handler.ts",
+          "sha256": "64f3b1f471fa3e20917c90f7e663c47a6fbb049c9719790876917348b49d004d"
+        },
+        {
+          "path": "taxi-bot-admin/quality.ts",
+          "sha256": "6a28459309549ddfd85287cd2c93d9c2a5feba0cbdd57681126794befbe36a84"
+        },
+        {
+          "path": "_shared/bot/taxis/adminContracts.ts",
+          "sha256": "a848fe6fb653ba41676984855b62ba47e995f7380eff5f19ef420fa20f344d44"
+        },
+        {
+          "path": "_shared/bot/taxis/contracts.ts",
+          "sha256": "d0d8c1d35e8bb789bee38b34450e4496f2b7d31010ceaeadc5fd6d81f991ad12"
+        },
+        {
+          "path": "_shared/bot/taxis/h3.ts",
+          "sha256": "b85bd35b94323634e1a9a74e2c3fe8ecac941a290e2eb8acf2fc91b9a8517e68"
+        },
+        {
+          "path": "_shared/bot/taxis/policy.ts",
+          "sha256": "b7a3d77abfd7890bb5b664304018c8084595c0a9ce393a2438f3220643405cb1"
+        },
+        {
+          "path": "_shared/algorithms/headingMatcher.ts",
+          "sha256": "1593c4f6da3cfbcfb416666fa398fb31e99ea9b6b163ff17c55794aa302bac09"
+        },
+        {
+          "path": "_shared/tracking/fleetTypes.ts",
+          "sha256": "516467f5ce77487e45362a1be606d367b31ce23b79199e433034fe730e00da8d"
+        },
+        {
+          "path": "taxi-bot-admin/deno.json",
+          "sha256": "c2e6865101c767d010391f27380d33f4c55e137e5e27f56e937040d07d8d3a53"
+        }
+      ]
+    },
+    {
+      "name": "ai-insights",
+      "version": 1,
+      "status": "ACTIVE",
+      "files": [
+        {
+          "path": "ai-insights/index.ts",
+          "sha256": "aec8bc36447814014089b963279b0639c818010d98137d2cf53e6ffd16639abe"
+        },
+        {
+          "path": "_shared/tracking/runtime.ts",
+          "sha256": "174be37139f9cb7dc798b1ffcfdd58eba8f416bee4aab4aff8a06f188aa44305"
+        },
+        {
+          "path": "_shared/tracking/auth.ts",
+          "sha256": "bdbc6062906a06cfaf0189b2a84997fe010ffee108205899f672dec7fc8b8a79"
+        },
+        {
+          "path": "_shared/tracking/contracts.ts",
+          "sha256": "87955c6254674f049d9046d48b1be8f5c4d6226f454b334fa09abf870e2f750c"
+        },
+        {
+          "path": "_shared/tracking/http.ts",
+          "sha256": "85764359443be35e8dfbe22dd3e535564bf969444f12292b4e9eff568afe9075"
+        },
+        {
+          "path": "_shared/tracking/store.ts",
+          "sha256": "95add739576573316707f7e603c69600b8f7995b9e1a7f8bea42dd4d8bd7ecad"
+        },
+        {
+          "path": "ai-insights/handler.ts",
+          "sha256": "71e657504ec127c97b48657df904dcf2fd06964d50792cba5b072a470906ccdf"
+        },
+        {
+          "path": "_shared/tracking/insights.ts",
+          "sha256": "5a85e58876cecce8a06cf7d707dc51b46ff77a8f91dbdb471ce9e8297b5c78e4"
+        },
+        {
+          "path": "ai-insights/deno.json",
+          "sha256": "c2e6865101c767d010391f27380d33f4c55e137e5e27f56e937040d07d8d3a53"
+        }
+      ]
+    },
+    {
+      "name": "calculate-driving-scores",
+      "version": 1,
+      "status": "ACTIVE",
+      "files": [
+        {
+          "path": "calculate-driving-scores/index.ts",
+          "sha256": "e17d28cdbe02bed59cb3d605d6c3f088ba92de74024bb347061536a3dffa9e43"
+        },
+        {
+          "path": "_shared/tracking/runtime.ts",
+          "sha256": "174be37139f9cb7dc798b1ffcfdd58eba8f416bee4aab4aff8a06f188aa44305"
+        },
+        {
+          "path": "_shared/tracking/auth.ts",
+          "sha256": "bdbc6062906a06cfaf0189b2a84997fe010ffee108205899f672dec7fc8b8a79"
+        },
+        {
+          "path": "_shared/tracking/contracts.ts",
+          "sha256": "87955c6254674f049d9046d48b1be8f5c4d6226f454b334fa09abf870e2f750c"
+        },
+        {
+          "path": "_shared/tracking/http.ts",
+          "sha256": "85764359443be35e8dfbe22dd3e535564bf969444f12292b4e9eff568afe9075"
+        },
+        {
+          "path": "_shared/tracking/store.ts",
+          "sha256": "95add739576573316707f7e603c69600b8f7995b9e1a7f8bea42dd4d8bd7ecad"
+        },
+        {
+          "path": "calculate-driving-scores/handler.ts",
+          "sha256": "f6a6d3eca495a49a7cd35bd5cb8d902b182251b1316bc9a773a91fdf9ee4299e"
+        },
+        {
+          "path": "_shared/tracking/scoring.ts",
+          "sha256": "01dac951f8afcba1abb049fd0b539f0602f5d2251080fa5420b21ddab1d8dce1"
+        },
+        {
+          "path": "calculate-driving-scores/deno.json",
+          "sha256": "c2e6865101c767d010391f27380d33f4c55e137e5e27f56e937040d07d8d3a53"
+        }
+      ]
+    }
+  ],
+  "database": {
+    "publicTables": 24,
+    "rlsTables": 24,
+    "catalogH3Cells": 2541,
+    "namedZones": 94,
+    "configuredChannels": 0,
+    "drivers": 0,
+    "trips": 0,
+    "activeTenants": 0,
+    "legacyQueueTriggers": 0
+  },
+  "advisors": {
+    "warnings": 0,
+    "errors": 0,
+    "info": [
+      "rls_enabled_no_policy:22 private tables",
+      "unused_index:33 fresh project indexes"
+    ]
+  },
+  "tests": {
+    "deno": 4838,
+    "nodeSqlAndSeparation": 48,
+    "staticFiles": 48,
+    "entrypointsTypecheck": "passed",
+    "strictUiAndSqlTypes": "passed",
+    "webBuild": "passed",
+    "targetedLint": "passed",
+    "log": ".codex-tmp/stellar-separated-final.log",
+    "logSha256": "6abd9503223b25bfb8d63df34736fde7ded1840c7e197add70afb7f17b9a3491",
+    "physicalWhatsApp": "not_run",
+    "liveModelEvaluation": "not_run"
+  },
+  "vps": {
+    "release": "/opt/stellar-taxi-bot/releases/20261029-v3",
+    "workerStatus": "installed_not_started_pending_private_configuration",
+    "archiveSha256": "52d75c85545719cd3ace11743eacc061f6cd7d978c5f76b9b7287cedad5d6d38",
+    "traccar": "active",
+    "restaurantHealthHttp": 200,
+    "restaurantWorkerRestarts": 0,
+    "wialonBridgeRestarts": 0,
+    "bridgeUnchangedSha256": "6d8a9726f1e41cac61b8a0bda086015a464b6e911a31a83ffaa6662c3aad3591"
+  },
+  "clients": {
+    "web": "local_configuration_and_build_only_legacy_pages_still_pending",
+    "flutter": "unchanged",
+    "github": "not_pushed",
+    "vercel": "not_published"
+  }
+}

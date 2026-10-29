@@ -1,7 +1,25 @@
-# 🚕 Stellar Tracking — Guía de Arquitectura y Troubleshooting
+# Arquitectura General — Stellar Tracking / Pompeyo
 
-> Última actualización: Septiembre 2026  
-> Stack: Vite + React + TypeScript · Supabase (Edge Functions + Postgres) · Traccar · Vapi · YCloud · OpenAI · VPS Ubuntu (PM2)
+> **Estado posterior vigente — 29-10-2026:** [Clientes autorizados de Pompeyo](docs/STELLAR_AUTHORIZED_CUSTOMERS_20261029.md), proyecto independiente `izrsxygazsalfhpaualj` en Estrella orgs. Nueve migraciones publicadas; administrador v10 y webhook/consumidor v9. Acceso cerrado a clientes no listados; sólo el propietario terminado en 9156 está autorizado. Panel web y OpenStreetMap en local. Bot pausado, sin canales ni conductores registrados. Pompeyo es el único negocio de esta instalación; las notas de Robin’s/Estrella envios siguientes son historial.
+
+> **Estado remoto comprobado — 29-10-2026:** [Proyecto independiente Stellar Tracking](docs/STELLAR_DATABASE_SEPARATION_20261029.md), en Estrella envios. SQL y cinco funciones publicados; bot deshabilitado, consumidor instalado sin iniciar. GPS continúa Wialon → Traccar/MySQL. Configuración privada, canal, conductores y migración de clientes pendientes. Las notas siguientes son historial y no acreditan activación.
+
+> **Actualización local v3 — 29-10-2026:** [Herramientas de conversación para taxis](docs/TAXI_BOT_TOOLS_20261029.md). Una propuesta de función validada entra al coordinador existente; sin escritura directa del modelo ni cambios a SQL de reservas. Conserva las cuatro migraciones candidatas y sigue sin publicar/conectar el worker real. Robin’s permanece independiente.
+
+> **Actualización local v2 — 28-10-2026:** [Trazabilidad, máquinas de estados y revisión supervisada](docs/TAXI_BOT_TRACE_STATE_20261028.md). Nueva cuarta migración `20261028160342`, necesaria antes de ejecutar el motor nuevo. Sin publicar ni conectar un canal real. Las notas de pruebas anteriores se conservan como historial.
+
+> **Panel del bot de taxis — candidato local 28-10-2026:** [Uso, catálogo H3, tarifas por base y estado de publicación](docs/TAXI_BOT_ADMIN_20261028.md). Archivo local: 2,541 hexágonos / 94 nombres de zona; no equivalen a cobertura activada ni a conteo remoto verificado. API, migraciones y web siguen pendientes de publicación. Revisión visual final pendiente por bloqueo automático del navegador. No se ha conectado un canal real.
+
+> **Bot de taxis — candidato local actualizado 28-10-2026:** [Contrato, confirmación, asignación y outbox](docs/TAXI_BOT_20261027.md); [H3 integrado, tarifas por canal y evidencia](docs/TAXI_BOT_H3_20261028.md). Kaleb pidió priorizar esta IA y dejar la APK fuera. H3 está conectado en código y probado con SQL local; faltan el número/base, sus zonas revisadas y publicación. No se han hecho viajes/WhatsApps reales. El bot de Robin’s usado como referencia pertenece a su checkout independiente.
+
+> **Revisión vigente local — 27-10-2026:** [Integridad de IA, sesiones Traccar, score único y límites comprobados](docs/TRACKING_AI_HARDENING_20261027.md). Es candidato local, todavía sin publicar. Las secciones siguientes conservan el documento histórico de septiembre: mezclan versiones del bot y referencias no comprobadas de cron/predicción; no usarlas como evidencia del estado remoto.
+
+> Última actualización: Septiembre 2026
+> Stack: Vite + React + TypeScript · Supabase (Edge Functions + Postgres) · Traccar · YCloud · Gemini · VPS Ubuntu (PM2)
+
+> ⚠️ **Septiembre 2026 — SEPARACIÓN DE PROYECTOS**
+> El Bot de WhatsApp fue **completamente desacoplado** del dashboard de taxis.
+> Traccar ya NO forma parte del bot. El bot ahora opera como un SaaS independiente.
 
 ---
 
@@ -24,6 +42,29 @@
 
 ## 1. Visión General del Sistema
 
+### 1A. Bot de WhatsApp — Pollo Robin's SaaS (NUEVO — sin Traccar)
+
+```
+Cliente manda WhatsApp al número de la sucursal
+        │
+        ▼
+   [YCloud API]
+        │ Webhook inbound
+        ▼
+[VPS Ubuntu — bot-worker] ← process-queue/index.ts (PM2, Puerto 3002)
+        │
+        ├─► GATEKEEPING MULTI-TENANT:
+        │      Busca toNumber en sucursales.telefono → empresa_id (tenant)
+        │      Fallback: busca en empresas.telefono_whatsapp
+        │
+        ├──► [Gemini 3.6 Flash]        → IA que razona y ejecuta herramientas
+        ├──► [Supabase DB]             → Historial, sesiones, pedidos, catálogo (RAG)
+        ├──► [Google Maps API]         → Geocodificación de entregas (opcional)
+        └──► [YCloud API]              → Responde al cliente por WhatsApp
+```
+
+### 1B. Dashboard de Taxis — Stellar Tracking (intacto)
+
 ```
 Cliente manda WhatsApp
         │
@@ -31,43 +72,26 @@ Cliente manda WhatsApp
    [YCloud API]
         │ Webhook inbound
         ▼
-[VPS Ubuntu — bot-worker] ← process-queue/index.ts corriendo con PM2
+[VPS Ubuntu — bot-worker] ← process-queue/index.ts
         │
-        ├──► [OpenAI gpt-4o]          → IA que razona y decide qué herramienta usar
-        ├──► [OpenAI text-embedding-3-small] → Vector semántico para buscar en el catálogo
-        ├──► [Supabase DB] → Lee historial, guarda sesión, inserta pedidos/viajes
-        ├──► [Supabase pgvector] → Búsqueda semántica del catálogo (RAG)
-        ├──► [Traccar API] → Busca taxi más cercano (Heading Matcher)
-        ├──► [Google Maps API] → Geocodifica la dirección del cliente
-        └──► [YCloud API] → Responde al cliente por WhatsApp
+        ├──► [Traccar API]             → Busca taxi más cercano (Heading Matcher)
+        ├──► [Supabase DB]             → Historial, sesiones, viajes
+        ├──► [Google Maps API]         → Geocodifica el origen del cliente
+        └──► [YCloud API]              → Responde al cliente por WhatsApp
 
 Cliente llama por teléfono
         │
         ▼
-   [VAPI] ──────────────────────────────────────────────────────────────┐
-   Plataforma de IA de voz                                              │
-   Transcribe la llamada y ejecuta herramientas                         │
-        │                                                               │
+   [VAPI] ─────────────────────────────────────────────────────────────┐
         │ Webhook tool-call (book_taxi)                                 │
         ▼                                                               │
-[vapi-webhook] ← Supabase Edge Function                                 │
-        │                                                               │
-        ├──► [Google Maps API] → Geocodifica el origen del cliente      │
-        │                                                               │
-        ├──► [Traccar API] → Encuentra taxi más cercano (con heading)   │
-        │                                                               │
-        ├──► [Supabase DB] → Guarda el viaje + token de tracking        │
-        │                                                               │
-        ├──► [YCloud WhatsApp] → Manda link de tracking al CLIENTE      │
-        │                                                               │
-        └──► [YCloud WhatsApp] → Manda resumen del viaje al DESPACHADOR │
-                                                                        │
-Cliente abre WhatsApp → link /track/:token                             │
-        │                                                               │
-        ▼                                                               │
-[track-position] ← Supabase Edge Function (poll cada 5s)              │
-        │                                                               │
-        └──► [Traccar API] → Lee posición GPS en tiempo real ──────────┘
+[vapi-webhook] ← Supabase Edge Function                                │
+        ├──► [Traccar API] → Taxi más cercano                          │
+        ├──► [Supabase DB] → Viaje + token de tracking                 │
+        └──► [YCloud WhatsApp] → Link de tracking al cliente ──────────┘
+
+[track-position] ← Edge Function (poll 5s)
+        └──► [Traccar API] → Posición GPS en tiempo real
 ```
 
 ---
@@ -76,17 +100,16 @@ Cliente abre WhatsApp → link /track/:token                             │
 
 | Servicio | Qué hace en el sistema | URL / Panel |
 |---|---|---|
-| **VPS (74.208.153.209)** | Servidor Ubuntu que corre el **bot-worker de WhatsApp** bajo PM2. Es el cerebro del chat: recibe mensajes de YCloud, los procesa con OpenAI, ejecuta herramientas y responde. | SSH: `root@74.208.153.209` · Gestor: PM2 (app #4 `bot-worker`) |
-| **Wialon** | Proveedor original de los GPS (Kotan). Extraemos de aquí la telemetría en bruto. | `https://hosting.wialon.com` |
-| **Traccar** | GPS en tiempo real, historial de rutas, velocidad, heading, ignición | `https://taxis.estrella-eats.mx` |
+| **VPS (74.208.153.209)** | Servidor Ubuntu que corre el **bot-worker de WhatsApp** bajo PM2. Puerto 3002. | SSH: `root@74.208.153.209` · Gestor: PM2 (app #4 `bot-worker`) |
+| **Wialon** | Proveedor de telemetría GPS (solo para el dashboard de taxis). | `https://hosting.wialon.com` |
+| **Traccar** | GPS en tiempo real, heading, ignición. **Solo para el dashboard de taxis — el bot ya NO lo usa.** | `https://taxis.estrella-eats.mx` |
 | **Supabase** | Base de datos, Edge Functions, Auth, Storage, Realtime | `https://supabase.com/dashboard/project/knghdwpxheenkpuajkxl` |
-| **OpenAI** | LLM (`gpt-4o`) para razonamiento del bot · Embeddings (`text-embedding-3-small`) para búsqueda vectorial RAG | `https://platform.openai.com` |
-| **Vapi** | Bot de voz IA, transcripción, manejo de llamadas PSTN | `https://dashboard.vapi.ai` |
-| **YCloud** | Envío y recepción de WhatsApp Business (webhook inbound + mensajes outbound al cliente y despachador) | `https://app.ycloud.com` |
-| **Google Maps** | Geocodificación del origen del cliente, mapa en el frontend | `https://console.cloud.google.com` |
-| **Telnyx** | Número de teléfono que Vapi usa para recibir llamadas | `https://portal.telnyx.com` |
-| **Loyalty Estrella** | Proyecto principal del ecosistema. Conexión vía API para validación de clientes y lógica cruzada. | `https://app-estrella.shop` |
-| **Vercel / Hosting** | Sirve el frontend (Vite build) | `https://stellar.estrella-eats.mx` |
+| **Gemini (Google)** | LLM (`gemini-3.6-flash`) — razonamiento del bot de WhatsApp | API via `generativelanguage.googleapis.com` |
+| **Vapi** | Bot de voz IA, transcripción, llamadas PSTN (solo dashboard taxis) | `https://dashboard.vapi.ai` |
+| **YCloud** | Envío y recepción de WhatsApp Business | `https://app.ycloud.com` |
+| **Google Maps** | Geocodificación de entregas a domicilio | `https://console.cloud.google.com` |
+| **Telnyx** | Número de teléfono para Vapi (solo taxis) | `https://portal.telnyx.com` |
+| **Vercel / Hosting** | Sirve el frontend del dashboard de taxis | `https://stellar.estrella-eats.mx` |
 
 ---
 
@@ -150,7 +173,7 @@ estrella-taxis-backend/supabase/functions/
 
 ### `vapi-webhook` ⭐ La más importante
 
-**Ruta:** `POST /functions/v1/vapi-webhook?tenantId={uuid}`  
+**Ruta:** `POST /functions/v1/vapi-webhook?tenantId={uuid}`
 **Propósito:** Punto de entrada de toda la IA de voz. Vapi la llama en dos momentos:
 
 | Tipo de mensaje | Qué hace |
@@ -168,58 +191,58 @@ estrella-taxis-backend/supabase/functions/
 
 ### `track-position` 🆕
 
-**Ruta:** `GET /functions/v1/track-position?token={token}`  
-**Propósito:** Sirve la posición en tiempo real del taxi asignado a un viaje. La página `/track/:token` lo llama cada 5 segundos.  
+**Ruta:** `GET /functions/v1/track-position?token={token}`
+**Propósito:** Sirve la posición en tiempo real del taxi asignado a un viaje. La página `/track/:token` lo llama cada 5 segundos.
 **Caching:** La sesión de Traccar se cachea 10 minutos a nivel de módulo para no hacer login en cada poll.
 
 ---
 
 ### `traccar-webhook`
 
-**Ruta:** `POST /functions/v1/traccar-webhook`  
+**Ruta:** `POST /functions/v1/traccar-webhook`
 **Propósito:** Recibe eventos de Traccar (geofence entrada/salida, velocidad excedida, ignición) y los procesa para guardarlos en Supabase o mandar alertas por WhatsApp.
 
 ---
 
 ### `whatsapp-webhook`
 
-**Ruta:** `POST /functions/v1/whatsapp-webhook`  
+**Ruta:** `POST /functions/v1/whatsapp-webhook`
 **Propósito:** Recibe notificaciones de entrega/lectura de YCloud. Ignora los webhooks de confirmación de YCloud para no procesarlos como alertas reales.
 
 ---
 
 ### `calculate-driving-scores`
 
-**Ruta:** `POST /functions/v1/calculate-driving-scores`  
-**Propósito:** Calcula el score de manejo diario para cada vehículo (velocidad, frenadas, tiempo activo). Se ejecuta automáticamente cada noche a las 23:45 vía cron configurado en `supabase/config.toml`.  
+**Ruta:** `POST /functions/v1/calculate-driving-scores`
+**Propósito:** Calcula el score de manejo diario para cada vehículo (velocidad, frenadas, tiempo activo). Se ejecuta automáticamente cada noche a las 23:45 vía cron configurado en `supabase/config.toml`.
 **Parámetros opcionales:** `{ "date": "2026-08-31" }` o `{ "deviceId": 5 }`
 
 ---
 
 ### `log-command`
 
-**Ruta:** `POST /functions/v1/log-command`  
+**Ruta:** `POST /functions/v1/log-command`
 **Propósito:** Registra comandos enviados a las unidades GPS (inmovilizador, alarma, etc.) en la tabla `command_logs`.
 
 ---
 
 ### `ai-insights`
 
-**Ruta:** `POST /functions/v1/ai-insights`  
+**Ruta:** `POST /functions/v1/ai-insights`
 **Propósito:** Genera análisis inteligentes del comportamiento de la flota usando IA.
 
 ---
 
 ### `generate-fillers`
 
-**Ruta:** `POST /functions/v1/generate-fillers`  
+**Ruta:** `POST /functions/v1/generate-fillers`
 **Propósito:** Genera frases de espera para el bot de voz mientras procesa.
 
 ---
 
 ### `welcome-email`
 
-**Ruta:** `POST /functions/v1/welcome-email`  
+**Ruta:** `POST /functions/v1/welcome-email`
 **Propósito:** Envía el correo de bienvenida cuando se crea un nuevo usuario.
 
 ---
@@ -390,7 +413,7 @@ Características de robustez implementadas:
 1. Jitter Anti-Spam: El ciclo de sincronización no es fijo. Se usa un delay aleatorio de 25s a 35s para simular tráfico humano y evitar bloqueos.
 2. Inyección Paralela: Usa Promise.all para mandar las 17 coordenadas a Traccar simultáneamente.
 3. Fetch Timeouts: AbortSignal de 15s para Wialon y 5s para Traccar evita cuelgues de red.
-6. Mapeo de Parámetros: 
+6. Mapeo de Parámetros:
    - io_3 (Kotan): Traducido a `occupied` (0 = Ocupado, 1 = Libre).
    - pwr_int / battery: Traducido a nivel de batería (0-100%).
    - io_239 / ignition: Traducido a estado del motor.
@@ -412,44 +435,71 @@ El sistema ya no usa distancias en línea recta simple (Haversine). Ahora calcul
 
 > **IP:** `74.208.153.209` · **OS:** Ubuntu · **Gestor:** PM2 · **Runtime:** Deno
 
-Esta es la pieza más crítica de la arquitectura del bot de WhatsApp. A diferencia de las Edge Functions de Supabase (que son stateless y tienen límites de tiempo), el bot-worker corre como un **servidor HTTP persistente** en el VPS, gestionado por PM2.
+> ⚠️ **CAMBIO CRÍTICO — Septiembre 2026**
+> El bot ya **NO usa Traccar**. La lógica de taxis (`traccar.ts`, `headingMatcher.ts`, `antiFugas.ts`, herramientas `book_taxi`/`cancelar_viaje`) fue **eliminada por completo** del bot.
+> El bot es ahora un SaaS puro de mensajería para restaurantes, farmacias y cualquier otro negocio.
+
+### Arquitectura del bot (nueva)
+
+| Antes | Ahora |
+|---|---|
+| Tenant vía `empresas.telefono_whatsapp` | **Tenant vía `sucursales.telefono`** → `empresa_id` |
+| Incluía lógica de taxis, conductores, viajes | Sin taxis. Solo pedidos, catálogo, facturación |
+| `traccar.ts`, `headingMatcher.ts`, `antiFugas.ts` | **Eliminados** del bot |
+| IA: OpenAI gpt-4o | **IA: Gemini 3.6 Flash** |
 
 ### Por qué existe el VPS (y no todo está en Supabase Edge Functions)
 
 | Edge Functions (Supabase) | Bot-Worker (VPS) |
 |---|---|
 | Máximo 2 minutos de ejecución | Sin límite de tiempo |
-| Sin estado entre llamadas | Puede mantener colas y locks en memoria |
-| Buenas para operaciones rápidas (webhook de Traccar, scoring) | Ideal para el loop de procesamiento de mensajes con debounce, locks de sesión y reintentos |
+| Sin estado entre llamadas | Mantiene colas y locks en memoria |
+| Buenas para operaciones rápidas (webhooks, scoring) | Ideal para debounce (10s), spin-lock de sesión y reintentos |
 
-### Estructura de archivos en el VPS
+### Estructura de archivos en el VPS (estado actual)
 
 ```
 /opt/bot-worker/
 ├── ecosystem.config.cjs        ← Config de PM2: nombre, script, env vars
 └── functions/
     ├── process-queue/
-    │   └── index.ts            ← Servidor HTTP principal. Recibe webhooks de YCloud.
+    │   └── index.ts            ← Servidor HTTP. Recibe webhooks de YCloud.
+    │                              ✅ Multi-tenant via sucursales.telefono
+    │                              ✅ Sin lógica de taxis/Traccar
     └── _shared/
-        ├── whatsapp.ts         ← Envío de mensajes, listas, botones a YCloud
-        ├── geo.ts              ← Geocodificación con Google Maps
-        ├── traccar.ts          ← Login + búsqueda de taxi más cercano
+        ├── whatsapp.ts         ← Mensajes, listas, botones, media a YCloud
+        ├── geo.ts              ← Geocodificación (Google Maps)
         └── bot/
             ├── core/
             │   ├── types.ts         ← Tipos compartidos
-            │   ├── router.ts        ← Despacha por tipo_negocio al dominio correcto
-            │   ├── commonTools.ts   ← Herramientas genéricas (catálogo, ubicación, escalar)
-            │   └── toolSchemas.ts   ← Definición de tools para OpenAI
+            │   ├── router.ts        ← Despacha herramientas por tipo_negocio
+            │   ├── commonTools.ts   ← Herramientas genéricas
+            │   ├── geminiVision.ts  ← Análisis visual de tickets/comprobantes
+            │   ├── toolSchemas.ts   ← Definición de tools para Gemini
+            │   └── zodSchemas.ts    ← Validación de argumentos de tools
             ├── restaurante/
             │   ├── prompt.ts        ← Prompt del tomador de pedidos
-            │   └── tools.ts         ← enviar_pedido, cotizar_envio, mostrar_menu_lista
-            ├── taxis/
-            │   ├── prompt.ts
-            │   └── tools.ts         ← book_taxi, cotizar_viaje, cancelar_viaje
+            │   └── tools.ts         ← enviar_pedido, mostrar_menu_lista, cotizar_envio
             ├── farmacia/
             │   └── prompt.ts
             └── otro/
                 └── prompt.ts
+```
+
+### Fuente de verdad local: `pollo-robins-panel/`
+
+El código del VPS se sincroniza desde la carpeta local:
+```
+estrella-taxis-dashboard/
+└── pollo-robins-panel/        ← Proyecto Bot SaaS independiente
+    ├── web/                   ← Panel admin React/Vite (Admin Panel)
+    └── supabase/
+        └── functions/
+            ├── _shared/       ← Código compartido del bot (SIN Traccar)
+            ├── process-queue/ ← Bot worker (copia al VPS)
+            ├── ycloud-webhook/
+            ├── admin-create-user/
+            └── admin-create-sucursal/
 ```
 
 ### Flujo interno del bot-worker (por cada mensaje)
@@ -491,25 +541,23 @@ Esta es la pieza más crítica de la arquitectura del bot de WhatsApp. A diferen
 
 ### Variables de entorno del VPS
 
-> ⚠️ **IMPORTANTE — Dos fuentes de variables:**
-> - **`OPENAI_API_KEY`**: Está **hardcodeada directamente** en `ecosystem.config.cjs` en disco (es la única con el valor real en el archivo).
-> - **El resto** (`YCLOUD_API_KEY`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `YCLOUD_SENDER`): El archivo tiene placeholders (`TU_SUPABASE_URL`, etc.) pero están inyectadas como valores reales en el proceso PM2 en memoria — probablemente vía `pm2 set` o `pm2 restart --update-env`.
->
 > Para ver **todas** las variables activas reales del proceso:
 > ```bash
 > pm2 env 4
 > ```
 
-| Variable | Descripción | Estado |
+| Variable | Descripción | Requerida |
 |---|---|---|
-| `PORT` | Puerto donde escucha el bot-worker (`3002`) | ✅ |
+| `PORT` | Puerto del bot-worker (`3002`) | ✅ |
 | `SUPABASE_URL` | URL del proyecto Supabase | ✅ |
 | `SUPABASE_SERVICE_ROLE_KEY` | Service role key (bypass de RLS) | ✅ |
-| `OPENAI_API_KEY` | Clave de OpenAI para `gpt-4o` (LLM) y `text-embedding-3-small` (embeddings RAG) | ✅ |
+| `GEMINI_API_KEY` | Clave de Gemini para `gemini-3.6-flash` (IA del bot) | ✅ |
 | `YCLOUD_API_KEY` | API key de YCloud para enviar mensajes | ✅ |
-| `YCLOUD_SENDER` | Número de WhatsApp Business de fallback. **En la práctica no se usa como sender principal** — ver nota abajo | ⚠️ |
-| `GOOGLE_MAPS_API_KEY` | Geocodificación de direcciones (cotizar envío, destinos de taxi) | ❌ No configurada |
-| `TRACCAR_URL` | URL de la API de Traccar | ✅ |
+| `YCLOUD_SENDER` | Número WhatsApp Business de fallback | ⚠️ Solo fallback |
+| `GOOGLE_MAPS_API_KEY` | Geocodificación de entregas a domicilio | Opcional |
+| `APP_URL` | URL pública del panel (para links al cliente) | Opcional |
+
+> ❌ **`TRACCAR_URL`, `TRACCAR_EMAIL`, `TRACCAR_PASSWORD`** ya no son necesarias en el bot-worker. El bot no habla con Traccar.
 
 ### Cómo funciona el número de salida (YCLOUD_SENDER vs toNumber)
 
@@ -627,16 +675,15 @@ Estas variables viven **sólo en el VPS** y son independientes de los Secrets de
 
 | Variable | Descripción |
 |---|---|
-| `OPENAI_API_KEY` | Clave de OpenAI para `gpt-4o-mini` (LLM) y `text-embedding-3-small` (embeddings RAG) |
-| `YCLOUD_API_KEY` | API key de YCloud (igual que en Supabase, pero configurada en PM2) |
-| `YCLOUD_SENDER` | Número WhatsApp Business (`+52963...`) |
-| `SUPABASE_URL` | URL de Supabase (para leer/escribir pedidos, sesiones, empresas) |
+| `GEMINI_API_KEY` | Clave de Gemini (`gemini-3.6-flash`) — IA del bot |
+| `YCLOUD_API_KEY` | API key de YCloud para enviar/recibir WhatsApp |
+| `YCLOUD_SENDER` | Número WhatsApp Business de fallback |
+| `SUPABASE_URL` | URL de Supabase |
 | `SUPABASE_SERVICE_ROLE_KEY` | Service role key de Supabase |
-| `GOOGLE_MAPS_API_KEY` | Geocodificación de direcciones de entrega |
-| `TRACCAR_URL` | URL de la API de Traccar |
-| `TRACCAR_EMAIL` | Email de acceso a Traccar |
-| `TRACCAR_PASSWORD` | Contraseña de Traccar |
-| `PORT` | Puerto donde escucha el bot-worker (`3002`) |
+| `GOOGLE_MAPS_API_KEY` | Geocodificación de entregas (opcional) |
+| `PORT` | Puerto del bot-worker (`3002`) |
+
+> ❌ **Eliminadas del bot:** `TRACCAR_URL`, `TRACCAR_EMAIL`, `TRACCAR_PASSWORD` — El bot ya no se comunica con Traccar.
 
 ### Frontend `.env`
 ```
@@ -714,7 +761,7 @@ Los planes se configuran en la tabla `paquetes` de Supabase y se asignan a cada 
 
 ### 🔴 El bot no responde
 
-1. Verificar que Vapi tenga el webhook apuntando a:  
+1. Verificar que Vapi tenga el webhook apuntando a:
    `https://knghdwpxheenkpuajkxl.supabase.co/functions/v1/vapi-webhook`
 2. Verificar que el número de Telnyx esté asociado al asistente en Vapi.
 3. Revisar logs: **Supabase → Edge Functions → vapi-webhook → Logs**
@@ -735,8 +782,8 @@ Los planes se configuran en la tabla `paquetes` de Supabase y se asignan a cada 
 
 ### 🔴 Traccar no encuentra taxis (No session cookie)
 
-1. Verificar secret `TRACCAR_URL` — debe incluir `/api` al final:  
-   ✅ `https://taxis.estrella-eats.mx/api`  
+1. Verificar secret `TRACCAR_URL` — debe incluir `/api` al final:
+   ✅ `https://taxis.estrella-eats.mx/api`
    ❌ `https://taxis.estrella-eats.mx`
 2. Verificar `TRACCAR_EMAIL` y `TRACCAR_PASSWORD` en Secrets.
 3. En logs buscar: `[TRACCAR LOGIN] Cookie obtenida: SÍ ✓` o `NO ✗`.

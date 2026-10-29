@@ -1,5 +1,5 @@
-import { TraccarDevice, TraccarPosition } from "../traccar.ts";
-import { z } from "https://esm.sh/zod@3.22.4";
+import type { TraccarDevice, TraccarPosition } from '../tracking/fleetTypes.ts';
+import { flag } from '../tracking/contracts.ts';
 
 /**
  * Módulo de Enrutamiento Vectorial (Heading Matcher)
@@ -13,11 +13,8 @@ import { z } from "https://esm.sh/zod@3.22.4";
  */
 
 // 1. Zod Schemas para Validación Estricta
-const CoordSchema = z.number().min(-90).max(90);
-const LngSchema = z.number().min(-180).max(180);
-
 export function isValidCoord(lat: number, lng: number): boolean {
-  return CoordSchema.safeParse(lat).success && LngSchema.safeParse(lng).success;
+  return Number.isFinite(lat) && Number.isFinite(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180;
 }
 
 // 2. Result Pattern
@@ -67,6 +64,7 @@ export interface OptimalTaxiResult {
   distanceKm: number;
   deviceId: number;
   performanceMs: number;
+  effectiveDistanceKm: number;
 }
 
 export function findOptimalTaxi(
@@ -74,18 +72,30 @@ export function findOptimalTaxi(
   positions: TraccarPosition[], 
   clientLat: number, 
   clientLng: number,
-  maxRadiusKm: number = 10
+  maxRadiusKm: number = 10,
+  nowMs: number = Date.now()
 ): Result<OptimalTaxiResult[]> {
   const startMs = performance.now();
   
   if (!Array.isArray(positions) || positions.length === 0) return { success: false, error: "No positions available" };
   if (!Array.isArray(devices) || devices.length === 0) return { success: false, error: "No devices available" };
   if (!isValidCoord(clientLat, clientLng)) return { success: false, error: "Invalid client coordinates" };
+  if (!Number.isFinite(nowMs) || !Number.isFinite(maxRadiusKm) || maxRadiusKm <= 0 || maxRadiusKm > 100 || devices.length > 50000 || positions.length > 100000) {
+    return { success: false, error: "Invalid dispatch limits" };
+  }
 
-  let scoredTaxis: { device: TraccarDevice; effectiveDist: number; rawDist: number }[] = [];
-
+  const scoredTaxis: { device: TraccarDevice; effectiveDist: number; rawDist: number }[] = [];
+  const byId = new Map(devices.map((device) => [device.id, device]));
+  const latest = new Map<number, TraccarPosition>();
   for (const pos of positions) {
+    if (!pos || !Number.isSafeInteger(pos.deviceId) || pos.deviceId <= 0) continue;
+    const previous = latest.get(pos.deviceId);
+    if (!previous || Date.parse(pos.fixTime ?? '') >= Date.parse(previous.fixTime ?? '') || !Number.isFinite(Date.parse(previous.fixTime ?? ''))) latest.set(pos.deviceId, pos);
+  }
+
+  for (const pos of latest.values()) {
     if (!pos || !pos.deviceId || !isValidCoord(pos.latitude, pos.longitude)) continue;
+    if (pos.valid === false || pos.outdated === true) continue;
 
     // Fast-path: Bounding box culling (O(1) simple math)
     if (!isWithinBoundingBox(clientLat, clientLng, pos.latitude, pos.longitude, maxRadiusKm * 1.5)) {
@@ -94,30 +104,31 @@ export function findOptimalTaxi(
 
     // Filtrar taxis apagados o sin señal (GPS > 10 mins de antigüedad)
     const MAX_AGE_MS = 10 * 60 * 1000;
-    const fixTime = new Date(pos.fixTime || 0).getTime();
-    if (Date.now() - fixTime > MAX_AGE_MS) {
+    const fixTime = Date.parse(pos.fixTime ?? '');
+    if (!Number.isFinite(fixTime) || nowMs - fixTime > MAX_AGE_MS || fixTime > nowMs + 30000) {
       continue;
     }
 
     // Filtrar taxis con motor apagado (si el GPS lo reporta)
-    if (pos.attributes && pos.attributes.ignition === false) {
+    if (pos.attributes && flag(pos.attributes.ignition) === false) {
       continue;
     }
 
     // Filtrar taxis ocupados (ignorar si attributes.occupied es 'true' o true)
-    if (pos.attributes && (pos.attributes.occupied === 'true' || pos.attributes.occupied === true)) {
+    if (pos.attributes && flag(pos.attributes.occupied) === true) {
       continue; // Ignorar taxis que ya llevan pasaje
     }
 
-    const device = devices.find(d => d.id === pos.deviceId);
-    if (!device) continue;
+    const device = byId.get(pos.deviceId);
+    if (!device || device.status === 'offline') continue;
 
     // Slow-path: Haversine
     const rawDistance = getDistanceFromLatLonInKm(pos.latitude, pos.longitude, clientLat, clientLng);
     if (rawDistance > maxRadiusKm * 1.5) continue;
 
     const bearing = getBearing(pos.latitude, pos.longitude, clientLat, clientLng);
-    const taxiCourse = Number.isFinite(pos.course) ? pos.course! : 0;
+    const courseKnown = typeof pos.course === 'number' && Number.isFinite(pos.course) && pos.course >= 0 && pos.course < 360;
+    const taxiCourse = courseKnown ? pos.course! : 0;
     const taxiSpeedKmh = (Number.isFinite(pos.speed) ? pos.speed! : 0) * 1.852; 
     
     const angleDiff = getAngleDifference(taxiCourse, bearing);
@@ -128,7 +139,7 @@ export function findOptimalTaxi(
     // La penalización NO debe crecer con la distancia, ya que hacer una vuelta en U toma el mismo tiempo a 1km que a 10km.
     let penaltyKm = 0;
 
-    if (taxiSpeedKmh > 5) { // Solo si el vehículo está en movimiento
+    if (taxiSpeedKmh > 5 && courseKnown) {
       if (angleDiff <= 45) {
         penaltyKm = 0; // Va en dirección correcta
       } else if (angleDiff <= 90) {
@@ -146,7 +157,7 @@ export function findOptimalTaxi(
   }
 
   // Ordenar por distancia efectiva (menor a mayor)
-  scoredTaxis.sort((a, b) => a.effectiveDist - b.effectiveDist);
+  scoredTaxis.sort((a, b) => a.effectiveDist - b.effectiveDist || a.rawDist - b.rawDist || a.device.id - b.device.id);
 
   // Filtrar los que están realmente dentro del radio máximo crudo
   const validTaxis = scoredTaxis.filter(t => t.rawDist <= maxRadiusKm);
@@ -159,7 +170,8 @@ export function findOptimalTaxi(
       name: t.device.name,
       distanceKm: t.rawDist,
       deviceId: t.device.id,
-      performanceMs: perf
+      performanceMs: perf,
+      effectiveDistanceKm: t.effectiveDist
     }));
 
     // Retornamos el array de taxis encontrados

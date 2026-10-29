@@ -1,0 +1,33 @@
+{
+  "date": "2026-10-29",
+  "request": "Present the supplied H3 map as Pompeyo coverage, remove generic catalog language",
+  "cells": 2541,
+  "areaNames": 94,
+  "priorPreviewSubset": 37,
+  "previewNowRepresentsAllCells": true,
+  "persistentChanges": false,
+  "apiDeployed": false,
+  "webPublished": false,
+  "strictEditorTypes": "passed",
+  "build": "passed_with_existing_bundle_warnings",
+  "visualCheck": "unavailable_browser_disabled_in_Work",
+  "priorCaptures": "historical_before_copy_correction",
+  "files": [
+    {
+      "path": "src/pages/TaxiBotAdminPage.tsx",
+      "sha256": "874f1e98fd0bf545267a4dcd9b9f48cb5e95d41576ca62de4d8466584648bd03"
+    },
+    {
+      "path": "src/components/TaxiZoneMap.tsx",
+      "sha256": "bfbfbb560ea9cec0ffa2da9585c4ce098eb716b7f763e2dd85bf95678011c6d7"
+    },
+    {
+      "path": "src/lib/taxiAdminPreview.ts",
+      "sha256": "96d9d9bdd74d0724c7a7285f84f7785d849426d4ea5e588f2c5113d17cf1c5f9"
+    },
+    {
+      "path": "docs/STELLAR_ZONES_UI_20261029.md",
+      "sha256": "9dc490866e09e3608be1483aacdeaab640459ec1596101e8ce8f4189447d32b6"
+    }
+  ]
+}

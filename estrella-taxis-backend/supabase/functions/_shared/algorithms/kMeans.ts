@@ -1,8 +1,7 @@
 /**
- * Módulo de Mapas de Calor (K-Means Clustering)
- * 
- * Versión Robusta:
- * - Algoritmo K-Means++ para inicialización inteligente (evita óptimos locales y clusters vacíos).
+ * Agrupación de actividad histórica (K-Means).
+ *
+ * - Inicialización determinista por puntos separados, reproducible para auditoría.
  * - Epsilon (ε) para tolerancia de movimiento (previene ciclos infinitos por flotantes).
  * - Protección contra sets de datos vacíos o menores a K.
  * - Validación de puntos inválidos.
@@ -31,28 +30,31 @@ function getDistanceSquared(p1: Point, p2: Point): number {
 }
 
 /**
- * Algoritmo K-Means++ (K-Means Robusto) para encontrar zonas calientes de demanda.
- * @param rawData Puntos de demanda (ej. coordenadas de los viajes de hoy)
- * @param k Número de zonas calientes a identificar (ej. 3)
+ * K-Means con semillas deterministas por máxima separación.
+ * @param rawData Observaciones históricas; no prueban demanda de pasajeros.
+ * @param k Número máximo de zonas a identificar.
  * @param maxIterations Límite de iteraciones para forzar la salida
  */
 export function calculateKMeans(rawData: Point[], k: number = 3, maxIterations: number = 50): Cluster[] {
   // 1. Limpieza de datos robusta
   if (!Array.isArray(rawData)) return [];
-  const data = rawData.filter(isValidPoint);
+  if (!Number.isInteger(k) || k < 1 || k > 20 || !Number.isInteger(maxIterations) || maxIterations < 1 || maxIterations > 100 || rawData.length > 20000) return [];
+  const data = rawData.filter(isValidPoint).sort((a,b) => a.lat-b.lat || a.lng-b.lng);
   
   if (data.length === 0) return [];
   
-  // Si pedimos más clusters que puntos, cada punto es su propio cluster
+  // Agrupar coordenadas idénticas también cuando hay menos observaciones que k.
   if (data.length <= k) {
-    return data.map(p => ({ centroid: p, points: [p], weight: 1 }));
+    const groups=new Map<string,Cluster>();
+    for(const point of data){const key=point.lat+','+point.lng;const group=groups.get(key);if(group){group.points.push(point);group.weight++;}else groups.set(key,{centroid:point,points:[point],weight:1});}
+    return [...groups.values()].sort((a,b)=>b.weight-a.weight || a.centroid.lat-b.centroid.lat || a.centroid.lng-b.centroid.lng);
   }
 
-  // 2. Inicialización K-Means++ (Elegir centroides separados inteligentemente)
-  let centroids: Point[] = [];
+  // Deterministic farthest-first initialization, without a random winning zone.
+  const centroids: Point[] = [];
   
-  // El primer centroide es totalmente aleatorio
-  centroids.push(data[Math.floor(Math.random() * data.length)]);
+  // Primera coordenada en el orden estable.
+  centroids.push(data[0]);
   
   for (let i = 1; i < k; i++) {
     let sumDistances = 0;
@@ -69,16 +71,10 @@ export function calculateKMeans(rawData: Point[], k: number = 3, maxIterations: 
       sumDistances += minDistSq;
     }
     
-    // Elegir el siguiente centroide con probabilidad proporcional a la distancia al cuadrado
-    let target = Math.random() * sumDistances;
+    // Elegir la observación más alejada de las semillas existentes.
+    if (sumDistances === 0) break;
     let selectedIndex = 0;
-    for (let j = 0; j < data.length; j++) {
-      target -= distances[j];
-      if (target <= 0) {
-        selectedIndex = j;
-        break;
-      }
-    }
+    for (let j = 1; j < data.length; j++) if (distances[j] > distances[selectedIndex]) selectedIndex = j;
     centroids.push(data[selectedIndex]);
   }
 
@@ -112,15 +108,11 @@ export function calculateKMeans(rawData: Point[], k: number = 3, maxIterations: 
     centroidsMoved = false;
 
     // Recalcular centroides
-    for (let i = 0; i < k; i++) {
+    for (let i = 0; i < centroids.length; i++) {
       const cluster = clusters[i];
       
       if (cluster.points.length === 0) {
-        // TRUCO ROBUSTO: Si un cluster quedó vacío, le asignamos un punto aleatorio nuevo
-        // para que no se desperdicie el cluster ni genere NaN
-        const randomFallback = data[Math.floor(Math.random() * data.length)];
-        centroids[i] = { lat: randomFallback.lat, lng: randomFallback.lng };
-        centroidsMoved = true;
+        // Una zona vacía no participa en el resultado; conservar su semilla evita NaN.
         continue;
       }
 
@@ -133,6 +125,7 @@ export function calculateKMeans(rawData: Point[], k: number = 3, maxIterations: 
       
       const newLat = sumLat / cluster.points.length;
       const newLng = sumLng / cluster.points.length;
+      cluster.centroid={lat:newLat,lng:newLng};
 
       // Evaluar movimiento contra EPSILON en vez de estricta igualdad (===)
       if (
@@ -147,9 +140,8 @@ export function calculateKMeans(rawData: Point[], k: number = 3, maxIterations: 
     iterations++;
   }
 
-  // Devolver clusters filtrando los que hayan quedado en 0 a pesar del fallback
-  // y ordenados de mayor a menor peso (demanda)
+  // Zonas con observaciones, ordenadas por peso y coordenadas estables.
   return clusters
     .filter(c => c.weight > 0)
-    .sort((a, b) => b.weight - a.weight);
+    .sort((a, b) => b.weight - a.weight || a.centroid.lat-b.centroid.lat || a.centroid.lng-b.centroid.lng);
 }

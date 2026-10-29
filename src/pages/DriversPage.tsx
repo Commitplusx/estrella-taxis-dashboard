@@ -3,14 +3,18 @@ import { User, Plus, Trash2, Edit2, X, Save, Hash, Phone, Link, Check, BarChart3
 import { useCachedFetch } from '../hooks/useCachedFetch';
 import { dataCache } from '../lib/cache';
 import { api, type TraccarDevice } from '../lib/traccarApi';
-import { supabase } from '../lib/supabase';
+import { trackingCall } from '../lib/trackingClient';
+import { parseScoreHistory, type TrackingScoreRow } from '../lib/trackingContracts';
+import { mapLimit } from '../../estrella-taxis-backend/supabase/functions/_shared/tracking/http.ts';
+import { localDay, positiveId, record } from '../../estrella-taxis-backend/supabase/functions/_shared/tracking/contracts.ts';
+import { useFeature } from '../hooks/useFeature';
 import { useAuth } from '../context/AuthContext';
 
 interface TraccarDriver {
   id?: number;
   name: string;
   uniqueId: string;
-  attributes?: Record<string, any>;
+  attributes?: {phone?:string;[key:string]:unknown};
 }
 
 // ─── Score Badge ──────────────────────────────────────────────────────────────
@@ -59,7 +63,7 @@ function DriverModal({
       const method = driver?.id ? 'PUT' : 'POST';
       const url = driver?.id ? `/api/drivers/${driver.id}` : '/api/drivers';
       
-      const payload: any = {
+      const payload: {id?:number;name:string;uniqueId:string;attributes:{phone?:string;[key:string]:unknown}} = {
         name: form.name,
         uniqueId: form.uniqueId,
         attributes: {
@@ -88,8 +92,8 @@ function DriverModal({
       
       onSaved();
       onClose();
-    } catch (e: any) {
-      setError('Error al guardar: ' + e.message);
+    } catch (error: unknown) {
+      setError(error instanceof Error?'Error al guardar: '+error.message:'No pudimos guardar el conductor.');
     } finally {
       setSaving(false);
     }
@@ -174,8 +178,8 @@ function AssignTaxisModal({ driver, onClose }: { driver: TraccarDriver; onClose:
           try {
             const res = await fetch(`/api/drivers?deviceId=${device.id}`, { credentials: 'include' });
             if (res.ok) {
-              const deviceDrivers = await res.json();
-              if (deviceDrivers.some((d: any) => d.id === driver.id)) {
+              const deviceDrivers:unknown = await res.json();
+              if (Array.isArray(deviceDrivers) && deviceDrivers.some((item)=>record(item) && item.id===driver.id)) {
                 linkedIds.add(device.id);
               }
             }
@@ -303,24 +307,40 @@ export default function DriversPage() {
   const [assigningDriver, setAssigningDriver] = useState<TraccarDriver | null>(null);
   const [expandedDriver, setExpandedDriver] = useState<number | null>(null);
   // scores: Map de uniqueId → score del día de hoy
-  const [scores, setScores] = useState<Record<string, { score: number; label: string; km: number; idle: number }>>({});
+  const [scores,setScores]=useState<Record<number,TrackingScoreRow[]>>({});
+  const [scoreError,setScoreError]=useState<string|null>(null);
+  const canScore=useFeature('score_diario');
 
   useEffect(() => {
+    const controller=new AbortController();setScores({});setScoreError(null);
     async function fetchScores() {
-      const today = new Date().toISOString().slice(0, 10);
-      const { data: rows } = await supabase
-        .from('driving_scores')
-        .select('device_name, score, score_label, distance_km, idle_minutes')
-        .eq('score_date', today);
-      if (!rows) return;
-      const map: typeof scores = {};
-      for (const r of rows) {
-        map[r.device_name] = { score: r.score, label: r.score_label, km: r.distance_km, idle: r.idle_minutes };
+      if(!canScore || !data?.length) return;
+      try {
+        if(data.length>100) throw new Error('El resumen de calificaciones permite hasta 100 conductores. Revisa las unidades desde su perfil.');
+        const devices=await api.getDevices();if(!devices.length)return;
+        if(devices.length>100)throw new Error('Revisa las calificaciones por grupo: hay más de 100 unidades.');
+        const today=localDay(Date.now());
+        const rows=parseScoreHistory(await trackingCall('calculate-driving-scores',{action:'history',deviceIds:devices.map((device)=>device.id),date:today},controller.signal));
+        const byDevice=new Map(rows.map((row)=>[row.device_id,row]));
+        const assignments=await mapLimit(devices.filter((device)=>byDevice.has(device.id)),3,async(device)=>{
+          const response=await fetch('/api/drivers?deviceId='+device.id,{credentials:'include',headers:{Accept:'application/json'},signal:controller.signal});
+          if(!response.ok)throw new Error('No pudimos verificar las unidades asignadas a cada conductor.');
+          const assigned:unknown=await response.json();
+          if(!Array.isArray(assigned) || !assigned.every((item)=>record(item) && positiveId(item.id)))throw new Error('La asignación de unidades no es válida.');
+          return {deviceId:device.id,driverIds:assigned.flatMap((item)=>record(item) && positiveId(item.id)?[item.id]:[])};
+        });
+        const map:Record<number,TrackingScoreRow[]>={};
+        for(const assignment of assignments){const score=byDevice.get(assignment.deviceId);if(score)for(const id of assignment.driverIds)(map[id] ??= []).push(score);}
+        if(!controller.signal.aborted)setScores(map);
+      } catch(error:unknown) {
+        if(!controller.signal.aborted)setScoreError(error instanceof Error?error.message:'No pudimos consultar las calificaciones.');
       }
-      setScores(map);
     }
     fetchScores();
-  }, [empresaId]);
+    return ()=>controller.abort();
+  }, [empresaId,canScore,data]);
+
+  const scoreBadges=(driverId:number|undefined)=>driverId?scores[driverId]?.map((row)=><span key={row.device_id} title={'Unidad: '+row.device_name+' · '+(row.qualityStatus==='sufficient'?'evidencia suficiente':row.qualityStatus==='legacy'?'versión anterior':'datos limitados')}><ScoreBadge score={row.score} label={row.device_name+' · '+(row.qualityStatus==='sufficient'?row.score_label:'revisar datos')}/></span>):null;
 
   const handleDelete = async (id: number) => {
     if (!confirm('¿Eliminar este conductor?')) return;
@@ -358,6 +378,8 @@ export default function DriversPage() {
         </div>
       </div>
 
+      {scoreError && <p role="alert" className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">{scoreError}</p>}
+      {canScore && <p className="text-sm text-slate-600">Se muestran las calificaciones de las unidades actualmente vinculadas. No atribuyen todo el recorrido del día a un solo conductor.</p>}
       {loading ? (
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden animate-pulse">
           <div className="border-b border-gray-100 bg-gray-50/50 flex px-5 py-3">
@@ -417,9 +439,7 @@ export default function DriversPage() {
                     <p className="text-xs text-gray-500 font-medium">ID: {driver.uniqueId}</p>
                   </div>
                   {/* Score badge móvil */}
-                  {scores[driver.name] && (
-                    <ScoreBadge score={scores[driver.name].score} label={scores[driver.name].label} />
-                  )}
+                  {scoreBadges(driver.id)}
                 </div>
 
                 {expandedDriver === driver.id && (
@@ -465,7 +485,7 @@ export default function DriversPage() {
                   <th className="px-5 py-3 text-xs font-bold text-gray-500 uppercase tracking-wider">Conductor</th>
                   <th className="px-5 py-3 text-xs font-bold text-gray-500 uppercase tracking-wider">Identificador</th>
                   <th className="px-5 py-3 text-xs font-bold text-gray-500 uppercase tracking-wider">Teléfono</th>
-                  <th className="px-5 py-3 text-xs font-bold text-gray-500 uppercase tracking-wider">Score Hoy</th>
+                  <th className="px-5 py-3 text-xs font-bold text-gray-500 uppercase tracking-wider">Unidades asignadas · hoy</th>
                   <th className="px-5 py-3 text-xs font-bold text-gray-500 uppercase tracking-wider text-right">Acciones</th>
                 </tr>
               </thead>
@@ -487,10 +507,7 @@ export default function DriversPage() {
                       {driver.attributes?.phone || <span className="text-gray-400 italic">No registrado</span>}
                     </td>
                     <td className="px-5 py-4">
-                      {scores[driver.name]
-                        ? <ScoreBadge score={scores[driver.name].score} label={scores[driver.name].label} km={scores[driver.name].km} />
-                        : <span className="text-[11px] text-gray-300 font-medium">Sin datos hoy</span>
-                      }
+                      {scores[driver.id ?? -1]?.length ? scoreBadges(driver.id) : <span className="text-sm text-slate-600">Sin análisis guardado</span>}
                     </td>
                     <td className="px-5 py-4 text-right">
                       <div className="flex items-center justify-end gap-2">

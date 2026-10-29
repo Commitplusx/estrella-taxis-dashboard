@@ -1,16 +1,29 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Layers, Crosshair, Filter, Zap, Power, Radio, ShieldAlert, Car, Bell, Battery, Activity, Route, Map as MapIcon, MapPin, X, Wifi, WifiOff, Play, Square, Terminal, CheckCircle2, Key, Plus, Minus, List, Ruler, Loader2, Brain, ChevronDown, Search } from 'lucide-react';
+
+import { Layers, Crosshair, Zap, Power, Radio, ShieldAlert, Bell, Battery, Activity, MapPin, X, Wifi, WifiOff, Play, Square, Terminal, CheckCircle2, Key, Plus, Minus, Ruler, Loader2, Brain, Search } from 'lucide-react';
 import { toast } from 'react-hot-toast';
-import { loadGoogleMaps } from '../lib/mapsLoader';
+import L from 'leaflet';
+import { openStreetMapLayer } from '../lib/openStreetMap';
+import { fleetMarkerHtml, validFleetPoint, type FleetMapPoint } from '../lib/fleetMapPresentation';
+import { fleetMapQuote } from '../lib/fleetMapQuote';
+import { taxiAdminClient } from '../lib/taxiAdminClient';
+import 'leaflet/dist/leaflet.css';
+import './fleetMap.css';
 import { api, type TraccarDevice, type TraccarPosition } from '../lib/traccarApi';
-import { supabase } from '../lib/supabase';
-import * as h3 from 'h3-js';
+
+
 import { useTraccarSocket } from '../hooks/useTraccarSocket';
 import { RequireFeature } from '../components/RequireFeature';
 import { CommandModal } from '../components/CommandModal';
 import { useAuth } from '../context/AuthContext';
-import { getMarkerIcon } from '../lib/mapIcons';
+
+import { findOptimalTaxi } from '../../estrella-taxis-backend/supabase/functions/_shared/algorithms/headingMatcher.ts';
+import { loadFleetActivity } from '../lib/fleetActivity';
+import { distanceKm } from '../../estrella-taxis-backend/supabase/functions/_shared/tracking/scoring.ts';
+import { positiveId,flag } from '../../estrella-taxis-backend/supabase/functions/_shared/tracking/contracts.ts';
+import { escapeHtml } from '../lib/escapeHtml';
+
+interface MapTelemetryEvent {id:number;deviceId:number;type:string;eventTime?:string;serverTime?:string;attributes?:{alarm?:string;result?:string}}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function knotsToKmh(knots: number) {
@@ -18,7 +31,7 @@ function knotsToKmh(knots: number) {
 }
 
 function getBatteryColor(level: number | undefined) {
-  if (!level) return '#94a3b8';
+  if (level===undefined || !Number.isFinite(level)) return '#94a3b8';
   if (level > 50) return '#16a34a';
   if (level > 20) return '#f59e0b';
   return '#dc2626';
@@ -44,7 +57,9 @@ function formatRelativeTime(dateStr: string, nowMs: number = Date.now()) {
 }
 
 export function generateInfoWindowContent(device: TraccarDevice, pos: TraccarPosition, isReadonly: boolean = false, isFollowing: boolean = false, liveAddress: string = '', nowMs: number = Date.now()) {
-  const battery = pos.attributes?.batteryLevel;
+  const rawBattery=pos.attributes?.batteryLevel;
+  const battery=typeof rawBattery==='number' && Number.isFinite(rawBattery) && rawBattery>=0 && rawBattery<=100?rawBattery:undefined;
+  const deviceId=positiveId(device.id)?device.id:0;
   const ignition = pos.attributes?.ignition;
   const speed = knotsToKmh(pos.speed || 0);
   const isMoving = Number(speed) > 2;
@@ -58,24 +73,26 @@ export function generateInfoWindowContent(device: TraccarDevice, pos: TraccarPos
     engineStatusHtml = `<div style="margin-top:8px; display:flex; align-items:center; justify-content:center; gap:6px; font-size:11px; color:#166534; background:#dcfce7; border:1px solid #bbf7d0; padding:6px; border-radius:8px; font-weight:700;"><span style="width:8px;height:8px;background:#22c55e;border-radius:50%;box-shadow:0 0 4px #22c55e"></span> MOTOR EN MOVIMIENTO</div>`;
   }
 
-  const finalAddress = liveAddress || (pos.address ? pos.address.split(',')[0] : '');
+  const finalAddress = escapeHtml(liveAddress || (pos.address ? pos.address.split(',')[0] : ''));
   const timeText = formatRelativeTime(pos.serverTime, nowMs);
-  const isOccupied = pos.attributes?.occupied === true || pos.attributes?.occupied === 'true';
+  const occupation = flag(pos.attributes?.occupied);
 
   let occupiedStatusHtml = '';
-  if (isOccupied) {
+  if (occupation===true) {
     occupiedStatusHtml = `<div style="margin-top:8px; display:flex; align-items:center; justify-content:center; gap:6px; font-size:11px; color:#991b1b; background:#fee2e2; border:1px solid #fecaca; padding:6px; border-radius:8px; font-weight:700;"><span style="width:8px;height:8px;background:#ef4444;border-radius:50%;box-shadow:0 0 4px #ef4444"></span> TAXI OCUPADO</div>`;
-  } else {
+  } else if(occupation===false) {
     occupiedStatusHtml = `<div style="margin-top:8px; display:flex; align-items:center; justify-content:center; gap:6px; font-size:11px; color:#166534; background:#dcfce7; border:1px solid #bbf7d0; padding:6px; border-radius:8px; font-weight:700;"><span style="width:8px;height:8px;background:#22c55e;border-radius:50%;box-shadow:0 0 4px #22c55e"></span> TAXI LIBRE</div>`;
+  } else {
+    occupiedStatusHtml='<div style="margin-top:8px;color:#475569;font-size:12px;text-align:center">Ocupación sin dato</div>';
   }
 
   return `
     <div style="font-family:Inter,sans-serif;min-width:220px;padding:4px">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-        <strong style="font-size:15px;color:#0f172a">${device.name}</strong>
+        <strong style="font-size:15px;color:#0f172a">${escapeHtml(device.name)}</strong>
         <span style="width:8px;height:8px;border-radius:50%;background:${getStatusColor(device)};display:inline-block;box-shadow:0 0 4px ${getStatusColor(device)}"></span>
       </div>
-      
+
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
         <div style="background:#f8fafc;border-radius:8px;padding:8px;text-align:center;border:1px solid #f1f5f9">
           <div style="font-size:20px;font-weight:800;color:#1d4ed8">${speed}</div>
@@ -91,19 +108,19 @@ export function generateInfoWindowContent(device: TraccarDevice, pos: TraccarPos
       ${occupiedStatusHtml}
 
       ${finalAddress ? `<div style="margin-top:10px;font-size:11px;color:#64748b;line-height:1.4"><div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:2px;"><strong style="color:#475569">📍 Dirección:</strong> ${device.status === 'online' ? `<span style="display:flex;align-items:center;color:#059669;font-weight:700;font-size:9px;background:#ecfdf5;padding:2px 6px;border-radius:4px;border:1px solid #a7f3d0;">${isMoving ? '<svg class="animate-spin" style="width:10px;height:10px;margin-right:4px;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"></path></svg>' : '<span style="width:6px;height:6px;background:#10b981;border-radius:50%;margin-right:4px;"></span>'} EN VIVO</span>` : ''}</div>${finalAddress}</div>` : ''}
-      
+
       <div style="margin-top:10px;padding-top:8px;border-top:1px solid #f1f5f9;font-size:10px;color:#94a3b8;display:flex;justify-content:space-between;">
         <span>Última señal:</span>
         <strong style="color:#475569">${timeText}</strong>
       </div>
-      
+
       <div style="display:flex;gap:6px;margin-top:12px">
-        ${!isReadonly ? `
-        <button onclick="window.dispatchEvent(new CustomEvent('openMapCommands', {detail: ${device.id}}))" style="flex:1; background:#fee2e2; color:#b91c1c; border:none; padding:8px 0; border-radius:8px; font-size:11px; font-weight:bold; cursor:pointer; display:flex; align-items:center; justify-content:center;">
+        ${!isReadonly && deviceId ? `
+        <button onclick="window.dispatchEvent(new CustomEvent('openMapCommands', {detail: ${deviceId}}))" style="flex:1; background:#fee2e2; color:#b91c1c; border:none; padding:8px 0; border-radius:8px; font-size:11px; font-weight:bold; cursor:pointer; display:flex; align-items:center; justify-content:center;">
           ⚡ Comandos
         </button>
         ` : ''}
-        <button onclick="window.dispatchEvent(new CustomEvent('followDevice', {detail: ${device.id}}))" style="flex:1; background:${isFollowing ? '#fee2e2' : '#e0e7ff'}; color:${isFollowing ? '#b91c1c' : '#4338ca'}; border:none; padding:8px 0; border-radius:8px; font-size:11px; font-weight:bold; cursor:pointer; display:flex; align-items:center; justify-content:center;">
+        <button onclick="window.dispatchEvent(new CustomEvent('followDevice', {detail: ${deviceId}}))" style="flex:1; background:${isFollowing ? '#fee2e2' : '#e0e7ff'}; color:${isFollowing ? '#b91c1c' : '#4338ca'}; border:none; padding:8px 0; border-radius:8px; font-size:11px; font-weight:bold; cursor:pointer; display:flex; align-items:center; justify-content:center;">
           ${isFollowing ? '✋ Dejar de seguir' : '📍 Seguir Taxi'}
         </button>
       </div>
@@ -112,14 +129,16 @@ export function generateInfoWindowContent(device: TraccarDevice, pos: TraccarPos
 }
 
 export default function MapPage() {
-  const { user } = useAuth();
+  const { user, empresaId } = useAuth();
+  const companyRef = useRef(empresaId);
+
   const isReadonly = user?.readonly ?? false;
 
-  const navigate = useNavigate();
+
   const mapRef = useRef<HTMLDivElement>(null);
-  const googleMapRef = useRef<google.maps.Map | null>(null);
-  const markersRef = useRef<Map<number, google.maps.Marker>>(new Map());
-  const infoWindowRef = useRef<google.maps.InfoWindow | null>(null);
+  const leafletMapRef = useRef<L.Map | null>(null);
+  const markersRef = useRef<Map<number, L.Marker>>(new Map());
+  const infoWindowRef = useRef<L.Popup | null>(null);
   const initialZoomDone = useRef(false);
 
   const [devices, setDevices] = useState<TraccarDevice[]>([]);
@@ -129,23 +148,25 @@ export default function MapPage() {
   const devicesRef = useRef<TraccarDevice[]>([]);
   const [selectedDevice, setSelectedDevice] = useState<TraccarDevice | null>(null);
   const [liveAddress, setLiveAddress] = useState<string>('');
-  const geocoderRef = useRef<google.maps.Geocoder | null>(null);
+
   const [commandDevice, setCommandDevice] = useState<TraccarDevice | null>(null);
   const [followingDeviceId, setFollowingDeviceId] = useState<number | null>(null);
   const followingDeviceIdRef = useRef<number | null>(null);
   const [mapsLoaded, setMapsLoaded] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [nowTick, setNowTick] = useState(Date.now());
+  const [nowTick, setNowTick] = useState(() => Date.now());
   const [showMobileEvents, setShowMobileEvents] = useState(false);
   const [showEventsPanel, setShowEventsPanel] = useState(true);
   const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const searchInputRef = useRef<HTMLInputElement>(null);
-  const [streetViewActive, setStreetViewActive] = useState(false);
+  const [tileError, setTileError] = useState(false);
+  const [mutedMap, setMutedMap] = useState(true);
+  const alertTimers = useRef(new Map<number, ReturnType<typeof setTimeout>>());
 
   // Heatmap
   const [showHeatmap, setShowHeatmap] = useState(false);
-  const heatmapLayerRef = useRef<google.maps.visualization.HeatmapLayer | null>(null);
+  const activityCircles=useRef<L.Circle[]>([]);
 
   // Escuchar el evento de renderizado forzado (ej: cuando un canvas termina de tintar el taxi PNG)
   useEffect(() => {
@@ -154,370 +175,84 @@ export default function MapPage() {
     return () => window.removeEventListener('forceMapRender', handleForceRender);
   }, []);
 
+  // Measurement Tool
+  const [isMeasuring, setIsMeasuring] = useState(false);
+  const isMeasuringRef = useRef(false);
+  useEffect(() => { isMeasuringRef.current = isMeasuring; }, [isMeasuring]);
+
+  const measurePathRef = useRef<FleetMapPoint[]>([]);
+  const measureLayerRef = useRef<L.LayerGroup | null>(null);
+  const measureLabelRef = useRef<L.Popup | null>(null);
+  const measureGeneration = useRef(0);
+
+  useEffect(() => {
+    companyRef.current = empresaId;
+    measureGeneration.current++;
+    measurePathRef.current = [];
+    measureLayerRef.current?.clearLayers();
+    measureLabelRef.current?.remove();
+  }, [empresaId]);
+
   // ─── Simulador de Asignación IA ───
   const [isSimulatorActive, setIsSimulatorActive] = useState(false);
   const isSimulatorActiveRef = useRef(false);
   useEffect(() => { isSimulatorActiveRef.current = isSimulatorActive; }, [isSimulatorActive]);
 
   interface SimResult {
-    passengerLatLng: google.maps.LatLngLiteral;
-    candidates: { device: TraccarDevice; pos: TraccarPosition; distKm: number; rank: number; eta?: string; routeKm?: string }[];
+    passengerLatLng: FleetMapPoint;
+    candidates: { device: TraccarDevice; pos: TraccarPosition; distKm: number; rank: number }[];
   }
   const [simResult, setSimResult] = useState<SimResult | null>(null);
-  const simElementsRef = useRef<{ lines: google.maps.Polyline[]; markers: google.maps.Marker[] }>({ lines: [], markers: [] });
-
-  const clearSimElements = useCallback(() => {
-    simElementsRef.current.lines.forEach(l => l.setMap(null));
-    simElementsRef.current.markers.forEach(m => m.setMap(null));
-    simElementsRef.current = { lines: [], markers: [] };
-  }, []);
-
-  const runAiSimulator = useCallback((clickLatLng: google.maps.LatLngLiteral) => {
-    if (!googleMapRef.current || !window.google) return;
+  const simElementsRef = useRef<L.LayerGroup | null>(null);
+  const clearSimElements = useCallback(() => { simElementsRef.current?.clearLayers(); }, []);
+  const runAiSimulator = useCallback((point: FleetMapPoint) => {
+    const map = leafletMapRef.current;
+    if (!map) return;
     clearSimElements();
-
-    const passengerLoc = new window.google.maps.LatLng(clickLatLng.lat, clickLatLng.lng);
-
-    // Calcular distancias a todos los taxis online con posición conocida
-    const candidates = Array.from(positionsRef.current.entries())
-      .map(([devId, pos]) => {
-        const device = devicesRef.current.find(d => d.id === devId);
-        if (!device || device.status !== 'online') return null;
-        const taxiLoc = new window.google.maps.LatLng(pos.latitude, pos.longitude);
-        const distKm = window.google.maps.geometry.spherical.computeDistanceBetween(passengerLoc, taxiLoc) / 1000;
-        return { device, pos, distKm };
-      })
-      .filter((c): c is NonNullable<typeof c> => c !== null)
-      .sort((a, b) => a.distKm - b.distKm)
-      .slice(0, 3)
-      .map((c, i) => ({ ...c, rank: i + 1 }));
-
-    if (candidates.length === 0) {
-      toast.error('No hay taxis online para simular asignación.');
-      return;
-    }
-
-    const rankColors = ['#ef4444', '#3b82f6', '#f59e0b'];
-    const rankLabels = ['🥇 Ganador', '🥈 2do', '🥉 3ro'];
-
-    // SVG de persona para el marcador del pasajero
-    const personSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 36" width="32" height="48">
-      <circle cx="12" cy="6" r="5" fill="#ef4444" stroke="white" stroke-width="1.5"/>
-      <path d="M5 22 Q5 13 12 13 Q19 13 19 22 L19 28 Q19 30 17 30 L7 30 Q5 30 5 28 Z" fill="#ef4444" stroke="white" stroke-width="1.5"/>
-      <line x1="12" y1="30" x2="12" y2="36" stroke="#ef4444" stroke-width="2.5" stroke-linecap="round"/>
-    </svg>`;
-    const personIconUrl = `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(personSvg)}`;
-
-    // Marcador del pasajero
-    const passengerMarker = new window.google.maps.Marker({
-      position: passengerLoc,
-      map: googleMapRef.current,
-      icon: {
-        url: personIconUrl,
-        scaledSize: new window.google.maps.Size(32, 48),
-        anchor: new window.google.maps.Point(16, 48),
-      },
-      title: '📍 Pasajero',
-      zIndex: 100,
+    const ranking = findOptimalTaxi(devicesRef.current, Array.from(positionsRef.current.values()), point.lat, point.lng);
+    if (!ranking.success) { setSimResult(null); toast.error('No hay unidades disponibles con una señal GPS vigente en 10 km.'); return; }
+    const candidates = ranking.data.flatMap((candidate, index) => {
+      const device = devicesRef.current.find((entry) => entry.id === candidate.deviceId);
+      const pos = positionsRef.current.get(candidate.deviceId);
+      return device && pos ? [{ device, pos, distKm: candidate.distanceKm, rank: index + 1 }] : [];
     });
-    simElementsRef.current.markers.push(passengerMarker);
-
-    // Secuencia de animación de "pensamiento" de la IA
-    toast.dismiss('sim-instruct'); // Ocultar instrucción
-    const toastStyle = { borderRadius: '99px', background: '#2563eb', color: '#fff', fontWeight: 'bold', boxShadow: '0 4px 14px 0 rgba(37, 99, 235, 0.39)' };
-    const toastId = 'ai-sequence';
-    toast.loading('Buscando unidades más cerca...', { id: toastId, icon: '📡', style: toastStyle });
-
-    setTimeout(() => {
-      if (!isSimulatorActiveRef.current) {
-        toast.dismiss(toastId);
-        return;
-      }
-      toast.loading('Calculando tiempo de llegada...', { id: toastId, icon: '⏱️', style: toastStyle });
-
-      setTimeout(() => {
-        if (!isSimulatorActiveRef.current) {
-          toast.dismiss(toastId);
-          return;
-        }
-        toast.loading('Analizando tráfico en tiempo real...', { id: toastId, icon: '🚦', style: toastStyle });
-
-        setTimeout(() => {
-          if (!isSimulatorActiveRef.current) {
-            toast.dismiss(toastId);
-            return;
-          }
-
-          setSimResult({ passengerLatLng: clickLatLng, candidates });
-          toast.success(`¡Asignación Lista! IA seleccionó: ${candidates[0]?.device.name ?? '–'}`, { id: toastId, icon: '🤖', style: toastStyle });
-
-          // Dibujar rutas por calles reales con animación secuencial
-          const directionsService = new window.google.maps.DirectionsService();
-          // Track ETAs as they come in to update the panel
-          const etaMap: Record<number, { eta: string; routeKm: string }> = {};
-
-          candidates.forEach((c, idx) => {
-            const color = rankColors[idx] ?? '#94a3b8';
-            const taxiLoc = { lat: c.pos.latitude, lng: c.pos.longitude };
-
-      setTimeout(() => {
-        if (!googleMapRef.current || !isSimulatorActiveRef.current) return;
-
-        // ── 1. Línea punteada de "calculando" mientras esperamos Directions ──
-        const loadingLine = new window.google.maps.Polyline({
-          path: [taxiLoc, clickLatLng],
-          geodesic: false,
-          strokeColor: color,
-          strokeOpacity: 0,
-          strokeWeight: 3,
-          icons: [{
-            icon: {
-              path: 'M 0,-1 0,1',
-              strokeOpacity: 0.6,
-              scale: 3,
-              strokeColor: color,
-            },
-            offset: '0',
-            repeat: '16px',
-          }],
-          map: googleMapRef.current,
-        });
-        simElementsRef.current.lines.push(loadingLine);
-
-        directionsService.route(
-          {
-            origin: taxiLoc,
-            destination: clickLatLng,
-            travelMode: window.google.maps.TravelMode.DRIVING,
-            drivingOptions: {
-              departureTime: new Date(), // Activa el cálculo con tráfico en tiempo real
-            },
-          },
-          (result, status) => {
-            if (!googleMapRef.current || !isSimulatorActiveRef.current) return;
-
-            // Quitar línea punteada
-            loadingLine.setMap(null);
-            const lineIdx = simElementsRef.current.lines.indexOf(loadingLine);
-            if (lineIdx !== -1) simElementsRef.current.lines.splice(lineIdx, 1);
-
-            if (status !== 'OK' || !result) return;
-
-            const routePath = result.routes[0]?.overview_path ?? [];
-            const leg = result.routes[0]?.legs[0];
-            // Leer duration_in_traffic si está disponible, si no caer al duration normal
-            const etaText = leg?.duration_in_traffic?.text || leg?.duration?.text || '';
-            const routeKmText = leg?.distance?.text ?? `${c.distKm.toFixed(1)} km`;
-
-
-            // ── 2. Ruta real con flecha animada moviéndose ──
-            const line = new window.google.maps.Polyline({
-              path: routePath,
-              geodesic: false,
-              strokeColor: color,
-              strokeOpacity: idx === 0 ? 0.95 : 0.55,
-              strokeWeight: idx === 0 ? 5 : 3,
-              icons: [{
-                icon: {
-                  path: window.google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
-                  scale: 3,
-                  strokeColor: color,
-                  fillColor: color,
-                  fillOpacity: 1,
-                },
-                offset: '0%',
-              }],
-              map: googleMapRef.current,
-            });
-            simElementsRef.current.lines.push(line);
-
-            // Animar la flecha recorriéndose por la línea
-            let count = 0;
-            let burstTriggered = false;
-            const animInterval = setInterval(() => {
-              if (!simElementsRef.current.lines.includes(line)) {
-                clearInterval(animInterval);
-                return;
-              }
-              count = (count + 1) % 200;
-              const icons = line.get('icons') as google.maps.IconSequence[];
-              if (icons?.[0]) {
-                icons[0].offset = `${count / 2}%`;
-                line.set('icons', icons);
-              }
-
-              // Cuando la flecha del ganador llega (~98%), efecto sónar
-              if (idx === 0 && count >= 196 && !burstTriggered) {
-                burstTriggered = true;
-
-                // 1. Cambiar muñeco a checkmark por 1.5s
-                const checkSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="44" height="44">
-                  <circle cx="24" cy="24" r="22" fill="#10b981" stroke="white" stroke-width="2"/>
-                  <polyline points="12,25 21,34 38,16" fill="none" stroke="white" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
-                </svg>`;
-                passengerMarker.setIcon({
-                  url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(checkSvg)}`,
-                  scaledSize: new window.google.maps.Size(44, 44),
-                  anchor: new window.google.maps.Point(22, 44),
-                });
-
-                // 2. Emitir 3 ondas sónar escalonadas
-                const sonarRings: google.maps.Marker[] = [];
-                [0, 250, 500].forEach((delay, waveIdx) => {
-                  setTimeout(() => {
-                    if (!googleMapRef.current) return;
-                    const ring = new window.google.maps.Marker({
-                      position: passengerLoc,
-                      map: googleMapRef.current,
-                      icon: {
-                        path: window.google.maps.SymbolPath.CIRCLE,
-                        scale: 1,
-                        fillColor: '#10b981',
-                        fillOpacity: 0,
-                        strokeColor: '#10b981',
-                        strokeOpacity: 0.8,
-                        strokeWeight: 2.5,
-                      },
-                      zIndex: 50 + waveIdx,
-                      clickable: false,
-                    });
-                    sonarRings.push(ring);
-
-                    // Expandir el anillo
-                    let step = 0;
-                    const expandInterval = setInterval(() => {
-                      step++;
-                      const scale = step * 3;
-                      const opacity = Math.max(0, 0.8 - step * 0.04);
-                      ring.setIcon({
-                        path: window.google.maps.SymbolPath.CIRCLE,
-                        scale,
-                        fillColor: '#10b981',
-                        fillOpacity: 0,
-                        strokeColor: '#10b981',
-                        strokeOpacity: opacity,
-                        strokeWeight: 2,
-                      });
-                      if (step >= 20) {
-                        clearInterval(expandInterval);
-                        ring.setMap(null);
-                      }
-                    }, 30);
-                  }, delay);
-                });
-
-                // 3. Restaurar muñeco y limpiar después de 1.5s
-                setTimeout(() => {
-                  passengerMarker.setIcon({
-                    url: personIconUrl,
-                    scaledSize: new window.google.maps.Size(32, 48),
-                    anchor: new window.google.maps.Point(16, 48),
-                  });
-                  burstTriggered = false;
-                }, 1500);
-              }
-            }, 25);
-
-            // Etiqueta flotante sobre el taxi con ETA real
-            const labelMarker = new window.google.maps.Marker({
-              position: taxiLoc,
-              map: googleMapRef.current,
-              icon: {
-                path: window.google.maps.SymbolPath.CIRCLE,
-                scale: 0,
-                fillOpacity: 0,
-              },
-              label: {
-                text: `${rankLabels[idx]} · ${etaText || routeKmText}`,
-                color: '#ffffff',
-                fontSize: '11px',
-                fontWeight: 'bold',
-                className: 'bg-slate-900 px-2 py-1 rounded-md shadow-lg border border-slate-700/50 -mt-8',
-              },
-              title: c.device.name,
-              zIndex: 90 - idx,
-            });
-            simElementsRef.current.markers.push(labelMarker);
-
-            // ── 3. Actualizar el panel con ETA real ──
-            etaMap[c.device.id] = { eta: etaText, routeKm: routeKmText };
-            setSimResult(prev => {
-              if (!prev) return prev;
-              return {
-                ...prev,
-                candidates: prev.candidates.map(pc =>
-                  pc.device.id === c.device.id
-                    ? { ...pc, eta: etaText, routeKm: routeKmText }
-                    : pc
-                ),
-              };
-            });
-          }
-        );
-      }, idx * 700);
+    const group = simElementsRef.current;
+    if (!group) return;
+    L.circleMarker(point, { radius: 8, color: '#fff', fillColor: '#7c3aed', fillOpacity: 1 }).bindTooltip('Punto de recogida').addTo(group);
+    candidates.forEach((candidate, index) => {
+      L.polyline([[candidate.pos.latitude, candidate.pos.longitude], [point.lat, point.lng]], {
+        color: ['#2563eb', '#68788f', '#9c6940'][index % 3], weight: index === 0 ? 4 : 3,
+        opacity: .8, dashArray: '6 6', interactive: false,
+      }).addTo(group);
     });
-        }, 800);
-      }, 1000);
-    }, 1200);
+    setSimResult({ passengerLatLng: point, candidates });
   }, [clearSimElements]);
-
-  // Activar/desactivar el modo simulador en el mapa
-  const simClickListenerRef = useRef<google.maps.MapsEventListener | null>(null);
-  const trafficLayerRef = useRef<google.maps.TrafficLayer | null>(null);
-
   useEffect(() => {
-    if (!googleMapRef.current || !mapsLoaded) return;
-
+    const map = leafletMapRef.current;
+    if (!map || !mapsLoaded) return;
+    const click = (event: L.LeafletMouseEvent) => {
+      if (isSimulatorActiveRef.current) runAiSimulator({ lat: event.latlng.lat, lng: event.latlng.lng });
+    };
     if (isSimulatorActive) {
-      if (!trafficLayerRef.current) {
-        trafficLayerRef.current = new window.google.maps.TrafficLayer();
-      }
-      trafficLayerRef.current.setMap(googleMapRef.current);
-
-      toast('Haz clic en el mapa para simular un pedido de pasajero 🤖', { 
-        id: 'sim-instruct',
-        duration: 4000, 
-        style: { borderRadius: '99px', background: '#1e293b', color: '#fff' } 
-      });
-      simClickListenerRef.current = googleMapRef.current.addListener('click', (e: google.maps.MapMouseEvent) => {
-        if (!e.latLng) return;
-        runAiSimulator(e.latLng.toJSON());
-      });
+      setIsMeasuring(false);
+      isMeasuringRef.current = false;
+      measureGeneration.current++;
+      measurePathRef.current = [];
+      measureLayerRef.current?.clearLayers();
+      measureLabelRef.current?.remove();
+      toast('Elige un punto de recogida para comparar taxis por cercanía y dirección.', { id: 'sim-instruct', duration: 4000 });
+      map.on('click', click);
     } else {
-      if (trafficLayerRef.current) {
-        trafficLayerRef.current.setMap(null);
-      }
-      if (simClickListenerRef.current) {
-        window.google?.maps.event.removeListener(simClickListenerRef.current);
-        simClickListenerRef.current = null;
-      }
       clearSimElements();
       setSimResult(null);
       toast.dismiss('sim-instruct');
-      toast.dismiss('ai-sequence');
     }
-
-    return () => {
-      if (simClickListenerRef.current) {
-        window.google?.maps.event.removeListener(simClickListenerRef.current);
-        simClickListenerRef.current = null;
-      }
-    };
+    return () => { map.off('click', click); };
   }, [isSimulatorActive, mapsLoaded, runAiSimulator, clearSimElements]);
 
   // Events Drawer
-  const [realtimeEvents, setRealtimeEvents] = useState<any[]>([]);
+  const [realtimeEvents, setRealtimeEvents] = useState<MapTelemetryEvent[]>([]);
   const [toastEvent, setToastEvent] = useState<{ id: string, title: string, message: string } | null>(null);
-
-  // Measurement Tool
-  const [isMeasuring, setIsMeasuring] = useState(false);
-  const isMeasuringRef = useRef(false);
-  useEffect(() => { isMeasuringRef.current = isMeasuring; }, [isMeasuring]);
-  
-  const measurePathRef = useRef<google.maps.LatLngLiteral[]>([]);
-  const measureDirectionsRendererRef = useRef<any>(null);
-  const measureMarkersRef = useRef<any[]>([]);
-  const measureLabelRef = useRef<any>(null);
 
   // Sincronizar state con ref para usarlo dentro del websocket callback
   useEffect(() => {
@@ -526,26 +261,27 @@ export default function MapPage() {
 
   // Escuchar eventos globales desde los botones del InfoWindow HTML
   useEffect(() => {
-    const handleOpenCommands = (e: any) => {
-      const dev = devices.find(d => d.id === e.detail);
+    const handleOpenCommands = (event: Event) => {
+      if(!(event instanceof CustomEvent) || !positiveId(event.detail))return;
+      const dev = devices.find(d => d.id === event.detail);
       if (dev) setCommandDevice(dev);
     };
-    const handleFollowDevice = (e: any) => {
-      if (followingDeviceId === e.detail) {
+    const handleFollowDevice = (event: Event) => {
+      if(!(event instanceof CustomEvent) || !positiveId(event.detail))return;
+      const id=event.detail;
+      if (followingDeviceIdRef.current === id) {
         setFollowingDeviceId(null);
       } else {
-        setFollowingDeviceId(e.detail);
-        const pos = positionsRef.current.get(e.detail);
-        if (pos && googleMapRef.current) {
-          const map = googleMapRef.current;
+        setFollowingDeviceId(id);
+        const pos = positionsRef.current.get(id);
+        if (pos && validFleetPoint(pos.latitude, pos.longitude) && leafletMapRef.current) {
+          const map = leafletMapRef.current;
           map.panTo({ lat: pos.latitude, lng: pos.longitude });
-          map.setHeading(pos.course || 0);
-          map.setTilt(60);
-          setTimeout(() => map.setZoom(18), 300);
+          map.setZoom(17);
         }
       }
       // Cerrar la ventana de info para dejar la vista limpia
-      infoWindowRef.current?.close();
+      infoWindowRef.current?.remove();
       setSelectedDevice(null);
     };
     window.addEventListener('openMapCommands', handleOpenCommands);
@@ -554,308 +290,103 @@ export default function MapPage() {
       window.removeEventListener('openMapCommands', handleOpenCommands);
       window.removeEventListener('followDevice', handleFollowDevice);
     };
-  }, [devices, navigate]);
+  }, [devices]);
 
-  // Manejador del Mapa de Calor con datos históricos reales
+  // Historical activity is sampled per unit/time bucket, then clustered. It does not predict passenger demand.
+  useEffect(()=>{
+    activityCircles.current.forEach((circle)=>circle.remove());activityCircles.current=[];
+    if (!showHeatmap || !mapsLoaded || !leafletMapRef.current) return;
+    const controller=new AbortController();
+    const now=new Date(),from=new Date(now.getTime()-7*86400000);
+    const task='fleet-activity';
+    toast.loading('Revisando actividad registrada de los últimos siete días…',{id:task});
+    loadFleetActivity(devicesRef.current.map((device)=>device.id),from.toISOString(),now.toISOString(),
+      (id)=>api.getRoute({deviceIds:[id],from:from.toISOString(),to:now.toISOString()},controller.signal)).then((activity)=>{
+      if (controller.signal.aborted || !leafletMapRef.current) return;
+      if (!activity.clusters.length) {toast('No hay recorridos suficientes para mostrar zonas de actividad.',{id:task});return;}
+      for(const cluster of activity.clusters) {
+        const spread=cluster.points.map((point)=>distanceKm(cluster.centroid,point)*1000).sort((a,b)=>a-b);
+        const radius=Math.min(1200,Math.max(80,spread[Math.floor(spread.length*.8)] ?? 80));
+        const circle=L.circle(cluster.centroid,{radius,color:'#b45309',weight:1,opacity:.6,fillColor:'#f59e0b',fillOpacity:.12+.2*cluster.weight/activity.sampledPoints,interactive:false}).addTo(leafletMapRef.current);
+        activityCircles.current.push(circle);
+      }
+      toast.success(activity.sampledPoints.toLocaleString('es-MX')+' observaciones de actividad'+(activity.missingUnits?' · '+activity.missingUnits+' unidades sin ruta':''),{id:task});
+    }).catch((error:unknown)=>{if(!controller.signal.aborted)toast.error(error instanceof Error?error.message:'No pudimos cargar la actividad histórica.',{id:task});});
+    return ()=>{controller.abort();toast.dismiss(task);activityCircles.current.forEach((circle)=>circle.remove());activityCircles.current=[];};
+  },[showHeatmap,mapsLoaded]);
+
   useEffect(() => {
-    if (!mapsLoaded || !googleMapRef.current || !window.google?.maps?.visualization) {
-      if (showHeatmap && !window.google?.maps?.visualization) {
-        toast.error('Librería de calor no disponible. Por favor recarga la página (F5).');
-      }
-      return;
-    }
-
-    let aborted = false;
-
-    if (showHeatmap) {
-      // Crear la capa solo si no existe aún
-      if (!heatmapLayerRef.current) {
-        heatmapLayerRef.current = new window.google.maps.visualization.HeatmapLayer({
-          map: googleMapRef.current,
-          radius: 35,
-          opacity: 0.75,
-          gradient: [
-            'rgba(0,255,255,0)',
-            'rgba(0,255,255,1)',
-            'rgba(0,191,255,1)',
-            'rgba(0,127,255,1)',
-            'rgba(0,63,255,1)',
-            'rgba(0,0,255,1)',
-            'rgba(0,0,223,1)',
-            'rgba(0,0,159,1)',
-            'rgba(63,0,91,1)',
-            'rgba(127,0,63,1)',
-            'rgba(191,0,31,1)',
-            'rgba(255,0,0,1)'
-          ]
-        });
-
-        // Snapshot de posiciones actuales como placeholder mientras carga historial
-        // Usamos positionsRef para no añadir `positions` como dependencia del effect
-        const currentPoints = Array.from(positionsRef.current.values()).map(pos =>
-          new window.google.maps.LatLng(pos.latitude, pos.longitude)
-        );
-        if (currentPoints.length > 0) {
-          heatmapLayerRef.current.setData(currentPoints);
-        }
-
-        // Cargar historial real de los últimos 7 días desde Traccar
-        const loadHistoricalHeatmap = async () => {
-          const toastId = toast.loading('Cargando historial de rutas...');
-          try {
-            const deviceIds = devicesRef.current.map(d => d.id);
-            if (deviceIds.length === 0 || aborted) {
-              toast.dismiss(toastId);
-              return;
-            }
-
-            const now = new Date();
-            const from = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-            const toIso   = now.toISOString();
-            const fromIso = from.toISOString();
-
-            const results = await Promise.allSettled(
-              deviceIds.map(id =>
-                api.getRoute({ deviceIds: [id], from: fromIso, to: toIso })
-              )
-            );
-
-            // Si el heatmap fue desactivado mientras cargaba, no hacer nada
-            if (aborted || !heatmapLayerRef.current) {
-              toast.dismiss(toastId);
-              return;
-            }
-
-            const historicalPoints: google.maps.LatLng[] = [];
-            results.forEach(r => {
-              if (r.status === 'fulfilled') {
-                r.value.forEach((pos: TraccarPosition) => {
-                  if (pos.latitude && pos.longitude) {
-                    historicalPoints.push(
-                      new window.google.maps.LatLng(pos.latitude, pos.longitude)
-                    );
-                  }
-                });
-              }
-            });
-
-            if (historicalPoints.length > 0) {
-              heatmapLayerRef.current.setData(historicalPoints);
-              toast.success(`Mapa de calor: ${historicalPoints.length.toLocaleString()} puntos históricos (7 días)`, { id: toastId, duration: 4000 });
-            } else {
-              toast.dismiss(toastId);
-              toast('Sin historial en los últimos 7 días. Mostrando posiciones actuales.', { icon: 'ℹ️' });
-            }
-          } catch (err) {
-            toast.dismiss(toastId);
-            console.warn('Error cargando historial para heatmap:', err);
-          }
-        };
-
-        loadHistoricalHeatmap();
-      }
-    } else {
-      if (heatmapLayerRef.current) {
-        heatmapLayerRef.current.setMap(null);
-        heatmapLayerRef.current = null;
-      }
-    }
-
-    return () => { aborted = true; };
-  }, [showHeatmap, mapsLoaded]); // ← Sin `positions` para no re-ejecutar cada segundo
-
-  // Cargar Google Maps y Ticker
-  useEffect(() => {
-    // Solicitar permisos para Push Notifications Nativas
-    if ('Notification' in window && Notification.permission === 'default') {
-      Notification.requestPermission();
-    }
-
-    loadGoogleMaps().then(() => setMapsLoaded(true)).catch(console.error);
-    const interval = setInterval(() => setNowTick(Date.now()), 1000); // 1 segundo para mostrar contador en vivo
+    const interval = setInterval(() => setNowTick(Date.now()), 1000);
     return () => clearInterval(interval);
   }, []);
 
-  // Inicializar mapa: registramos el evento de cierre del popup una sola vez
-  // para que no se acumulen y alenten la página
   useEffect(() => {
-    if (!mapsLoaded || !mapRef.current || googleMapRef.current) return;
-    if (!window.google || !window.google.maps) {
-      console.warn("Google Maps no está disponible aún en window.google");
-      return;
-    }
-
-    const savedMapType = localStorage.getItem('estrella_map_type') || 'roadmap';
-
-    googleMapRef.current = new window.google.maps.Map(mapRef.current, {
-      center: { lat: 16.2355, lng: -92.1267 }, // Comitán, Chiapas
-      zoom: 13,
-      mapId: '4e5716e8dc53e17ddbdcd5ef', // ID Vectorial de Estrella Taxis
-      tilt: 45,
-      heading: 0,
-      tiltInteractionEnabled: true,
-      headingInteractionEnabled: true,
-      mapTypeControl: false,
-      fullscreenControl: false,
-      streetViewControl: false,
-      zoomControl: false,
-      rotateControl: false,
-      clickableIcons: false, // Ocultar flechita de "Cómo llegar" al tocar negocios
-      mapTypeId: savedMapType,
-      gestureHandling: 'greedy'
-      // NOTA: No usar `styles` array en código cuando se usa mapId vector, 
-      // ya que fuerza a Google Maps a volver al motor viejo 2D (raster) desactivando Tilt y Rotación.
+    if (!mapRef.current) return;
+    const map = L.map(mapRef.current, { center: [16.2355, -92.1267], zoom: 13, zoomControl: false, attributionControl: false, preferCanvas: true });
+    L.control.attribution({ position: 'bottomleft' }).addTo(map);
+    leafletMapRef.current = map;
+    initialZoomDone.current = false;
+    openStreetMapLayer(setTileError).addTo(map);
+    infoWindowRef.current = L.popup({ maxWidth: 330, autoPanPadding: [30, 40] });
+    map.on('popupclose', (event: L.PopupEvent) => {
+      if (event.popup === infoWindowRef.current) setSelectedDevice(null);
     });
-    infoWindowRef.current = new window.google.maps.InfoWindow();
-
-    // Manejar visibilidad de Street View para mostrar botón de salir
-    const panorama = googleMapRef.current.getStreetView();
-    window.google.maps.event.addListener(panorama, 'visible_changed', () => {
-      setStreetViewActive(panorama.getVisible());
-    });
-
-    // Cuando se cierre la tarjetita de información, quitamos la selección
-    window.google.maps.event.addListener(infoWindowRef.current, 'closeclick', () => {
-      setSelectedDevice(null);
-    });
-
-    // Clic en el mapa (fondo): cerrar sheet o medir distancia
-    googleMapRef.current.addListener('click', async (e: any) => {
-      if (isMeasuringRef.current && e.latLng) {
-        const latLng = e.latLng.toJSON();
-        
-        // Reiniciar si ya tenemos 2 puntos (origen y destino)
-        if (measurePathRef.current.length >= 2) {
-          measurePathRef.current = [];
-          if (measureDirectionsRendererRef.current) measureDirectionsRendererRef.current.setMap(null);
-          measureMarkersRef.current.forEach(m => m.setMap(null));
-          measureMarkersRef.current = [];
-          if (measureLabelRef.current) measureLabelRef.current.close();
-        }
-
-        measurePathRef.current.push(latLng);
-        
-        // Ocultamos los marcadores manuales si usamos DirectionsRenderer, o los mantenemos si es solo origen
-        if (measurePathRef.current.length === 1) {
-          const marker = new window.google.maps.Marker({
-            position: latLng,
-            map: googleMapRef.current,
-            icon: {
-              path: window.google.maps.SymbolPath.CIRCLE,
-              scale: 6,
-              fillColor: '#16a34a',
-              fillOpacity: 1,
-              strokeColor: '#ffffff',
-              strokeWeight: 2,
-            }
-          });
-          measureMarkersRef.current.push(marker);
-        } else if (measurePathRef.current.length === 2) {
-          // Ya tenemos origen y destino, usamos DirectionsService
-          const origin = measurePathRef.current[0];
-          const dest = measurePathRef.current[1];
-          
-          if (!measureDirectionsRendererRef.current) {
-            measureDirectionsRendererRef.current = new window.google.maps.DirectionsRenderer({
-              map: googleMapRef.current,
-              suppressMarkers: false,
-              polylineOptions: {
-                strokeColor: '#3b82f6',
-                strokeWeight: 5,
-                strokeOpacity: 0.8,
-              }
-            });
-          }
-          
-          measureMarkersRef.current.forEach(m => m.setMap(null));
-          measureMarkersRef.current = [];
-
-          const directionsService = new window.google.maps.DirectionsService();
-          
-          if (!measureLabelRef.current) {
-            measureLabelRef.current = new window.google.maps.InfoWindow({ disableAutoPan: true });
-          }
-          measureLabelRef.current.setContent(`<div style="padding: 8px; font-size: 14px; text-align: center;"><div class="animate-spin inline-block w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full"></div> Cotizando...</div>`);
-          measureLabelRef.current.setPosition(dest);
-          measureLabelRef.current.open(googleMapRef.current);
-
-          directionsService.route({
-            origin: origin,
-            destination: dest,
-            travelMode: window.google.maps.TravelMode.DRIVING,
-            drivingOptions: {
-              departureTime: new Date(),  // Fuerza a Google a usar tráfico en vivo
-              trafficModel: window.google.maps.TrafficModel.BEST_GUESS
-            }
-          }, async (response: any, status: any) => {
-            if (status === 'OK' && response) {
-              measureDirectionsRendererRef.current.setDirections(response);
-              
-              const leg = response.routes[0].legs[0];
-              const distanceText = leg.distance.text;
-              // Usar tiempo con tráfico si está disponible, de lo contrario tiempo normal
-              const durationText = leg.duration_in_traffic ? leg.duration_in_traffic.text : leg.duration.text;
-
-              // Calcular H3
-              const centerHexOrigin = h3.latLngToCell(origin.lat, origin.lng, 10);
-              const centerHexDest = h3.latLngToCell(dest.lat, dest.lng, 10);
-              
-              const nearbyOrigin = h3.gridDisk(centerHexOrigin, 3);
-              const nearbyDest = h3.gridDisk(centerHexDest, 3);
-              
-              const [res1, res2] = await Promise.all([
-                supabase.from('h3_zonas').select('precio').in('h3_index', nearbyOrigin),
-                supabase.from('h3_zonas').select('precio').in('h3_index', nearbyDest)
-              ]);
-
-              const originPrice = res1.data && res1.data.length > 0 ? Math.max(...res1.data.map(z => z.precio || 0)) : 0;
-              const destPrice = res2.data && res2.data.length > 0 ? Math.max(...res2.data.map(z => z.precio || 0)) : 0;
-              
-              const finalPrice = Math.max(originPrice, destPrice);
-              const priceText = finalPrice > 0 ? `$${finalPrice}` : 'A consultar';
-
-              const content = `
-                <div style="padding: 4px; min-width: 140px; text-align: center; font-family: sans-serif;">
-                  <div style="font-size: 18px; font-weight: bold; color: #16a34a; margin-bottom: 4px;">💵 ${priceText}</div>
-                  <div style="font-size: 13px; color: #475569;">📏 ${distanceText}</div>
-                  <div style="font-size: 13px; color: #475569;" title="Incluye tráfico actual">🚦 ${durationText}</div>
-                </div>
-              `;
-              measureLabelRef.current.setContent(content);
-            } else {
-              measureLabelRef.current.setContent(`<div style="padding: 4px; color: #ef4444;">No se pudo trazar ruta</div>`);
-            }
-          });
-        }
-        return; // Detener flujo normal
+    simElementsRef.current = L.layerGroup().addTo(map);
+    measureLayerRef.current = L.layerGroup().addTo(map);
+    const click = async (event: L.LeafletMouseEvent) => {
+      if (isSimulatorActiveRef.current) return;
+      if (!isMeasuringRef.current) {
+        setSelectedDevice(null);
+        infoWindowRef.current?.remove();
+        return;
       }
-
-      setSelectedDevice(null);
-      infoWindowRef.current?.close();
-      if (window.innerWidth < 640 && googleMapRef.current) {
-        const currentZoom = googleMapRef.current.getZoom();
-        if (currentZoom) {
-          googleMapRef.current.setZoom(Math.max(currentZoom - 1, 12));
-        }
+      if (measurePathRef.current.length >= 2) {
+        measureGeneration.current++;
+        measurePathRef.current = [];
+        measureLayerRef.current?.clearLayers();
+        measureLabelRef.current?.remove();
       }
-    });
-
-    // Ocultar etiquetas si hay mucho zoom out para no amontonar
-    const zoomListener = googleMapRef.current.addListener('zoom_changed', () => {
-      const zoom = googleMapRef.current?.getZoom() || 13;
-      if (mapRef.current) {
-        if (zoom < 14) {
-          mapRef.current.classList.add('hide-marker-labels');
-        } else {
-          mapRef.current.classList.remove('hide-marker-labels');
-        }
+      const point = { lat: event.latlng.lat, lng: event.latlng.lng };
+      measurePathRef.current.push(point);
+      if (measureLayerRef.current) L.circleMarker(point, { radius: 7, color: '#fff', fillColor: '#16a34a', fillOpacity: 1 }).addTo(measureLayerRef.current);
+      if (measurePathRef.current.length !== 2) return;
+      const [origin, destination] = measurePathRef.current;
+      const generation = ++measureGeneration.current;
+      const company = companyRef.current;
+      if (measureLayerRef.current) L.polyline([origin, destination], { color: '#2563eb', weight: 3, dashArray: '6 6', interactive: false }).addTo(measureLayerRef.current);
+      const label = L.popup({ autoClose: false, closeOnClick: false }).setLatLng(destination);
+      measureLabelRef.current = label;
+      const distance = distanceKm(origin, destination).toFixed(2) + ' km en línea recta';
+      label.setContent('<div style="padding:4px;font:13px/1.5 sans-serif">' + distance + '<br>Consultando tarifa de la base…</div>').openOn(map);
+      try {
+        const result = await fleetMapQuote(taxiAdminClient, company, origin, destination);
+        if (measureGeneration.current !== generation || !isMeasuringRef.current || companyRef.current !== company) return;
+        label.setContent('<div style="padding:4px;max-width:250px;font:13px/1.5 sans-serif">' + distance + '<br>' + escapeHtml(result) + '</div>');
+      } catch {
+        if (measureGeneration.current === generation && isMeasuringRef.current && companyRef.current === company) label.setContent('<div style="padding:4px;max-width:250px;font:13px/1.5 sans-serif">' + distance + '<br>No pudimos consultar la tarifa. Intenta de nuevo.</div>');
       }
-    });
-
-    return () => {
-      window.google.maps.event.removeListener(zoomListener);
     };
-  }, [mapsLoaded]);
+    map.on('click', click);
+    const zoom = () => mapRef.current?.classList.toggle('hide-marker-labels', map.getZoom() < 14);
+    map.on('zoomend', zoom);
+    zoom();
+    const resize = new ResizeObserver(() => map.invalidateSize({ pan: false }));
+    resize.observe(mapRef.current);
+    setMapsLoaded(true);
+    return () => {
+      measureGeneration.current++;
+      resize.disconnect();
+      for (const timer of alertTimers.current.values()) clearTimeout(timer);
+      alertTimers.current.clear();
+      map.off('click', click);
+      map.remove();
+      markersRef.current.clear();
+      leafletMapRef.current = null;
+      infoWindowRef.current = null;
+      simElementsRef.current = null;
+      measureLayerRef.current = null;
+    };
+  }, []);
 
   // Traer los taxis y sus posiciones desde el servidor
   const isFetchingRef = useRef(false);
@@ -870,6 +401,7 @@ export default function MapPage() {
       positionsRef.current = posMap;
       setDevices(devs);
       setPositions(posMap);
+      setLoadError(null);
 
       // Precargar los últimos eventos (ej. últimas 12 horas) para que el panel no esté vacío
       if (devs.length > 0) {
@@ -886,8 +418,8 @@ export default function MapPage() {
           })
           .catch(err => console.error('Error precargando eventos:', err));
       }
-    } catch (e: any) {
-      setLoadError(e.message || 'Error al cargar los datos del mapa.');
+    } catch (error: unknown) {
+      setLoadError(error instanceof Error?error.message:'Error al cargar los datos del mapa.');
     } finally {
       isFetchingRef.current = false;
     }
@@ -898,110 +430,56 @@ export default function MapPage() {
     loadFullState();
   }, [loadFullState]);
 
-  // Auto-ajustar mapa a los marcadores
   useEffect(() => {
-    if (!googleMapRef.current || !mapsLoaded || !window.google || !window.google.maps) return;
-    if (initialZoomDone.current) return;
-
-    const validPositions = devices
-      .map(d => positions.get(d.id))
-      .filter((p): p is TraccarPosition => p != null && p.latitude !== 0 && p.longitude !== 0);
-
-    if (validPositions.length > 0) {
-      const bounds = new window.google.maps.LatLngBounds();
-      validPositions.forEach(pos => {
-        bounds.extend({ lat: pos.latitude, lng: pos.longitude });
-      });
-
-      googleMapRef.current.fitBounds(bounds);
-      const listener = window.google.maps.event.addListener(googleMapRef.current, 'idle', () => {
-        if (googleMapRef.current!.getZoom()! > 14) {
-          googleMapRef.current!.setZoom(14);
-        }
-        window.google.maps.event.removeListener(listener);
-      });
-      initialZoomDone.current = true;
-    }
-  }, [positions, mapsLoaded]);
-
-  // Actualizar marcadores cuando hay datos
-  useEffect(() => {
-    if (!googleMapRef.current || !mapsLoaded || !window.google || !window.google.maps) return;
-    devices.forEach(device => {
-      const pos = positions.get(device.id);
-      if (!pos) return;
-
-      const latLng = { lat: pos.latitude, lng: pos.longitude };
-      const isOccupied = pos.attributes?.occupied === true || pos.attributes?.occupied === 'true';
-      const icon = getMarkerIcon(device.category, device.status, pos.speed || 0, pos.course || 0, isOccupied, window.google.maps);
-
-      if (markersRef.current.has(device.id)) {
-        // OPTIMIZACIÓN DE RENDIMIENTO: 
-        // El WebSocket (updateMarkerImperative) ya actualizó la posición en tiempo real.
-        // No hacer nada aquí salva cientos de re-renders innecesarios en la API de Google Maps.
-      } else {
-        const isSelected = selectedDevice?.id === device.id;
-        const zIndex = isSelected ? 1000 : (device.status === 'online' ? (pos.speed && pos.speed > 0 ? 500 : 400) : 300);
-
-        const marker = new window.google.maps.Marker({
-          position: latLng,
-          map: googleMapRef.current!,
-          icon,
-          title: device.name,
-          zIndex,
-          label: {
-            text: device.name || 'Taxi',
-            color: '#1e293b',
-            fontSize: '11px',
-            fontWeight: '600',
-            className: 'marker-label'
-          },
-        });
-        marker.addListener('click', () => {
-          setSelectedDevice(device);
-          if (window.innerWidth >= 640) {
-            // Usamos positionsRef para garantizar que usamos los datos más frescos al hacer click (evitar stale closure)
-            const freshPos = positionsRef.current.get(device.id) || pos;
-            infoWindowRef.current?.setContent(generateInfoWindowContent(device, freshPos, isReadonly, followingDeviceIdRef.current === device.id));
-            infoWindowRef.current?.open(googleMapRef.current!, marker);
-          } else {
-            // Ensure any open InfoWindow is closed on mobile when switching markers
-            infoWindowRef.current?.close();
-          }
-        });
-        markersRef.current.set(device.id, marker);
-      }
+    const map = leafletMapRef.current;
+    if (!map || !mapsLoaded || initialZoomDone.current) return;
+    const points = devices.flatMap((device): L.LatLngTuple[] => {
+      const p = positions.get(device.id);
+      return p && validFleetPoint(p.latitude, p.longitude) ? [[p.latitude, p.longitude]] : [];
     });
+    if (points.length) { map.fitBounds(points, { padding: [40, 40], maxZoom: 14 }); initialZoomDone.current = true; }
   }, [devices, positions, mapsLoaded]);
+
+  useEffect(() => {
+    const map = leafletMapRef.current;
+    if (!map || !mapsLoaded) return;
+    const visibleIds = new Set(devices.filter((device) => {
+      const p = positions.get(device.id);
+      return p && validFleetPoint(p.latitude, p.longitude);
+    }).map((device) => device.id));
+    for (const [id, marker] of markersRef.current) {
+      if (!visibleIds.has(id)) { marker.remove(); markersRef.current.delete(id); }
+    }
+    devices.forEach((device) => {
+      const p = positions.get(device.id);
+      if (!p || !validFleetPoint(p.latitude, p.longitude)) return;
+      const icon = L.divIcon({ className: 'fleet-vehicle-marker', html: fleetMarkerHtml({ name: device.name, category: device.category, status: device.status, speed: p.speed || 0, course: p.course || 0, occupied: flag(p.attributes?.occupied) ?? undefined }), iconSize: [36, 36], iconAnchor: [18, 18] });
+      const existing = markersRef.current.get(device.id);
+      if (existing) { existing.setLatLng([p.latitude, p.longitude]).setIcon(icon); return; }
+      const marker = L.marker([p.latitude, p.longitude], { icon, title: device.name, keyboard: true }).addTo(map);
+      marker.on('click', () => {
+        const freshDevice = devicesRef.current.find((d) => d.id === device.id);
+        const freshPos = positionsRef.current.get(device.id);
+        if (!freshDevice || !freshPos) return;
+        setSelectedDevice(freshDevice);
+        if (window.innerWidth >= 640) {
+          infoWindowRef.current?.setLatLng(marker.getLatLng()).setContent(generateInfoWindowContent(freshDevice, freshPos, isReadonly, followingDeviceIdRef.current === device.id)).openOn(map);
+        } else infoWindowRef.current?.remove();
+      });
+      markersRef.current.set(device.id, marker);
+    });
+  }, [devices, positions, mapsLoaded, isReadonly]);
 
   // Derived state: siempre usar la versión más fresca del dispositivo para evitar closures viejos
   const currentSelectedDevice = selectedDevice
     ? (devices.find(d => d.id === selectedDevice.id) || selectedDevice)
     : null;
 
-  const selectedLat = currentSelectedDevice ? positions.get(currentSelectedDevice.id)?.latitude : undefined;
-  const selectedLng = currentSelectedDevice ? positions.get(currentSelectedDevice.id)?.longitude : undefined;
-
   useEffect(() => {
-    if (!currentSelectedDevice || !mapsLoaded || !window.google || !selectedLat || !selectedLng) {
-      setLiveAddress('');
-      return;
-    }
-    
-    if (!geocoderRef.current) {
-       geocoderRef.current = new window.google.maps.Geocoder();
-    }
-
-    const timer = setTimeout(() => {
-        geocoderRef.current?.geocode({ location: { lat: selectedLat, lng: selectedLng } }, (results, status) => {
-            if (status === 'OK' && results && results[0]) {
-               const addr = results[0].formatted_address;
-               setLiveAddress(addr.split(',')[0]);
-            }
-        });
-    }, 800);
-    return () => clearTimeout(timer);
-  }, [selectedLat, selectedLng, mapsLoaded, currentSelectedDevice]);
+    const position = currentSelectedDevice ? positions.get(currentSelectedDevice.id) : null;
+    // Traccar already supplies addresses. Do not reverse-geocode every GPS tick against a public service.
+    setLiveAddress(position?.address ?? '');
+  }, [currentSelectedDevice, positions]);
 
   // Actualizar z-index y ventana de info en tiempo real si el coche se mueve o cambia la selección
   useEffect(() => {
@@ -1012,7 +490,7 @@ export default function MapPage() {
         const isSelected = currentSelectedDevice?.id === d.id;
         const pos = positions.get(d.id);
         const zIndex = isSelected ? 1000 : (d.status === 'online' ? (pos?.speed && pos.speed > 0 ? 500 : 400) : 300);
-        marker.setZIndex(zIndex);
+        marker.setZIndexOffset(zIndex);
       }
     });
 
@@ -1020,44 +498,13 @@ export default function MapPage() {
     if (!currentSelectedDevice || !infoWindowRef.current) return;
     const pos = positions.get(currentSelectedDevice.id);
     if (pos && window.innerWidth >= 640) {
-      infoWindowRef.current.setContent(generateInfoWindowContent(currentSelectedDevice, pos, isReadonly, followingDeviceId === currentSelectedDevice.id, liveAddress));
+      infoWindowRef.current.setLatLng([pos.latitude, pos.longitude]).setContent(generateInfoWindowContent(currentSelectedDevice, pos, isReadonly, followingDeviceId === currentSelectedDevice.id, liveAddress));
     }
   }, [positions, currentSelectedDevice, isReadonly, devices, nowTick, followingDeviceId, liveAddress]);
 
-  // Función auxiliar para animación suave de salida (Fly-out)
-  const animationFrameRef = useRef<number | null>(null);
   const smoothCameraReset = useCallback(() => {
-    const map = googleMapRef.current;
-    if (!map) return;
-
-    if (animationFrameRef.current) {
-      cancelAnimationFrame(animationFrameRef.current);
-    }
-
-    let tilt = map.getTilt() || 0;
-    let zoom = map.getZoom() || 18;
-    const targetZoom = 13;
-
-    const animate = () => {
-      let changed = false;
-      if (tilt > 0) {
-        tilt = Math.max(0, tilt - 2);
-        map.setTilt(tilt);
-        changed = true;
-      }
-      if (zoom > targetZoom) {
-        zoom = Math.max(targetZoom, zoom - 0.25);
-        map.setZoom(zoom);
-        changed = true;
-      }
-      if (changed) {
-        animationFrameRef.current = requestAnimationFrame(animate);
-      } else {
-        map.setHeading(0);
-        animationFrameRef.current = null;
-      }
-    };
-    animationFrameRef.current = requestAnimationFrame(animate);
+    const map = leafletMapRef.current;
+    if (map) map.flyTo(map.getCenter(), 13, { duration: .45 });
   }, []);
 
   // Alternar el panel móvil desde el Layout
@@ -1089,20 +536,15 @@ export default function MapPage() {
     return () => {
       window.dispatchEvent(new CustomEvent('showBottomNav'));
     };
-  }, [selectedDevice]);
+  }, [currentSelectedDevice]);
 
-  // WebSocket — actualizaciones en tiempo real
-  // Función auxiliar: actualiza UN marcador de Google Maps de forma imperativa (sin pasar por React)
+  // Move live markers without recreating the map or waiting for a full data reload.
   const updateMarkerImperative = useCallback((device: TraccarDevice, pos: TraccarPosition) => {
-    if (!googleMapRef.current || !window.google?.maps) return;
-    const latLng = { lat: pos.latitude, lng: pos.longitude };
-    const isOccupied = pos.attributes?.occupied === true || pos.attributes?.occupied === 'true';
-    const icon = getMarkerIcon(device.category, device.status, pos.speed || 0, pos.course || 0, isOccupied, window.google.maps);
+    if (!validFleetPoint(pos.latitude, pos.longitude)) { markersRef.current.get(device.id)?.remove(); markersRef.current.delete(device.id); return; }
     const marker = markersRef.current.get(device.id);
-    if (marker) {
-      marker.setPosition(latLng);
-      marker.setIcon(icon);
-    }
+    if (!marker) return;
+    marker.setLatLng([pos.latitude, pos.longitude]);
+    marker.setIcon(L.divIcon({ className: 'fleet-vehicle-marker', html: fleetMarkerHtml({ name: device.name, category: device.category, status: device.status, speed: pos.speed || 0, course: pos.course || 0, occupied: flag(pos.attributes?.occupied) ?? undefined }), iconSize: [36, 36], iconAnchor: [18, 18] }));
   }, []);
 
   const handleWsDevices = useCallback((updated: TraccarDevice[]) => {
@@ -1126,29 +568,29 @@ export default function MapPage() {
       updated.forEach(p => {
         next.set(p.deviceId, p);
         positionsRef.current.set(p.deviceId, p);
-        // Mover el marcador de Google Maps INMEDIATAMENTE, sin esperar a React
+        // Mover el marcador de Leaflet INMEDIATAMENTE, sin esperar a React
         const device = devicesRef.current.find(d => d.id === p.deviceId);
         if (device) updateMarkerImperative(device, p);
 
         // Seguir al taxi si está en modo follow
-        if (followingDeviceIdRef.current === p.deviceId && googleMapRef.current) {
+        if (followingDeviceIdRef.current === p.deviceId && leafletMapRef.current && validFleetPoint(p.latitude, p.longitude)) {
           // Usamos panTo en lugar de moveCamera durante la actualización en tiempo real.
-          // Esto mantiene centrado el taxi, pero PERMITE al usuario girar, inclinar y hacer zoom libremente sin que se le sobreescriba.
-          googleMapRef.current.panTo({ lat: p.latitude, lng: p.longitude });
+          // Esto mantiene centrado el taxi y conserva el zoom del usuario.
+          leafletMapRef.current.panTo({ lat: p.latitude, lng: p.longitude });
         }
       });
       return next;
     });
   }, [updateMarkerImperative]);
 
-  const handleWsEvents = useCallback((newEvents: any[]) => {
+  const handleWsEvents = useCallback((newEvents: MapTelemetryEvent[]) => {
     setRealtimeEvents(prev => {
       const next = [...newEvents, ...prev];
       return next.slice(0, 50); // Keep last 50 events
     });
 
     // Si hay eventos de encendido/apagado, parchar la posición en memoria para que la UI se actualice instantáneamente
-    let ignitionChanged = false;
+
     newEvents.forEach(ev => {
       if (ev.type === 'ignitionOn' || ev.type === 'ignitionOff') {
         setPositions(prev => {
@@ -1157,6 +599,7 @@ export default function MapPage() {
             const updatedPos = { ...pos, attributes: { ...pos.attributes, ignition: ev.type === 'ignitionOn' } };
             const nextMap = new Map(prev);
             nextMap.set(ev.deviceId, updatedPos);
+            positionsRef.current.set(ev.deviceId, updatedPos);
             // Actualizar Marcador Imperativamente aquí para mantener sincronía 100% sin React
             const device = devicesRef.current.find(d => d.id === ev.deviceId);
             if (device) updateMarkerImperative(device, updatedPos);
@@ -1168,9 +611,11 @@ export default function MapPage() {
       // Aplicar animación BOUNCE en alertas importantes
       if (['alarm', 'geofenceEnter', 'geofenceExit', 'deviceOffline', 'ignitionOn', 'deviceMoving'].includes(ev.type)) {
         const marker = markersRef.current.get(ev.deviceId);
-        if (marker && window.google?.maps) {
-          marker.setAnimation(window.google.maps.Animation.BOUNCE);
-          setTimeout(() => marker.setAnimation(null), 3000);
+        if (marker) {
+          const element = marker.getElement();
+          element?.classList.add('is-alert');
+          clearTimeout(alertTimers.current.get(ev.deviceId));
+          alertTimers.current.set(ev.deviceId, setTimeout(() => { element?.classList.remove('is-alert'); alertTimers.current.delete(ev.deviceId); }, 3000));
         }
       }
     });
@@ -1218,7 +663,7 @@ export default function MapPage() {
 
       if (message) {
         const id = Date.now().toString();
-        toast.custom((t) => (
+        toast.custom(() => (
           <div className="bg-gray-900/90 backdrop-blur-sm text-white px-4 py-3 rounded-2xl shadow-xl border border-gray-700/50 flex flex-col items-center min-w-[200px] pointer-events-auto">
             <span className="text-xs font-bold text-gray-400 mb-0.5">{title}</span>
             <span className="text-sm font-semibold">{message}</span>
@@ -1250,66 +695,51 @@ export default function MapPage() {
     onConnect: loadFullState
   });
 
-  const onlineCount = devices.filter(d => d.status === 'online').length;
-
-  const movingCount = devices.filter(d => {
-    const p = positions.get(d.id);
-    return d.status === 'online' && p && (p.speed || 0) > 0.5;
-  }).length;
-
-  const stoppedCount = onlineCount - movingCount;
-
   const handleZoomIn = () => {
-    if (googleMapRef.current) {
-      googleMapRef.current.setZoom((googleMapRef.current.getZoom() || 13) + 1);
+    if (leafletMapRef.current) {
+      leafletMapRef.current.setZoom((leafletMapRef.current.getZoom() || 13) + 1);
     }
   };
 
   const handleZoomOut = () => {
-    if (googleMapRef.current) {
-      googleMapRef.current.setZoom((googleMapRef.current.getZoom() || 13) - 1);
+    if (leafletMapRef.current) {
+      leafletMapRef.current.setZoom((leafletMapRef.current.getZoom() || 13) - 1);
     }
   };
 
   const handleFitBounds = () => {
-    if (googleMapRef.current && markersRef.current.size > 0) {
-      const bounds = new window.google.maps.LatLngBounds();
+    if (leafletMapRef.current && markersRef.current.size > 0) {
+      const bounds = L.latLngBounds([]);
       markersRef.current.forEach(marker => {
-        const pos = marker.getPosition();
+        const pos = marker.getLatLng();
         if (pos) bounds.extend(pos);
       });
-      googleMapRef.current.fitBounds(bounds);
+      leafletMapRef.current.fitBounds(bounds, { padding: [40, 40], maxZoom: 17 });
     } else {
-      toastEvent?.id && setToastEvent(null);
+      if (toastEvent?.id) setToastEvent(null);
     }
   };
 
-  const handleToggleMapType = () => {
-    if (googleMapRef.current) {
-      const current = googleMapRef.current.getMapTypeId();
-      const nextType = current === 'satellite' ? 'roadmap' : 'satellite';
-      googleMapRef.current.setMapTypeId(nextType);
-      localStorage.setItem('estrella_map_type', nextType);
-    }
-  };
+  const handleToggleMapType = () => setMutedMap((current) => !current);
 
   const clearMeasure = () => {
+    measureGeneration.current++;
     measurePathRef.current = [];
-    if (measureDirectionsRendererRef.current) measureDirectionsRendererRef.current.setMap(null);
-    measureMarkersRef.current.forEach(m => m.setMap(null));
-    measureMarkersRef.current = [];
-    if (measureLabelRef.current) measureLabelRef.current.close();
+    measureLayerRef.current?.clearLayers();
+    measureLabelRef.current?.remove();
   };
 
   const handleToggleMeasure = () => {
     const newMeasuring = !isMeasuring;
     setIsMeasuring(newMeasuring);
+    isMeasuringRef.current = newMeasuring;
+    if (newMeasuring) { isSimulatorActiveRef.current = false; setIsSimulatorActive(false); clearSimElements(); setSimResult(null); }
     if (!newMeasuring) {
       clearMeasure();
-      if (googleMapRef.current) googleMapRef.current.setOptions({ draggableCursor: null });
+      if (leafletMapRef.current) leafletMapRef.current.getContainer().style.cursor = '';
     } else {
-      if (googleMapRef.current) googleMapRef.current.setOptions({ draggableCursor: 'crosshair' });
-      toast.success('Modo medición activo. Haz clics en el mapa.');
+      if (leafletMapRef.current) leafletMapRef.current.getContainer().style.cursor = 'crosshair';
+      toast('Marca dos puntos: verás la distancia en línea recta y la tarifa de la base si está disponible.');
     }
   };
 
@@ -1321,11 +751,10 @@ export default function MapPage() {
         {/* Stats eliminadas para un diseño más limpio */}
 
         {loadError && (
-          <div className="absolute inset-0 flex items-center justify-center bg-red-50 z-10">
-            <div className="text-center p-6">
-              <p className="text-red-600 font-bold text-sm mb-1">Error al cargar el mapa</p>
-              <p className="text-red-400 text-xs">{loadError}</p>
-            </div>
+          <div role="alert" className="absolute top-4 left-4 max-w-[70%] bg-white text-slate-800 rounded-xl shadow-md p-3 z-[20]">
+            <p className="font-semibold text-sm">No pudimos actualizar los taxis.</p>
+            <p className="text-xs mt-1">{loadError}</p>
+            <button onClick={() => void loadFullState()} className="text-sm text-blue-700 underline underline-offset-4 mt-2">Reintentar</button>
           </div>
         )}
         {!mapsLoaded && !loadError && (
@@ -1336,22 +765,8 @@ export default function MapPage() {
             </div>
           </div>
         )}
-        <div ref={mapRef} className="w-full h-full hide-marker-labels" />
-
-        {/* Gran Botón para salir de Street View */}
-        {streetViewActive && (
-          <button
-            onClick={() => {
-              if (googleMapRef.current) {
-                googleMapRef.current.getStreetView().setVisible(false);
-              }
-            }}
-            className="absolute top-20 sm:top-6 left-1/2 -translate-x-1/2 z-[100] bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-6 rounded-full shadow-2xl shadow-red-600/40 flex items-center gap-3 animate-fade-in border-2 border-red-500 active:scale-95 transition-all outline-none"
-          >
-            <X size={20} className="drop-shadow-sm" strokeWidth={3} />
-            <span className="text-sm tracking-wide drop-shadow-sm">Cerrar Street View</span>
-          </button>
-        )}
+        <div ref={mapRef} className={`fleet-osm-map w-full h-full hide-marker-labels ${mutedMap ? 'is-muted' : ''}`} role="region" aria-label="Mapa de seguimiento de taxis · OpenStreetMap" />
+        {tileError && <p role="status" className="absolute bottom-7 left-3 z-[20] bg-white text-slate-800 text-xs rounded-lg px-3 py-2 max-w-[75%]">No cargó parte del mapa. Revisa la conexión; las posiciones GPS siguen disponibles.</p>}
 
         {/* Pill flotante para detener el modo seguimiento */}
         {followingDeviceId && (
@@ -1397,7 +812,7 @@ export default function MapPage() {
             ) : (
               realtimeEvents.slice(0, 5).map((ev, i) => {
                 const device = devices.find(d => d.id === ev.deviceId);
-                const isAlarm = ev.type === 'alarm';
+
 
                 let title = ev.type;
                 let icon = <Zap size={12} />;
@@ -1427,7 +842,7 @@ export default function MapPage() {
                       <p className="text-xs font-medium text-gray-800 truncate">
                         {title}
                       </p>
-                      <p className="text-[10px] text-gray-500">{device?.name || 'ID: ' + ev.deviceId} • {new Date(ev.eventTime || ev.serverTime || Date.now()).toLocaleTimeString()}</p>
+                      <p className="text-[10px] text-gray-500">{device?.name || 'ID: ' + ev.deviceId} • {new Date(ev.eventTime || ev.serverTime || nowTick).toLocaleTimeString()}</p>
                     </div>
                   </div>
                 );
@@ -1467,15 +882,13 @@ export default function MapPage() {
                       setSelectedDevice(d);
                       // 3. Centrar el mapa
                       const pos = positions.get(d.id);
-                      if (pos && googleMapRef.current) {
-                        googleMapRef.current.panTo({ lat: pos.latitude, lng: pos.longitude });
-                        googleMapRef.current.setZoom(16);
+                      if (pos && leafletMapRef.current) {
+                        leafletMapRef.current.panTo({ lat: pos.latitude, lng: pos.longitude });
+                        leafletMapRef.current.setZoom(16);
                       }
                       // 4. Disparar el click del marcador para abrir el InfoWindow en desktop
                       const marker = markersRef.current.get(d.id);
-                      if (marker && window.google) {
-                        window.google.maps.event.trigger(marker, 'click');
-                      }
+                      if (marker) marker.fire('click');
                       // 5. Cerrar el buscador
                       setShowSearch(false);
                       setSearchQuery('');
@@ -1529,10 +942,10 @@ export default function MapPage() {
         {/* Mapa de Calor Predictivo */}
         <RequireFeature feature="mapa_calor">
           <div className="bg-white rounded-xl shadow-lg border border-gray-100 flex flex-col overflow-hidden group relative">
-            <button 
-              onClick={() => setShowHeatmap(!showHeatmap)} 
-              className={`w-10 h-10 flex items-center justify-center transition-all duration-300 ${showHeatmap ? 'text-red-600 bg-red-50' : 'text-gray-600 hover:text-red-500 hover:bg-slate-50'}`} 
-              title="Mapa de Calor Predictivo (IA)"
+            <button
+              onClick={() => setShowHeatmap(!showHeatmap)}
+              className={`w-10 h-10 flex items-center justify-center transition-all duration-300 ${showHeatmap ? 'text-red-600 bg-red-50' : 'text-gray-600 hover:text-red-500 hover:bg-slate-50'}`}
+              title="Zonas de actividad de los últimos siete días"
             >
               <Activity size={18} className={showHeatmap ? 'animate-pulse' : ''} />
             </button>
@@ -1548,19 +961,19 @@ export default function MapPage() {
             <button
               onClick={() => setIsSimulatorActive(v => !v)}
               className={`w-10 h-10 flex items-center justify-center transition-all duration-300 ${isSimulatorActive ? 'text-purple-600 bg-purple-50' : 'text-gray-600 hover:text-purple-500 hover:bg-slate-50'}`}
-              title="Simulador de Asignación IA"
+              title="Comparar taxis disponibles"
             >
               <Brain size={18} className={isSimulatorActive ? 'animate-pulse' : ''} />
             </button>
             <div className="absolute right-full mr-3 top-1/2 -translate-y-1/2 bg-gray-900 text-white text-[10px] font-bold px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
-              Simulador IA (Plan Enterprise)
+              Comparar taxis
             </div>
           </div>
         </RequireFeature>
 
         {/* Cambiar Capa */}
         <div className="bg-white rounded-xl shadow-lg border border-gray-100 flex flex-col overflow-hidden">
-          <button onClick={handleToggleMapType} className="w-10 h-10 flex items-center justify-center text-gray-600 hover:text-blue-600 hover:bg-slate-50 transition-colors" title="Cambiar tipo de mapa">
+          <button onClick={handleToggleMapType} className="w-10 h-10 flex items-center justify-center text-gray-600 hover:text-blue-600 hover:bg-slate-50 transition-colors" title={mutedMap ? "Ver mapa a color" : "Ver mapa en gris"} aria-label={mutedMap ? "Ver mapa a color" : "Ver mapa en gris"}>
             <Layers size={18} />
           </button>
         </div>
@@ -1584,8 +997,8 @@ export default function MapPage() {
                 <Brain size={14} className="text-purple-600 animate-pulse" />
               </div>
               <div>
-                <p className="text-xs font-black text-purple-700 uppercase tracking-wider">Simulador de IA</p>
-                <p className="text-[10px] text-gray-400">Enrutamiento Vectorial K-Means</p>
+                <p className="text-sm font-bold text-slate-800">Comparar taxis</p>
+                <p className="text-xs text-slate-600">Disponibilidad, cercanía y dirección</p>
               </div>
             </div>
             <button onClick={() => setIsSimulatorActive(false)} className="w-6 h-6 rounded-full hover:bg-gray-100 flex items-center justify-center text-gray-400">
@@ -1609,14 +1022,10 @@ export default function MapPage() {
                     <div className="flex-1 min-w-0">
                       <p className="font-bold truncate">{c.device.name}</p>
                       <p className="text-[10px] opacity-70">
-                        {c.routeKm ?? `${c.distKm.toFixed(2)} km`}
-                        {c.eta
-                          ? <> · <span className="font-black">ETA {c.eta}</span></>
-                          : <span className="italic"> · calculando...</span>
-                        }
+                        {c.distKm.toFixed(2)} km · en línea recta
                       </p>
                     </div>
-                    {i === 0 && <span className="text-[10px] font-black uppercase tracking-widest bg-emerald-600 text-white px-2 py-0.5 rounded-full">IA asignó</span>}
+                    {i === 0 && <span className="text-xs font-semibold text-blue-800">Candidato 1</span>}
                   </div>
                 );
               })}
@@ -1624,7 +1033,7 @@ export default function MapPage() {
                 onClick={() => { clearSimElements(); setSimResult(null); }}
                 className="w-full mt-1 text-[10px] text-gray-400 hover:text-gray-600 text-center py-1 hover:bg-gray-50 rounded-lg transition-colors"
               >
-                ↩ Limpiar y simular de nuevo
+                Elegir otro punto
               </button>
             </div>
           )}
@@ -1644,10 +1053,10 @@ export default function MapPage() {
             <button
               onClick={() => {
                 setSelectedDevice(null);
-                infoWindowRef.current?.close();
-                if (window.innerWidth < 640 && googleMapRef.current) {
-                  const currentZoom = googleMapRef.current.getZoom();
-                  if (currentZoom) googleMapRef.current.setZoom(Math.max(currentZoom - 1, 12));
+                infoWindowRef.current?.remove();
+                if (window.innerWidth < 640 && leafletMapRef.current) {
+                  const currentZoom = leafletMapRef.current.getZoom();
+                  if (currentZoom) leafletMapRef.current.setZoom(Math.max(currentZoom - 1, 12));
                 }
               }}
               className="absolute top-4 right-4 w-8 h-8 bg-gray-50 rounded-full flex items-center justify-center text-gray-500 hover:bg-gray-100"
@@ -1740,12 +1149,10 @@ export default function MapPage() {
                           smoothCameraReset();
                         } else {
                           setFollowingDeviceId(currentSelectedDevice.id);
-                          if (googleMapRef.current) {
-                            const map = googleMapRef.current;
+                          if (leafletMapRef.current) {
+                            const map = leafletMapRef.current;
                             map.panTo({ lat: pos.latitude, lng: pos.longitude });
-                            map.setHeading(pos.course || 0);
-                            map.setTilt(60);
-                            setTimeout(() => map.setZoom(18), 300);
+                            map.setZoom(17);
                           }
                         }
                         // Ocultar panel para dejar vista limpia

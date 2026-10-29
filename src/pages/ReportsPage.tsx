@@ -8,6 +8,12 @@ import {
   MapPin, Zap, AlertTriangle, RefreshCw, X, Sparkles, Activity
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { trackingCall,TrackingClientError } from '../lib/trackingClient';
+import { parseAuditReport, type AuditReport } from '../lib/trackingContracts';
+import { FleetAuditReport } from '../components/FleetAuditReport';
+import { RequireFeature } from '../components/RequireFeature';
+import '../components/fleetAudit.css';
+import { positiveId,record } from '../../estrella-taxis-backend/supabase/functions/_shared/tracking/contracts.ts';
 
 // â”€â”€â”€ Types â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 interface Trip {
@@ -36,7 +42,7 @@ interface Summary {
 }
 interface RoutePosition {
   id: number; deviceId: number; latitude: number; longitude: number;
-  speed: number; course: number; fixTime: string; attributes?: any;
+  speed: number; course: number; fixTime: string; attributes?: Record<string,unknown>;
 }
 interface AuditLog {
   id: string;
@@ -130,12 +136,19 @@ const EVENT_LABELS: Record<string, { label: string; color: string }> = {
 };
 
 // â”€â”€â”€ Filters Bar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+interface ReportGroup {id:number;name:string}
+interface FiltersBarProps {
+  devices:TraccarDevice[];groups:ReportGroup[];selectedDevices:number[];setSelectedDevices:React.Dispatch<React.SetStateAction<number[]>>;
+  selectedEventTypes:string[];setSelectedEventTypes:React.Dispatch<React.SetStateAction<string[]>>;
+  selectedGroups:number[];setSelectedGroups:React.Dispatch<React.SetStateAction<number[]>>;
+  from:string;to:string;setFrom:(value:string)=>void;setTo:(value:string)=>void;onSearch:()=>Promise<void>;loading:boolean;activeTab:TabType;
+}
 function FiltersBar({
   devices, groups, selectedDevices, setSelectedDevices,
   selectedEventTypes, setSelectedEventTypes,
   selectedGroups, setSelectedGroups, from, setFrom, to, setTo,
   onSearch, loading, activeTab
-}: any) {
+}: FiltersBarProps) {
   const [showDevicePicker, setShowDevicePicker] = useState(false);
   const [showEventPicker, setShowEventPicker] = useState(false);
   const [deviceSearch, setDeviceSearch] = useState('');
@@ -381,7 +394,7 @@ function AddressCell({ stop, mapsLoaded }: { stop: Stop, mapsLoaded: boolean }) 
     return () => observer.disconnect();
   }, [mapsLoaded, address]);
 
-  if (address) return <span ref={cellRef as any}>{address}</span>;
+  if (address) return <div ref={cellRef}>{address}</div>;
 
   return (
     <div ref={cellRef} className="flex flex-col gap-1.5">
@@ -401,7 +414,7 @@ function AddressCell({ stop, mapsLoaded }: { stop: Stop, mapsLoaded: boolean }) 
 // ——————————————————————————————————————————————————————————————————————————————————————————————————
 export default function ReportsPage() {
   const [devices, setDevices] = useState<TraccarDevice[]>([]);
-  const [groups, setGroups] = useState<any[]>([]);
+  const [groups, setGroups] = useState<ReportGroup[]>([]);
   const [selectedDevices, setSelectedDevices] = useState<number[]>([]);
   const [selectedEventTypes, setSelectedEventTypes] = useState<string[]>([]);
   const [selectedGroups, setSelectedGroups] = useState<number[]>([]);
@@ -421,12 +434,20 @@ export default function ReportsPage() {
     setTimeout(() => setToastMessage(null), 3000);
   };
 
-  const [aiReport, setAiReport] = useState<string | null>(null);
+  const [aiReport, setAiReport] = useState<AuditReport | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
+  const [aiError,setAiError]=useState<string|null>(null);
+  const auditController=useRef<AbortController|null>(null);
+  const auditRequest=useRef<{signature:string;key:string}|null>(null);
 
   const today = getPreset('today');
   const [from, setFrom] = useState(today.from);
   const [to, setTo] = useState(today.to);
+  useEffect(()=>{
+    auditController.current?.abort();auditController.current=null;
+    auditRequest.current=null;setAiReport(null);setAiError(null);setAiLoading(false);
+  },[from,to,selectedDevices]);
+  useEffect(()=>()=>auditController.current?.abort(),[]);
 
   // Results
   const [trips, setTrips] = useState<Trip[]>([]);
@@ -448,7 +469,12 @@ export default function ReportsPage() {
       setDevices(devs);
       if (devs.length > 0) setSelectedDevices([devs[0].id]);
     });
-    fetch('/api/groups', { credentials: 'include' }).then(r => r.json()).then(setGroups).catch(() => { });
+    fetch('/api/groups', { credentials: 'include' }).then(async(response)=>{
+      if(!response.ok)throw new Error('No pudimos consultar los grupos.');
+      const raw:unknown=await response.json();
+      if(!Array.isArray(raw))throw new Error('Grupos no válidos.');
+      setGroups(raw.flatMap((item)=>record(item) && positiveId(item.id) && typeof item.name==='string'?[{id:item.id,name:item.name}]:[]));
+    }).catch(()=>showToast('No pudimos cargar los grupos. Puedes elegir unidades individuales.','error'));
     loadGoogleMaps().then(() => setMapsLoaded(true)).catch(console.error);
   }, []);
 
@@ -641,20 +667,22 @@ export default function ReportsPage() {
   };
 
   const handleAnalyzeWithAI = async () => {
-    if (summary.length === 0 && events.length === 0) return;
+    if (auditController.current || selectedDevices.length===0) return;
+    const controller=new AbortController();auditController.current=controller;
     setAiLoading(true);
-    setAiReport(null);
+    setAiError(null);
     try {
-      const response = await supabase.functions.invoke('ai-insights', {
-        body: { summary, events }
-      });
-      if (response.error) throw response.error;
-      setAiReport(response.data?.text || 'No se pudo generar el reporte.');
-    } catch (err: any) {
-      console.error(err);
-      setAiReport(`**Error:** ${err.message || 'Error al conectar con la IA.'}`);
+      const params=new URLSearchParams(buildParams(selectedDevices[0]));
+      const request={deviceIds:[...selectedDevices].sort((a,b)=>a-b),from:params.get('from'),to:params.get('to')};
+      const signature=JSON.stringify(request);
+      if (auditRequest.current?.signature!==signature) auditRequest.current={signature,key:crypto.randomUUID()};
+      const result=await trackingCall('ai-insights',{...request,requestId:auditRequest.current.key},controller.signal);
+      if (!controller.signal.aborted) {setAiReport(parseAuditReport(result));auditRequest.current=null;}
+    } catch (error: unknown) {
+      if(error instanceof TrackingClientError && !['result_uncertain','request_running'].includes(error.code))auditRequest.current=null;
+      if (!controller.signal.aborted) setAiError(error instanceof Error?error.message:'No pudimos completar el análisis.');
     } finally {
-      setAiLoading(false);
+      if (auditController.current===controller) {auditController.current=null;setAiLoading(false);}
     }
   };
 
@@ -994,11 +1022,11 @@ export default function ReportsPage() {
               <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between shrink-0 bg-gray-50/50">
                 <span className="text-sm font-bold text-gray-700">{summary.length} unidad{summary.length !== 1 ? 'es' : ''}</span>
                 <div className="flex gap-2">
-                  <button onClick={handleAnalyzeWithAI} disabled={aiLoading}
+                  <RequireFeature feature="auditoria_ia"><button onClick={handleAnalyzeWithAI} disabled={aiLoading} aria-busy={aiLoading}
                     className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl transition border border-indigo-700 disabled:opacity-50">
                     {aiLoading ? <RefreshCw size={13} className="animate-spin" /> : <Sparkles size={13} />}
                     {aiLoading ? 'Analizando...' : 'Auditar con IA'}
-                  </button>
+                  </button></RequireFeature>
                   <button onClick={exportSummary}
                     className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-green-700 bg-green-50 hover:bg-green-100 rounded-xl transition border border-green-200">
                     <Download size={13} /> Exportar Excel
@@ -1007,22 +1035,9 @@ export default function ReportsPage() {
               </div>
             )}
             <div className="w-full p-4">
-              {aiReport && (
-                <div className="mb-6 bg-gradient-to-br from-indigo-50 to-purple-50 border border-indigo-100 rounded-2xl p-5 shadow-sm relative">
-                  <button onClick={() => setAiReport(null)} className="absolute top-3 right-3 text-indigo-300 hover:text-indigo-600 transition">
-                    <X size={16} />
-                  </button>
-                  <div className="flex items-center gap-2 mb-3">
-                    <Sparkles size={18} className="text-indigo-600" />
-                    <h3 className="font-bold text-indigo-900">Auditoría de IA</h3>
-                  </div>
-                  <div className="text-sm text-indigo-900/80 space-y-3 leading-relaxed">
-                    {aiReport.split('\n').map((para, i) => para.trim() ? (
-                      <p key={i} dangerouslySetInnerHTML={{ __html: para.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') }} />
-                    ) : <div key={i} className="h-1" />)}
-                  </div>
-                </div>
-              )}
+              {aiLoading && <p className="mb-4 text-sm text-slate-700" role="status">Consultando los datos del GPS y preparando el análisis…</p>}
+              {aiError && <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-4 text-amber-900" role="alert"><p>{aiError}</p><button type="button" onClick={handleAnalyzeWithAI} disabled={aiLoading} className="mt-2 underline underline-offset-4">Volver a consultar</button></div>}
+              {aiReport && <FleetAuditReport report={aiReport} onClose={()=>setAiReport(null)}/>}
               {loading && <div className="flex items-center justify-center h-40 text-gray-400 text-sm"><RefreshCw size={20} className="animate-spin mr-2" />Cargando resumen...</div>}
               {!loading && summary.length === 0 && <div className="flex flex-col items-center justify-center h-40 text-gray-400 gap-2"><BarChart3 size={32} className="opacity-30" /><p className="text-sm">Selecciona un período y genera el reporte</p></div>}
               {!loading && summary.length > 0 && (

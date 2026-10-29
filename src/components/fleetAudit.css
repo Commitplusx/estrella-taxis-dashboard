@@ -1,0 +1,16 @@
+.fleet-audit{margin-block-end:24px;border:1px solid #d7deea;border-radius:12px;background:#fff;color:#263244;padding:24px;overflow-wrap:anywhere}
+.fleet-audit-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:20px}
+.fleet-audit-heading h3{font-size:21px;font-weight:700;line-height:1.25;color:#17243b}
+.fleet-audit-heading p,.fleet-audit-scope{margin-top:8px;font-size:14px;color:#4e5c70;font-variant-numeric:tabular-nums}
+.fleet-audit-heading button{display:grid;place-items:center;min-width:40px;min-height:40px;border:1px solid #d7deea;border-radius:8px;color:#3f4e63;background:white}
+.fleet-audit-heading button:hover{background:#f1f5fa}.fleet-audit-heading button:focus-visible{outline:2px solid #244fa5;outline-offset:3px}
+.fleet-audit-summary{margin-top:24px;font-size:16px;line-height:1.65;max-width:72ch}
+.fleet-audit-notice{margin-top:20px;padding:14px;background:#f1f5fa;border-radius:8px;color:#3b4e69;font-size:14px;line-height:1.6}
+.fleet-audit-findings{margin-top:24px;list-style:none}.fleet-audit-findings>li{display:flex;gap:14px;padding-block:20px;border-top:1px solid #dfe5ed}
+.fleet-audit-findings>li>svg{flex-shrink:0;margin-top:3px;color:#8a4c0c}.fleet-audit-findings h4{font-size:16px;font-weight:700;margin-bottom:6px}
+.fleet-audit-findings p{max-width:72ch;font-size:15px;line-height:1.6}.fleet-audit-findings .fleet-audit-unit{font-size:14px;color:#4e5c70;margin-bottom:3px}
+.fleet-audit-action{margin-top:12px;color:#244fa5}.fleet-audit-empty{display:flex;gap:12px;align-items:flex-start;margin-top:24px;line-height:1.6;font-size:16px}.fleet-audit-empty svg{flex-shrink:0;margin-top:3px;color:#326052}
+.fleet-audit-warnings{margin-top:24px;font-size:14px;line-height:1.65;color:#4e5c70}.fleet-audit-warnings h4{font-weight:700;color:#263244}.fleet-audit-warnings ul{padding-inline-start:18px;list-style:disc;margin-top:6px}
+.fleet-audit footer{margin-top:24px;padding-top:16px;border-top:1px solid #dfe5ed;font-size:14px;line-height:1.6;color:#4e5c70;max-width:74ch}
+.fleet-audit ::selection{background:#dae5ff;color:#17243b}
+@media(max-width:600px){.fleet-audit{padding:18px}.fleet-audit-heading{gap:12px}.fleet-audit-heading h3{font-size:20px}.fleet-audit-findings p{font-size:16px}}

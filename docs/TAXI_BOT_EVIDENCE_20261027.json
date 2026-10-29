@@ -1,0 +1,198 @@
+{
+  "date": "2026-10-27",
+  "scope": "taxi_whatsapp_bot_local_candidate",
+  "published": false,
+  "channel_connected": false,
+  "apk_in_scope": false,
+  "production_mutations": 0,
+  "real_messages": 0,
+  "real_model_calls": 0,
+  "tests": {
+    "deno_passed": 63,
+    "postgres_integration_passed": 16,
+    "tracking_regressions_passed": 40,
+    "failed": 0,
+    "quality_gate_files": 17,
+    "entrypoint_types": "passed",
+    "sql_test_types": "passed",
+    "directed_lint": "passed"
+  },
+  "limitations": [
+    "No live provider/model evaluation without private credentials",
+    "No physical WhatsApp reception",
+    "PGlite tests do not establish multi-node production load capacity",
+    "VPS not accessed",
+    "Exact remote schema and existing changes require review before deployment"
+  ],
+  "files": [
+    {
+      "path": "estrella-taxis-backend/supabase/functions/_shared/bot/taxis/contracts.ts",
+      "sha256": "9EC255D180D1BDD4F640BB2D1118AC96F3FCF07C7B5D5293A1DCB8CE24379330"
+    },
+    {
+      "path": "estrella-taxis-backend/supabase/functions/_shared/bot/taxis/policy.ts",
+      "sha256": "B7A3D77ABFD7890BB5B664304018C8084595C0A9CE393A2438F3220643405CB1"
+    },
+    {
+      "path": "estrella-taxis-backend/supabase/functions/_shared/bot/taxis/coordinator.ts",
+      "sha256": "7C75C5B9656050F4438CD60EAE746904D84F49AAEBEFBDA13E3AF7F58FC5EFA1"
+    },
+    {
+      "path": "estrella-taxis-backend/supabase/functions/_shared/bot/taxis/interpreter.ts",
+      "sha256": "23901C936B71037FB918185B116619486B587AB84994ECEAF2CB71C0AFF15201"
+    },
+    {
+      "path": "estrella-taxis-backend/supabase/functions/_shared/bot/taxis/services.ts",
+      "sha256": "BAC93D1CF489614E10CBD720FA8FC03966D46FD2D28FCF407221E8397E5DB672"
+    },
+    {
+      "path": "estrella-taxis-backend/supabase/functions/_shared/bot/taxis/transport.ts",
+      "sha256": "465578CBD92FD66DCEE3CDA6970B9AD815AE63ECCC7E251777BEB0FE4D789805"
+    },
+    {
+      "path": "estrella-taxis-backend/supabase/functions/_shared/bot/taxis/engine.ts",
+      "sha256": "5DDE51D217B30AC117E4A05F00E2147B5AB0E2C3591E46C524D24F44B8D5AA75"
+    },
+    {
+      "path": "estrella-taxis-backend/supabase/functions/_shared/bot/taxis/runtime.ts",
+      "sha256": "3E1667D4BADDA2842664C27D141AB6C514DF378FE485E55E73EBB63442E4CD4C"
+    },
+    {
+      "path": "estrella-taxis-backend/supabase/functions/_shared/bot/taxis/prompt.ts",
+      "sha256": "5246D983F3927E19884535C478B969941ECCDB20B506C2E04ECADD8429306123"
+    },
+    {
+      "path": "estrella-taxis-backend/supabase/functions/_shared/bot/taxis/tools.ts",
+      "sha256": "E4BD443295355FB1675FBBF45E912DC042670F98E608F06EEC85739AC3C19E74"
+    },
+    {
+      "path": "estrella-taxis-backend/supabase/functions/process-queue/index.ts",
+      "sha256": "CF5398E6605D63CE34CEFF54A364D495CC7DFB3FDE50F7AD6E3C5AABB7735954"
+    },
+    {
+      "path": "estrella-taxis-backend/supabase/functions/ycloud-webhook/index.ts",
+      "sha256": "7171B29A769BEC2E630D4C0D92B5FBC2BC57975CBDC22106967BDA44216766AF"
+    },
+    {
+      "path": "estrella-taxis-backend/supabase/functions/_shared/bot/core/toolSchemas.ts",
+      "sha256": "30DBF1CACFA3BF87334FA1C45CEEE59E454E6D5DE296939259B22F47CE4F3B67"
+    },
+    {
+      "path": "estrella-taxis-backend/supabase/functions/_shared/tracking/auth.ts",
+      "sha256": "70AA5E6192B4D20D14BC820956BA7CB6731B4DECD42985283145759EC06AF6EA"
+    },
+    {
+      "path": "estrella-taxis-backend/supabase/functions/_shared/tracking/store.ts",
+      "sha256": "95ADD739576573316707F7E603C69600B8F7995B9E1A7F8BEA42DD4D8BD7ECAD"
+    },
+    {
+      "path": "estrella-taxis-backend/supabase/functions/_shared/tracking/http.ts",
+      "sha256": "85764359443BE35E8DFBE22DD3E535564BF969444F12292B4E9EFF568AFE9075"
+    },
+    {
+      "path": "estrella-taxis-backend/supabase/functions/_shared/tracking/contracts.ts",
+      "sha256": "87955C6254674F049D9046D48B1BE8F5C4D6226F454B334FA09ABF870E2F750C"
+    },
+    {
+      "path": "estrella-taxis-backend/supabase/functions/_shared/algorithms/headingMatcher.ts",
+      "sha256": "1593C4F6DA3CFBCFB416666FA398FB31E99EA9B6B163FF17C55794AA302BAC09"
+    },
+    {
+      "path": "estrella-taxis-backend/supabase/functions/_shared/tracking/fleetTypes.ts",
+      "sha256": "516467F5CE77487E45362A1BE606D367B31CE23B79199E433034FE730E00DA8D"
+    },
+    {
+      "path": "estrella-taxis-backend/supabase/config.toml",
+      "sha256": "5073F76C92751AA4DBE3919114C3E2EADDF596467D8F7AAD5DE92CB4DF1EB916"
+    },
+    {
+      "path": "estrella-taxis-backend/supabase/migrations/20261027220000_taxi_bot_transactions.sql",
+      "sha256": "2191F3E8E9231E5BEE32FEF879D322402BEF15EB728186AF6F817A8A9A91FDF0"
+    },
+    {
+      "path": "estrella-taxis-backend/scripts/check-taxi-bot-quality.ts",
+      "sha256": "5E0A072A39965F38BEDB416C9DCD8D1B36EF91B61EAA3EEB5DA06F8650E3CD56"
+    },
+    {
+      "path": "estrella-taxis-backend/scripts/run-taxi-worker.ts",
+      "sha256": "7778BC4A40FE0D0EFA90065BE1D3BA04DA0338137545FBF00D347FB92C40C816"
+    },
+    {
+      "path": "estrella-taxis-backend/scripts/evaluate-taxi-intents.ts",
+      "sha256": "2CAE059BE219AA37199BC20E263FF48932D74CCC95808C3C6A9BCB9DB2D6BB71"
+    },
+    {
+      "path": "estrella-taxis-backend/scripts/test-taxi-bot.ps1",
+      "sha256": "2A78A72B6A93C21D317F0D4892DAAB7247C0ACF233A1FD9576A9E1CA384AF5B1"
+    },
+    {
+      "path": "tests/taxi-bot-core.test.ts",
+      "sha256": "58664AF3B15CEC21CE31B614092FA241BE47D6461621050A8F563762AEA0010F"
+    },
+    {
+      "path": "tests/taxi-bot-services.test.ts",
+      "sha256": "5BE38CF1333D3B2B2C0B7388FA39C80254390A2F29B36876620668E489F423C4"
+    },
+    {
+      "path": "tests/taxi-bot-database.test.ts",
+      "sha256": "15C73A072EA76DF9034CBE7D5BC199ED8869F33732D524E4AA86C4D9AE51B7CF"
+    },
+    {
+      "path": "tests/fixtures/taxi-intents.ts",
+      "sha256": "C0B61294BC3F9FD1AC4C337A9DD55CF0D888F2706EA4E4FB2582F2C9B430F4E6"
+    },
+    {
+      "path": "tsconfig.taxi-tests.json",
+      "sha256": "BD71C217AE979FFE0C8E85217A97ECB05BB55397848F11364E12BDFC1D5436B9"
+    },
+    {
+      "path": "tsconfig.tracking-tests.json",
+      "sha256": "9BBA1336A2AE4998CBD7D5C904B03FC56E7318AAE4B20A5E13D469DBB217AB78"
+    },
+    {
+      "path": "docs/TAXI_BOT_20261027.md",
+      "sha256": "9395E1686AD3AA7397236DD416259B1179EF8831504F0C14F159B30006EF9BC4"
+    },
+    {
+      "path": ".codex-tmp/taxi-final-tests.log",
+      "sha256": "4CA9225FCA3F670F716FAD73BFD5F906B9448581EA9D45DA9A4D9C33AF99878A"
+    },
+    {
+      "path": ".codex-tmp/tracking-after-taxi-tests.log",
+      "sha256": "3E420224274632A03543B0CCB218802666CD747E9D606A5E67FA4AB27E6638A8"
+    },
+    {
+      "path": "tests/taxi-bot-ambiguities.test.ts",
+      "sha256": "055E4BD873679BC1AB22E325A1378C002730768F310E08A44F4A4C21C13076E7"
+    },
+    {
+      "path": ".codex-tmp/taxi-ambiguities-before.log",
+      "sha256": "B0A7A307133EBE571DAB689A71861A29437EA638A117513501EFA9710F3BBBC5"
+    },
+    {
+      "path": ".codex-tmp/taxi-ambiguities-followup-before.log",
+      "sha256": "DAEFF86F8037C35BF4A952B71E986F4C4C3018B9F5C79CE29F8E1140D3F5811A"
+    },
+    {
+      "path": ".codex-tmp/taxi-ambiguities-pending-before.log",
+      "sha256": "8BC8653B2FFC88B1BD37C0A122AB6664A1DED544DADA43736A53F2F8813BEB94"
+    },
+    {
+      "path": ".codex-tmp/taxi-ambiguities-sql-before.log",
+      "sha256": "E870AA2D5E7F64480FD563BDE57E82D2B487BDE9DAE72D5E3240A0B155704D71"
+    },
+    {
+      "path": ".codex-tmp/taxi-ambiguities-final-tests.log",
+      "sha256": "788EF15E62F13A3544F8A386DDDC28A8F5CDD5CF6BE461688EB2134AE56C1475"
+    }
+  ],
+  "h3_connected_to_new_coordinator": false,
+  "ambiguity_audit": {
+    "initial_cases": 12,
+    "initial_failures": 11,
+    "regression_cases": 19,
+    "sql_regressions_added": 2,
+    "final_failures": 0,
+    "scope": "local_only"
+  }
+}

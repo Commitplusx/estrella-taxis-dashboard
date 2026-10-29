@@ -1,6 +1,8 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { api, BASE_URL, type TraccarUser } from '../lib/traccarApi';
-import { supabase } from '../lib/supabase';
+import { taxiAdminClient } from '../lib/taxiAdminClient';
+import { issueTrackingCredential } from '../lib/trackingClient';
+import { bindTaxiAccount, restoreTrackingUser } from '../lib/taxiSession';
 import { useNativeApp } from '../hooks/useNativeApp';
 
 export type UserRole = 'superadmin' | 'admin_empresa' | 'operador';
@@ -56,6 +58,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const { postMessage } = useNativeApp(user, setUser);
 
   const loadRole = async (u: TraccarUser) => {
+    const account = await bindTaxiAccount(u.id, {
+      clearCredential: () => localStorage.removeItem('traccar_token'),
+      issueCredential: () => {
+        const expiration = new Date();
+        expiration.setMonth(expiration.getMonth() + 6);
+        return issueTrackingCredential(expiration);
+      },
+      saveCredential: (credential) => localStorage.setItem('traccar_token', credential),
+      readContext: () => taxiAdminClient.context(),
+    });
     if (u.administrator) {
       setUserRole('superadmin');
       setEmpresaId(null);
@@ -63,24 +75,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setPaqueteActual(null);
       return;
     }
-    const { data } = await supabase.from('perfiles').select('rol, empresa_id').eq('traccar_user_id', u.id).single();
-    if (data) {
-      setUserRole(data.rol as UserRole);
-      setEmpresaId(data.empresa_id);
-      if (data.empresa_id) {
-        const { data: empresa } = await supabase.from('empresas').select('*, paquete:paquetes(*)').eq('id', data.empresa_id).single();
-        setEmpresaData(empresa ? { id: empresa.id, nombre_empresa: empresa.nombre_empresa, logo_url: empresa.logo_url, tipo_negocio: empresa.tipo_negocio, categorias_catalogo: empresa.categorias_catalogo || [] } : null);
-        setPaqueteActual(empresa?.paquete ? (empresa.paquete as Paquete) : null);
-      } else {
-        setEmpresaData(null);
-        setPaqueteActual(null);
-      }
-    } else {
-      setUserRole('operador');
-      setEmpresaId(null);
-      setEmpresaData(null);
-      setPaqueteActual(null);
+    // The private Stellar database is accessed through the verified Traccar identity.
+    const company = account.tenants[0];
+    if (account.tenants.length !== 1 || !company) {
+      throw new Error('Tu cuenta necesita una base de taxis asignada.');
     }
+    setUserRole(account.canConfigure ? 'admin_empresa' : 'operador');
+    setEmpresaId(company.id);
+    setEmpresaData({ id: company.id, nombre_empresa: company.name, logo_url: null, tipo_negocio: 'taxi' });
+    const plan = company.plan;
+    setPaqueteActual(plan ? { ...plan, permisos_sistema: {
+      ...plan.permisos_sistema,
+      reporte_pdf: plan.permisos_sistema.reporte_pdf === true,
+      score_diario: plan.permisos_sistema.score_diario === true,
+      enrutamiento_vectorial: plan.permisos_sistema.enrutamiento_vectorial === true,
+      mapa_calor: plan.permisos_sistema.mapa_calor === true,
+    } } : null);
   };
 
   // Al arrancar, verificar si ya hay sesión activa o si viene un token en la URL
@@ -88,73 +98,41 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const params = new URLSearchParams(window.location.search);
     const token = params.get('token');
 
+    const acceptUser = async (u: TraccarUser) => {
+      await loadRole(u);
+      setUser(u);
+    };
+    const failedSession = () => {
+      localStorage.removeItem('traccar_token');
+      setUser(null); setUserRole(null); setEmpresaId(null); setEmpresaData(null); setPaqueteActual(null);
+    };
     if (token) {
       // Intentar iniciar sesión usando el token
       fetch(`${BASE_URL}/session?token=${encodeURIComponent(token)}`, { credentials: 'include' })
         .then(async (res) => {
           if (!res.ok) throw new Error('Token inválido o expirado');
           const userData = await res.json();
-          setUser(userData);
-          await loadRole(userData);
+          await acceptUser(userData);
           window.history.replaceState({}, document.title, window.location.pathname);
         })
-        .catch(() => { setUser(null); setUserRole(null); setEmpresaId(null); setEmpresaData(null); setPaqueteActual(null); })
+        .catch(failedSession)
         .finally(() => setLoading(false));
     } else {
       // Flujo normal web: verificar sesión existente mediante cookie
-      api.getSession()
-        .then(async (u) => { setUser(u); await loadRole(u); setLoading(false); })
-        .catch(async () => {
-          // Si falló la sesión normal, intentar auto-login con token de localStorage
-          const savedToken = localStorage.getItem('traccar_token');
-          if (savedToken) {
-            try {
-              const u = await api.loginWithToken(savedToken);
-              setUser(u);
-              await loadRole(u);
-              setLoading(false);
-              return;
-            } catch (e) {
-              console.warn('Token persistente inválido, limpiando...', e);
-              localStorage.removeItem('traccar_token');
-            }
-          }
-          // Si no hay token o falló, resetear el estado
-          setUser(null); setUserRole(null); setEmpresaId(null); setEmpresaData(null); setPaqueteActual(null);
-          setLoading(false);
-        });
+      restoreTrackingUser<TraccarUser>({
+        cookieUser: () => api.getSession(),
+        savedCredential: () => localStorage.getItem('traccar_token'),
+        resumeUser: (credential) => api.loginWithToken(credential),
+      }).then(acceptUser).catch(failedSession).finally(() => setLoading(false));
     }
   }, []);
 
   const login = async (email: string, password: string) => {
     const loggedUser = await api.login(email, password);
-    setUser(loggedUser);
     await loadRole(loggedUser);
-    
-    // Generar un token persistente para recordar la sesión por 6 meses
-    try {
-      const expiration = new Date();
-      expiration.setMonth(expiration.getMonth() + 6); // 6 meses
-      const res = await fetch(`${BASE_URL}/session/token`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({ expiration: expiration.toISOString() }),
-      });
-      if (res.ok) {
-        const appToken = await res.text();
-        // Guardar para la web
-        localStorage.setItem('traccar_token', appToken);
-        
-        // Si estamos en Android, enviarlo al WebView
-        // @ts-ignore
-        if (window.appInterface) {
-          postMessage(`login|${appToken}`);
-        }
-      }
-    } catch (e) {
-      console.error('Failed to register token for persistent session', e);
-    }
+    setUser(loggedUser);
+    const appToken = localStorage.getItem('traccar_token');
+    if (appToken) postMessage(`login|${appToken}`);
   };
 
   const logout = async () => {

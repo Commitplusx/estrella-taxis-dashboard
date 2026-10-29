@@ -1,0 +1,11 @@
+{
+  "compilerOptions": {
+    "target":"ES2023","module":"ESNext","moduleResolution":"bundler","strict":true,
+    "allowImportingTsExtensions":true,"noEmit":true,"jsx":"react-jsx","skipLibCheck":true,
+    "types":["node","react","vite/client"],"lib":["ES2023","DOM"]
+  },
+  "files":[
+    "tests/trackingDatabase.test.ts",
+    "src/lib/trackingContracts.ts","src/lib/fleetActivity.ts","src/lib/trackingClient.ts","src/components/FleetAuditReport.tsx"
+  ]
+}

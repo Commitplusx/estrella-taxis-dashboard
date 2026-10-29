@@ -70,6 +70,7 @@ export default function Sidebar({ onClose }: SidebarProps) {
     { to: '/map', icon: <Map size={18} />, label: 'Mapa en Vivo' },
     { to: '/dashboard', icon: <BarChart3 size={18} />, label: 'Dashboard' },
     { to: '/devices', icon: <Car size={18} />, label: 'Mis Taxis' },
+    { to: '/zonas-tarifas', icon: <Hexagon size={18} />, label: 'Zonas y tarifas' },
   ];
 
   const taxiToolsItems: { to: string; icon: React.ReactNode; label: string; feature?: Feature }[] = [
@@ -84,6 +85,7 @@ export default function Sidebar({ onClose }: SidebarProps) {
   const taxiAdminItems: { to: string; icon: React.ReactNode; label: string; always?: boolean; roles?: string[]; feature?: Feature }[] = [
     { to: '/groups', icon: <Layers size={16} />, label: 'Grupos', always: true },
     { to: '/drivers', icon: <UserCheck size={16} />, label: 'Conductores', always: true },
+    { to: '/taxi-bot', icon: <Bot size={16} />, label: 'Bot de WhatsApp', always: true },
     ...(isSuperadmin ? [{ to: '/catalog', icon: <ShoppingBag size={16} />, label: 'Catálogo Global', roles: ['superadmin'] }] : []),
     { to: '/bot', icon: <Bot size={16} />, label: 'Bot de Voz', roles: ['superadmin', 'admin_empresa'], feature: 'bot_voz' },
     { to: '/users', icon: <Users size={16} />, label: 'Usuarios', roles: ['superadmin', 'admin_empresa'] },
@@ -343,7 +345,8 @@ export default function Sidebar({ onClose }: SidebarProps) {
             onClick={handleLogout}
             disabled={isLoggingOut}
             title="Cerrar sesión"
-            className="flex-shrink-0 w-9 h-9 rounded-xl flex items-center justify-center text-gray-400 hover:bg-red-50 hover:text-red-500 transition disabled:opacity-50"
+            aria-label="Cerrar sesión"
+            className="flex-shrink-0 w-11 h-11 rounded-xl flex items-center justify-center text-slate-600 hover:bg-red-50 hover:text-red-700 transition disabled:opacity-50"
           >
             {isLoggingOut
               ? <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>

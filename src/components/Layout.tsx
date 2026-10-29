@@ -155,6 +155,7 @@ export default function Layout() {
     if (path === '/orders') return 'Pedidos Activos';
     if (path === '/catalog') return tipoNegocio === 'restaurante' ? 'Menú y Platillos' : 'Catálogo de Productos';
     if (path === '/bot') return 'Bot de Atención IA';
+    if (path === '/taxi-bot') return 'Zonas y bot de WhatsApp';
     if (path === '/devices') return 'Mis Taxis';
     if (path === '/connections') return 'Conexiones';
     if (path === '/reports') return 'Reportes';

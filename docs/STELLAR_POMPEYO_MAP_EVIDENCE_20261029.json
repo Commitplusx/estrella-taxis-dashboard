@@ -1,0 +1,78 @@
+{
+  "date": "2026-10-29",
+  "scope": "full_Pompeyo_map_and_zone_colors",
+  "cause": "viewport_over_500_cells_refused_new_data_and_left_previous_fragment_visible",
+  "coverage": {
+    "hexagons": 2541,
+    "zones": 94,
+    "colorsUsed": 12,
+    "neighborBoundaryChecks": 3464,
+    "colorCollisions": 0,
+    "coveredKm2": 40.23345087317503
+  },
+  "loader": {
+    "pageSize": 100,
+    "maxCells": 10000,
+    "cancelOnScopeChange": true,
+    "pagesForPompeyo": 26,
+    "maxPages": 100,
+    "checks": [
+      "cursor_progress",
+      "duplicates",
+      "stable_total",
+      "complete_final_page"
+    ],
+    "viewportLimitRemoved": true,
+    "api": "existing_zones_cursor"
+  },
+  "colors": {
+    "listSwatchesMatchMap": true,
+    "semantic": "named_zone",
+    "unassigned": "dashed_border",
+    "selection": "preserve_fill_dark_border"
+  },
+  "verification": {
+    "strictPanelTypes": "passed",
+    "qualityFiles": 55,
+    "build": "passed_with_existing_bundle_warning",
+    "strictTestTypes": "passed",
+    "visual": "not_run_browser_disabled_in_Work",
+    "newTestsPassed": 7
+  },
+  "publication": {
+    "frontend": "local_only",
+    "productionPricesChanged": false,
+    "sqlChanged": false,
+    "apiChanged": false
+  },
+  "files": [
+    {
+      "path": "src/lib/taxiCoverage.ts",
+      "sha256": "bab33976086b586eaf480ccc1aa0964c850cf8fdf0b9badc31c8163873d59c2d"
+    },
+    {
+      "path": "src/lib/taxiZoneColors.ts",
+      "sha256": "1d5822aa0a0c488f0d3abc837684c0fc8c136c978bd8186d8fd1d4b1371200f3"
+    },
+    {
+      "path": "src/components/TaxiZoneMap.tsx",
+      "sha256": "9f9c30f577f3c5cdb90e5bc0eed97ee222886b01aebfcbaf2f72de38a09b5fa5"
+    },
+    {
+      "path": "src/pages/TaxiBotAdminPage.tsx",
+      "sha256": "91ed4689b05d0947141292e1a68e9b87b4264460ec9e040f7de501f8e7ab4439"
+    },
+    {
+      "path": "src/pages/taxiBotAdmin.css",
+      "sha256": "d52969cc8e424a11efe5d912f8c46a2f263f85eb3bd2d98d34838e3f67f6e6da"
+    },
+    {
+      "path": "tests/taxi-coverage.test.ts",
+      "sha256": "2f13480c9a83c439cd6709c5c243d8b169cf37dfb0b55fbc8728fbaca942b34c"
+    },
+    {
+      "path": "tests/taxi-zone-colors.test.ts",
+      "sha256": "9ac2a24bfeebd47d0ecf7266f8a3aa96a82821fc6397032d6fffec7f7fb5275d"
+    }
+  ]
+}

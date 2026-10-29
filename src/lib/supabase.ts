@@ -1,6 +1,8 @@
 import { createClient } from '@supabase/supabase-js';
-
-const supabaseUrl = 'https://knghdwpxheenkpuajkxl.supabase.co';
-const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtuZ2hkd3B4aGVlbmtwdWFqa3hsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU0MTQ5ODgsImV4cCI6MjEwMDk5MDk4OH0.GYTrjUjrbbcBsZHTPbD5GrPub1ZOoFCe8JuNF9SQoMA';
-
-export const supabase = createClient(supabaseUrl, supabaseKey);
+import { stellarBackendConfig } from './stellarBackendConfig';
+import publicConfig from '../../deployment/stellar/web-public.json';
+const config = stellarBackendConfig({
+  VITE_STELLAR_SUPABASE_URL: import.meta.env.VITE_STELLAR_SUPABASE_URL ?? publicConfig.url,
+  VITE_STELLAR_SUPABASE_PUBLISHABLE_KEY: import.meta.env.VITE_STELLAR_SUPABASE_PUBLISHABLE_KEY ?? publicConfig.publishableKey,
+});
+export const supabase = createClient(config.url, config.publicKey);

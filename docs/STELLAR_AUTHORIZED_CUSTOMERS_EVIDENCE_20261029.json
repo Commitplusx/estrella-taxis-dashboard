@@ -1,0 +1,134 @@
+{
+  "project": "izrsxygazsalfhpaualj",
+  "business": "Pompeyo",
+  "date": "2026-10-29",
+  "publication": {
+    "sql": true,
+    "edge": true,
+    "web": "local",
+    "github": false,
+    "vpsWorkerStarted": false
+  },
+  "migration": {
+    "version": "20261029165842",
+    "name": "taxi_customer_access",
+    "file": "estrella-taxis-backend/supabase/migrations/20261029165842_taxi_customer_access.sql",
+    "sha256": "cfae90b01068e4d29e04894265eaddf78511d4aeee62be8daf466d861847d846"
+  },
+  "functions": [
+    {
+      "name": "ycloud-webhook",
+      "version": 9,
+      "status": "ACTIVE"
+    },
+    {
+      "name": "process-queue",
+      "version": 9,
+      "status": "ACTIVE"
+    },
+    {
+      "name": "taxi-bot-admin",
+      "version": 10,
+      "status": "ACTIVE"
+    }
+  ],
+  "verification": {
+    "sqlFunctions": [
+      {
+        "name": "taxi_bot_customer_phone",
+        "matches": true
+      },
+      {
+        "name": "taxi_bot_customer_allowed",
+        "matches": true
+      },
+      {
+        "name": "taxi_bot_inbound_allowed",
+        "matches": true
+      },
+      {
+        "name": "taxi_bot_recipient_allowed",
+        "matches": true
+      },
+      {
+        "name": "taxi_bot_outbox_permitted",
+        "matches": true
+      },
+      {
+        "name": "taxi_bot_customer_access_read",
+        "matches": true
+      },
+      {
+        "name": "taxi_bot_customer_access_apply",
+        "matches": true
+      },
+      {
+        "name": "taxi_bot_enqueue",
+        "matches": true
+      },
+      {
+        "name": "taxi_bot_begin",
+        "matches": true
+      },
+      {
+        "name": "taxi_bot_commit",
+        "matches": true
+      },
+      {
+        "name": "taxi_bot_outbox_claim",
+        "matches": true
+      }
+    ],
+    "runtimeFiles": 49,
+    "typeOnlyOmitted": 3
+  },
+  "liveState": {
+    "evidence": {
+      "trips": 0,
+      "channels": 0,
+      "allTablesRLS": true,
+      "companyActive": false,
+      "ownerAuthorized": true,
+      "unlistedBlocked": true,
+      "anonymousCanRead": false,
+      "authorizedCustomers": 1,
+      "legacyPrefixMatches": true
+    }
+  },
+  "health": [
+    {
+      "endpoint": "ycloud-webhook",
+      "status": 503,
+      "code": "taxi_disabled"
+    },
+    {
+      "endpoint": "process-queue",
+      "status": 503,
+      "code": "taxi_disabled"
+    },
+    {
+      "endpoint": "taxi-bot-admin",
+      "status": 401,
+      "code": "missing_session"
+    }
+  ],
+  "tests": {
+    "deno": 4846,
+    "nodeSql": 66,
+    "failed": 0,
+    "gateFiles": 63,
+    "strictTypes": true,
+    "build": true,
+    "physicalWhatsApp": false,
+    "visualReview": false
+  },
+  "ownerPhoneSuffix": "9156",
+  "policy": "Only explicitly authorized customers; own driver offer buttons are verified separately",
+  "backups": ".codex-tmp/stellar-access-before",
+  "limits": [
+    "Bot remains disabled; no channels or drivers registered",
+    "No real trip or WhatsApp provider call was made",
+    "Messages already in flight cannot be recalled by removing authorization",
+    "Web UI is local and visual review is pending"
+  ]
+}

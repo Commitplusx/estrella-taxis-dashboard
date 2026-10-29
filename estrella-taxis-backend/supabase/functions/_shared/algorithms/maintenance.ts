@@ -1,10 +1,7 @@
 /**
  * Módulo de Mantenimiento Preventivo
  * 
- * Versión Robusta:
- * - Validación de reglas (intervalos válidos, no ceros, no negativos).
- * - Protección contra odómetros basura (saltos abruptos del GPS).
- * - Manejo seguro de ciclos.
+ * Usa el último servicio registrado; los datos inválidos quedan sin evaluar.
  */
 
 export interface MaintenanceRule {
@@ -12,6 +9,7 @@ export interface MaintenanceRule {
   name: string;
   intervalKm: number; 
   warningThresholdKm: number; 
+  lastServiceKm?: number;
 }
 
 export interface MaintenanceAlert {
@@ -19,7 +17,7 @@ export interface MaintenanceAlert {
   odometerKm: number;
   rule: MaintenanceRule;
   kmToNextService: number;
-  status: 'WARNING' | 'DUE' | 'OK';
+  status: 'WARNING' | 'DUE' | 'OK' | 'UNKNOWN';
   error?: string;
 }
 
@@ -38,6 +36,7 @@ function isValidRule(rule: MaintenanceRule): boolean {
   if (!Number.isFinite(rule.warningThresholdKm) || rule.warningThresholdKm < 0) return false;
   // El threshold no puede ser más grande que el intervalo mismo
   if (rule.warningThresholdKm >= rule.intervalKm) return false;
+  if (rule.lastServiceKm !== undefined && (!Number.isFinite(rule.lastServiceKm) || rule.lastServiceKm < 0)) return false;
   return true;
 }
 
@@ -53,41 +52,39 @@ export function checkMaintenance(
   rules: MaintenanceRule[] = DEFAULT_RULES
 ): MaintenanceAlert[] {
   
-  if (!Number.isFinite(deviceId) || !Number.isFinite(odometerKm)) {
+  if (!Number.isSafeInteger(deviceId) || deviceId<=0 || !Number.isFinite(odometerKm) || odometerKm<0 || odometerKm>10_000_000) {
     return [{
-      deviceId: deviceId || -1,
+      deviceId: Number.isSafeInteger(deviceId) && deviceId>0 ? deviceId : -1,
       odometerKm: 0,
       rule: { id: 'error', name: 'Error de Input', intervalKm: 1, warningThresholdKm: 0 },
       kmToNextService: 0,
-      status: 'OK',
-      error: 'Inputs inválidos. odometerKm debe ser numérico.'
+      status: 'UNKNOWN',
+      error: 'No se puede evaluar el mantenimiento sin una unidad y un odómetro válidos.'
     }];
   }
-
-  // Odómetro negativo es imposible en el mundo real, ignorar
-  if (odometerKm < 0) return [];
-  
-  // Si el GPS escupe un odómetro billonario (bug de hardware), ignorar
-  if (odometerKm > 10_000_000) return []; 
 
   const alerts: MaintenanceAlert[] = [];
   const safeRules = Array.isArray(rules) ? rules : DEFAULT_RULES;
 
   for (const rule of safeRules) {
     if (!isValidRule(rule)) {
-      console.warn(`[MANTENIMIENTO] Regla inválida omitida:`, rule);
+      alerts.push({deviceId,odometerKm,rule:{id:'invalid-rule',name:'Regla sin evaluar',intervalKm:1,warningThresholdKm:0},kmToNextService:0,status:'UNKNOWN',error:'Revisa el intervalo y el último servicio de esta regla.'});
       continue;
     }
 
-    // Calculamos el próximo servicio usando módulo seguro
-    const completedCycles = Math.floor(odometerKm / rule.intervalKm);
-    const nextServiceTarget = (completedCycles + 1) * rule.intervalKm;
+    // El odómetro nunca reinicia el mantenimiento por sí solo.
+    const lastServiceKm = rule.lastServiceKm ?? 0;
+    if (lastServiceKm > odometerKm) {
+      alerts.push({deviceId,odometerKm,rule,kmToNextService:0,status:'UNKNOWN',error:'El último servicio supera el odómetro actual. Revisa los registros.'});
+      continue;
+    }
+    const nextServiceTarget = lastServiceKm + rule.intervalKm;
     
     // Cuántos km faltan
     let kmToNextService = nextServiceTarget - odometerKm;
     
     // Fix: Si por problemas de floats el kmToNextService queda en -0.0001
-    if (kmToNextService < 0.001 && kmToNextService > -0.001) {
+    if (Math.abs(kmToNextService) < 0.001) {
       kmToNextService = 0;
     }
 
