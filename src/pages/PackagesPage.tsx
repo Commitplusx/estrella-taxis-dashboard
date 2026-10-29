@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { supabase } from '../lib/supabase';
+import { packageAdminClient } from '../lib/packageAdminClient';
+import type { PackageFeature, PackageRecord, PackageWrite } from '../../estrella-taxis-backend/supabase/functions/_shared/tracking/packages.ts';
 import {
   Package, Plus, Pencil, Trash2, Check, X, ToggleLeft, ToggleRight,
   Star, DollarSign, Bot, MessageCircle, Wifi, GripVertical, AlertCircle,
@@ -8,32 +9,14 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
-interface Feature {
-  id: string;
-  label: string;
-  incluido: boolean;
-}
-
-interface Paquete {
-  id: string;
-  nombre: string;
-  precio_mensual: number;
-  incluye_bot: boolean;
-  incluye_whatsapp: boolean;
-  activo: boolean;
-  features: Feature[];
-  limite_vehiculos: number | null;
-  permisos_sistema: Record<string, boolean>;
-}
-
-const EMPTY_FORM = {
+const EMPTY_FORM: PackageWrite = {
   nombre: '',
   precio_mensual: 0,
   incluye_bot: false,
   incluye_whatsapp: false,
   activo: true,
   limite_vehiculos: null as number | null,
-  features: [] as Feature[],
+  features: [] as PackageFeature[],
   permisos_sistema: {} as Record<string, boolean>,
 };
 
@@ -81,13 +64,14 @@ function getPlanGradient(precio: number): string {
 
 export default function PackagesPage() {
   const { userRole } = useAuth();
-  const [paquetes, setPaquetes] = useState<Paquete[]>([]);
+  const [paquetes, setPaquetes] = useState<PackageRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [newFeatureLabel, setNewFeatureLabel] = useState('');
+  const createRequestId = useRef<string | null>(null);
 
   if (userRole !== 'superadmin') {
     return (
@@ -104,31 +88,13 @@ export default function PackagesPage() {
   // eslint-disable-next-line react-hooks/rules-of-hooks
   const fetchPaquetes = async () => {
     setLoading(true);
-    const { data, error } = await supabase
-      .from('paquetes')
-      .select('*')
-      .order('precio_mensual', { ascending: true });
-    if (error) {
-      toast.error('Error al cargar los planes: ' + error.message);
-    } else {
-      setPaquetes((data ?? []).map((p: Paquete) => {
-        let parsedFeatures = p.features;
-        if (typeof parsedFeatures === 'string') {
-          try { parsedFeatures = JSON.parse(parsedFeatures); } catch (e) {}
-        }
-        let parsedPermisos = p.permisos_sistema;
-        if (typeof parsedPermisos === 'string') {
-          try { parsedPermisos = JSON.parse(parsedPermisos); } catch (e) {}
-        }
-
-        return {
-          ...p,
-          features: Array.isArray(parsedFeatures) ? parsedFeatures : [],
-          permisos_sistema: typeof parsedPermisos === 'object' && parsedPermisos !== null ? parsedPermisos : {},
-        };
-      }));
+    try {
+      setPaquetes(await packageAdminClient.list());
+    } catch (error: unknown) {
+      toast.error('Error al cargar los planes: ' + (error instanceof Error ? error.message : String(error)));
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   // eslint-disable-next-line react-hooks/rules-of-hooks
@@ -137,12 +103,14 @@ export default function PackagesPage() {
   const openCreate = () => {
     setEditingId(null);
     setForm({ ...EMPTY_FORM, features: [] });
+    createRequestId.current = crypto.randomUUID();
     setNewFeatureLabel('');
     setModalOpen(true);
   };
 
-  const openEdit = (p: Paquete) => {
+  const openEdit = (p: PackageRecord) => {
     setEditingId(p.id);
+    createRequestId.current = null;
     setForm({
       nombre: p.nombre,
       precio_mensual: p.precio_mensual,
@@ -157,12 +125,18 @@ export default function PackagesPage() {
     setModalOpen(true);
   };
 
+  const closeModal = () => {
+    if (saving) return;
+    setModalOpen(false);
+    createRequestId.current = null;
+  };
+
   const handleSave = async () => {
     if (!form.nombre.trim()) return toast.error('El nombre del plan es requerido.');
     if (form.precio_mensual < 0) return toast.error('El precio no puede ser negativo.');
     setSaving(true);
     try {
-      const payload = {
+      const payload: PackageWrite = {
         nombre: form.nombre.trim(),
         precio_mensual: form.precio_mensual,
         incluye_bot: form.incluye_bot,
@@ -173,15 +147,16 @@ export default function PackagesPage() {
         permisos_sistema: form.permisos_sistema,
       };
       if (editingId) {
-        const { error } = await supabase.from('paquetes').update(payload).eq('id', editingId);
-        if (error) throw error;
+        await packageAdminClient.update(editingId, payload);
         toast.success('Plan actualizado ✓');
       } else {
-        const { error } = await supabase.from('paquetes').insert(payload);
-        if (error) throw error;
+        const requestId = createRequestId.current ?? crypto.randomUUID();
+        createRequestId.current = requestId;
+        await packageAdminClient.create(requestId, payload);
         toast.success('Plan creado ✓');
       }
       setModalOpen(false);
+      createRequestId.current = null;
       await fetchPaquetes();
     } catch (e: unknown) {
       toast.error('Error: ' + (e instanceof Error ? e.message : String(e)));
@@ -192,16 +167,20 @@ export default function PackagesPage() {
 
   const handleDelete = async (id: string, nombre: string) => {
     if (!confirm(`¿Eliminar el plan "${nombre}"? Esta acción no se puede deshacer.`)) return;
-    const { error } = await supabase.from('paquetes').delete().eq('id', id);
-    if (error) { toast.error('Error al eliminar: ' + error.message); }
-    else { toast.success('Plan eliminado'); await fetchPaquetes(); }
+    try {
+      await packageAdminClient.remove(id);
+      toast.success('Plan eliminado');
+      await fetchPaquetes();
+    } catch (error: unknown) {
+      toast.error('Error al eliminar: ' + (error instanceof Error ? error.message : String(error)));
+    }
   };
 
   const addFeature = () => {
     if (!newFeatureLabel.trim()) return;
     setForm(f => ({
       ...f,
-      features: [...f.features, { id: uid(), label: newFeatureLabel.trim(), incluido: true }],
+      features: [...f.features, { id: uid(), label: newFeatureLabel.trim(), incluido: true } satisfies PackageFeature],
     }));
     setNewFeatureLabel('');
   };
@@ -357,7 +336,7 @@ export default function PackagesPage() {
                 {editingId ? 'Editar Plan' : 'Crear Plan'}
               </h2>
               <button
-                onClick={() => setModalOpen(false)}
+                onClick={closeModal}
                 className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-gray-100 text-gray-500 transition"
               >
                 <X size={18} />
@@ -530,7 +509,7 @@ export default function PackagesPage() {
 
             <div className="px-6 py-4 border-t border-gray-100 flex gap-3 flex-shrink-0 bg-gray-50">
               <button
-                onClick={() => setModalOpen(false)}
+                onClick={closeModal}
                 className="flex-1 px-4 py-2.5 border border-gray-200 hover:bg-gray-100 text-gray-700 rounded-xl text-sm font-bold transition"
               >
                 Cancelar

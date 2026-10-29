@@ -11,6 +11,11 @@ import {
 import type { TrackingStore } from "../_shared/tracking/store.ts";
 import { coord, phone, text } from "../_shared/bot/taxis/contracts.ts";
 import {
+  parsePackageRecord,
+  parsePackageRows,
+  parsePackageWrite,
+} from "../_shared/tracking/packages.ts";
+import {
   cells,
   channelFromRow,
   exact,
@@ -94,6 +99,64 @@ export function createTaxiAdminHandler(
       }
       const identity = await deps.fleet.identity(req),
         scope = await access(identity);
+      if (raw.action.startsWith("packages_")) {
+        if (!identity.admin) {
+          throw new TrackingError(
+            403,
+            "superadmin_required",
+            "Sólo el superadministrador puede administrar los planes.",
+          );
+        }
+        if (raw.action === "packages_list") {
+          exact(raw, ["action"]);
+          const rows = await deps.store.read(
+            "paquetes",
+            new URLSearchParams({
+              select: "id,nombre,precio_mensual,incluye_bot,incluye_whatsapp,activo,features,limite_vehiculos,permisos_sistema",
+              order: "precio_mensual.asc",
+              limit: "100",
+            }),
+          );
+          return json({ packages: parsePackageRows(rows) });
+        }
+        if (raw.action === "packages_create") {
+          exact(raw, ["action", "requestId", "package"]);
+          const id = uuid(raw.requestId);
+          const payload = parsePackageWrite(raw.package);
+          const rows = await deps.store.writePackages(
+            "POST",
+            new URLSearchParams({ on_conflict: "id" }),
+            { id, ...payload },
+          );
+          if (rows.length !== 1) {
+            throw new TrackingError(503, "package_create_uncertain", "No se confirmó el plan. Actualiza la lista antes de volver a intentar.");
+          }
+          return json({ state: "saved", package: parsePackageRecord(rows[0]) });
+        }
+        if (raw.action === "packages_update") {
+          exact(raw, ["action", "id", "package"]);
+          const id = uuid(raw.id);
+          const rows = await deps.store.writePackages(
+            "PATCH",
+            new URLSearchParams({ id: "eq." + id }),
+            parsePackageWrite(raw.package),
+          );
+          if (rows.length !== 1) {
+            throw new TrackingError(404, "package_not_found", "El plan ya no existe. Actualiza la lista.");
+          }
+          return json({ state: "saved", package: parsePackageRecord(rows[0]) });
+        }
+        if (raw.action === "packages_delete") {
+          exact(raw, ["action", "id"]);
+          const id = uuid(raw.id);
+          const rows = await deps.store.writePackages(
+            "DELETE",
+            new URLSearchParams({ id: "eq." + id }),
+          );
+          return json({ state: "deleted", deleted: rows.length === 1 });
+        }
+        throw new TrackingError(400, "invalid_package_action", "Esa operación de planes no está disponible.");
+      }
       if (raw.action === "context") {
         exact(raw, ["action"]);
         const query = new URLSearchParams({

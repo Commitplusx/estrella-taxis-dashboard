@@ -1,8 +1,10 @@
 import { record, TrackingError } from './contracts.ts';
 import { requestJson, type Fetcher } from './http.ts';
+import type { PackageWrite } from './packages.ts';
 export interface TrackingStore {
   read(table: string, query: URLSearchParams): Promise<unknown[]>;
   writeScores(rows: readonly Record<string, unknown>[]): Promise<void>;
+  writePackages(method: 'POST' | 'PATCH' | 'DELETE', query: URLSearchParams, payload?: PackageWrite & { id?: string }): Promise<unknown[]>;
   rpc(name: string, params: Record<string, unknown>): Promise<unknown>;
 }
 export class RestTrackingStore implements TrackingStore {
@@ -25,6 +27,24 @@ export class RestTrackingStore implements TrackingStore {
     await requestJson(this.fetcher, `${this.base}/rest/v1/driving_scores?on_conflict=device_id,score_date`, {
       method:'POST', headers: { ...this.headers(), Prefer:'resolution=merge-duplicates,return=representation' }, body:JSON.stringify(rows),
     });
+  }
+  async writePackages(method: 'POST' | 'PATCH' | 'DELETE', query: URLSearchParams, payload?: PackageWrite & { id?: string }): Promise<unknown[]> {
+    const url = `${this.base}/rest/v1/paquetes?${query.toString()}`;
+    const headers = {
+      ...this.headers(),
+      Prefer: method === 'POST'
+        ? 'resolution=merge-duplicates,return=representation'
+        : 'return=representation',
+    };
+    const { data } = await requestJson(this.fetcher, url, {
+      method,
+      headers,
+      ...(method === 'DELETE' ? {} : { body: JSON.stringify(payload) }),
+    });
+    if (!Array.isArray(data) || data.length > 1) {
+      throw new TrackingError(502, 'package_write_contract', 'No pudimos confirmar el cambio del plan.');
+    }
+    return data;
   }
   async rpc(name: string, params: Record<string,unknown>): Promise<unknown> {
     const { data } = await requestJson(this.fetcher, `${this.base}/rest/v1/rpc/${name}`, { method:'POST', headers:this.headers(), body:JSON.stringify(params) }); return data;
