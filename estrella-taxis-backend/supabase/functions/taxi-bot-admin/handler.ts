@@ -404,7 +404,7 @@ export function createTaxiAdminHandler(
               throw new TrackingError(
                 400,
                 "invalid_source",
-                "Elige las zonas de la base o el catálogo existente.",
+                "Elige las zonas de la base.",
               );
             }
             input.source = raw.source;
@@ -500,6 +500,7 @@ export function createTaxiAdminHandler(
           "Sólo la administración de la base puede cambiar zonas y tarifas.",
         );
       }
+      if (command.action === 'assign_catalog') throw new TrackingError(400, 'action_retired', 'Las zonas ya pertenecen a la base. Edita su nombre o tarifa directamente en el mapa.');
       if (command.action === "configure" || command.action === 'rename_channel') {
         if (
           Number(command.payload.baseCents) > 1000000 ||
@@ -529,9 +530,7 @@ export function createTaxiAdminHandler(
             );
           }
         }
-      } else if (
-        command.action === "upsert_zones" || command.action === "assign_catalog"
-      ) {
+      } else if (command.action === "upsert_zones") {
         if (!channel) {
           throw new TrackingError(
             404,
@@ -585,7 +584,8 @@ export function createTaxiAdminHandler(
       }
       const errors: Record<string, string> = {
         activation_driver_missing: 'Registra al menos un conductor activo en Configuración → Conductores de esta base, justo arriba del WhatsApp.',
-        activation_zones_missing: 'Guarda las zonas para este canal en Zonas y tarifas. Ver los hexágonos en el mapa todavía no los vincula con el canal.',
+        activation_zones_missing: 'La base todavía no tiene zonas guardadas. Agrégalas en Zonas y tarifas.',
+        action_retired: 'Las zonas ya pertenecen a la base. No hace falta habilitarlas por WhatsApp.',
         pause_channel_first: 'Apaga el canal y guarda antes de cambiar el número.',
         channel_has_history: 'Este canal ya tiene conversaciones o viajes. Conserva su historial y registra el otro número como un canal nuevo.',
         revision_conflict:
@@ -593,8 +593,6 @@ export function createTaxiAdminHandler(
         request_conflict:
           "Esta solicitud ya se usó con otros datos. Actualiza el panel.",
         channel_conflict: "Ese número ya pertenece a otra base.",
-        invalid_catalog:
-          "La selección contiene celdas que ya no tienen una tarifa válida en el catálogo. Actualiza y revísalas.",
         activation_incomplete:
           "Agrega al menos un conductor y las zonas antes de activar el bot.",
         send_forbidden:

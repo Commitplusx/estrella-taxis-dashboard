@@ -134,9 +134,8 @@ export default function TaxiZoneMap(props: Props) {
         interactive: false,
         color: active ? "#0f172a" : color,
         fillColor: color,
-        fillOpacity: active ? 0.7 : z?.assigned ? 0.44 : 0.25,
+        fillOpacity: active ? 0.7 : 0.44,
         weight: active ? 3 : 1,
-        dashArray: !active && !z?.assigned ? "4 3" : undefined,
       });
       if (z) {
         polygon.bindTooltip(
@@ -265,7 +264,6 @@ export default function TaxiZoneMap(props: Props) {
       <div className="taxi-coverage-key">
         <span>Cada color representa una zona</span>
         <span>Borde oscuro: selección</span>
-        <span>Borde discontinuo: falta habilitar</span>
       </div>
       <p className="taxi-map-hint" role="status">
         <ZoomIn size={16} />

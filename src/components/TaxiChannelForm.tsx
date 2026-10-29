@@ -87,7 +87,7 @@ export default function TaxiChannelForm(
     <form className="taxi-config" onSubmit={save}>
       <div>
         <h2>WhatsApp de la base</h2>
-        <p>Guarda el canal y prepara sus zonas. Activarlo es un paso aparte.</p>
+        <p>Configura el número que atenderá a tus clientes. Las zonas y tarifas pertenecen a la base.</p>
       </div>
       <fieldset disabled={busy || !canEdit} className="taxi-fields">
         <label>

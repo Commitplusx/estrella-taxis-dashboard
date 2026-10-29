@@ -20,6 +20,7 @@
     "20261028160342_taxi_bot_trace_state_quality.sql",
     "20261029165842_taxi_customer_access.sql",
     "20261029193220_taxi_bot_driver_setup.sql",
-    "20261029194000_taxi_channel_edit_map_cache.sql"
+    "20261029194000_taxi_channel_edit_map_cache.sql",
+    "20261029195350_taxi_base_owned_zones.sql"
   ]
 }

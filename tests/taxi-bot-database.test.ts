@@ -26,8 +26,9 @@ const traceSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migratio
 const accessSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261029165842_taxi_customer_access.sql',import.meta.url),'utf8');
 const mapCacheSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261029194000_taxi_channel_edit_map_cache.sql',import.meta.url),'utf8');
 const driverSetupSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261029193220_taxi_bot_driver_setup.sql',import.meta.url),'utf8');
+const baseZonesSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261029195350_taxi_base_owned_zones.sql',import.meta.url),'utf8');
 const tenant='11111111-1111-4111-8111-111111111111',other='22222222-2222-4222-8222-222222222222',waba='+529630000001',customer='+529630000002',driverPhone='+529630000003';
-async function fixture(){
+async function fixture(options:{legacy?:boolean;seedCoverageBeforeMigration?:boolean}={}){
   const db=new PGlite();await db.exec(`CREATE ROLE anon;CREATE ROLE authenticated;CREATE ROLE service_role BYPASSRLS;
     CREATE TABLE empresas(id uuid PRIMARY KEY,tipo_negocio text DEFAULT 'taxi',telefono_whatsapp text);INSERT INTO empresas(id)VALUES('${tenant}'),('${other}');
     CREATE TABLE webhook_queue(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),payload jsonb,status text,processed_at timestamptz);
@@ -38,6 +39,12 @@ async function fixture(){
   await db.exec(accessSql);
   await db.exec(mapCacheSql);
   await db.exec(driverSetupSql);
+  if(options.seedCoverageBeforeMigration){
+    await db.exec(readFileSync(new URL('../estrella-taxis-backend/supabase/h3_limpio.sql',import.meta.url),'utf8'));
+    await db.exec('ALTER TABLE h3_zonas ADD COLUMN tenant_id uuid');
+    await db.query('UPDATE h3_zonas SET tenant_id=$1',[tenant]);
+  }
+  if(!options.legacy)await db.exec(baseZonesSql);
   // These legacy protocol fixtures explicitly act as customers too. Driver-only access has separate tests below.
   await db.query('INSERT INTO taxi_bot_allowed_customers(tenant_id,phone)VALUES($1,$2),($1,$3),($1,$4)',[tenant,customer,driverPhone,'+529630000004']);
   await db.query("INSERT INTO conductores(tenant_id,device_id,telefono_whatsapp,nombre)VALUES($1,1,$2,'Unidad 1'),($1,2,'+529630000004','Unidad 2'),($3,3,'+529630000005','Ajena')",[tenant,driverPhone,other]);
@@ -58,12 +65,54 @@ async function fixture(){
     const scope=taxiH3Scope(draft.origin,draft.destination);
     await db.query("UPDATE taxi_bot_channels SET pricing_mode='h3_zone_max'WHERE waba=$1",[waba]);
     await db.query("INSERT INTO h3_zonas(h3_index,precio,resolucion,nombre)VALUES($1,45,10,'Zona sintética origen'),($2,65,10,'Zona sintética destino')",[scope.originCell,scope.destinationCell]);
-    await db.query('INSERT INTO taxi_bot_h3_cells(tenant_id,waba,h3_index)VALUES($1,$2,$3),($1,$2,$4)',[tenant,waba,scope.originCell,scope.destinationCell]);
+    if(options.legacy)await db.query('INSERT INTO taxi_bot_h3_cells(tenant_id,waba,h3_index)VALUES($1,$2,$3),($1,$2,$4)',[tenant,waba,scope.originCell,scope.destinationCell]);
+    else await db.query("INSERT INTO taxi_bot_base_zones(tenant_id,h3_index,label,price_cents)VALUES($1,$2,'Zona sintética origen',4500),($1,$3,'Zona sintética destino',6500)",[tenant,scope.originCell,scope.destinationCell]);
     return scope;
   };
   const admin=async(action:string,payload:Record<string,unknown>,expected=0,request=crypto.randomUUID(),company=tenant,number=waba)=>obj(await scalar('SELECT taxi_bot_admin_apply($1,$2,$3,$4,$5,$6,$7)',[company,number,42,request,expected,action,payload]));
   return{db,scalar,obj,enqueue,begin,decision,commit,prepare,confirm,draft,seedH3,admin};
 }
+
+test('base ownership migration: Pompeyo receives all existing zones once, preserving original tariffs and earlier private edits',async()=>{
+ const f=await fixture({legacy:true});try{
+  const scope=await f.seedH3();await f.admin('upsert_zones',{cells:[scope.originCell],label:'Tarifa propia conservada',cents:5700});
+  await f.db.query('DELETE FROM conductores WHERE tenant_id=$1',[other]);
+  await f.db.query('DELETE FROM taxi_bot_customer_access WHERE tenant_id=$1',[other]);
+  await f.db.query('DELETE FROM empresas WHERE id=$1',[other]);await f.db.exec(baseZonesSql);
+  assert.equal(await f.scalar('SELECT count(*)::int FROM taxi_bot_base_zones WHERE tenant_id=$1',[tenant]),2);
+  assert.equal(await f.scalar('SELECT count(*)::int FROM h3_zonas WHERE tenant_id=$1',[tenant]),2);
+  const page=parseZones(await f.scalar('SELECT taxi_bot_admin_read($1,$2,$3,$4)',[tenant,waba,'zones',{}]));
+  assert.equal(page.zones.find(z=>z.cell===scope.originCell)?.cents,5700);assert.equal(page.zones.find(z=>z.cell===scope.originCell)?.label,'Tarifa propia conservada');
+  assert.equal(page.zones.find(z=>z.cell===scope.destinationCell)?.cents,6500);
+ }finally{await f.db.close();}
+});
+test('base ownership migration: ambiguous ownership and conflicting old channel prices stop without changing existing coverage',async()=>{
+ const f=await fixture({legacy:true});try{
+  const scope=await f.seedH3();await assert.rejects(f.db.exec(baseZonesSql),/Resolve H3 ownership/);await f.db.exec('ROLLBACK');
+  assert.equal(await f.scalar("SELECT to_regclass('public.taxi_bot_base_zones')"),null);
+  await f.db.exec('ALTER TABLE h3_zonas ADD COLUMN tenant_id uuid');await f.db.query('UPDATE h3_zonas SET tenant_id=$1',[tenant]);
+  const second='+529630000088';await f.db.query("INSERT INTO taxi_bot_channels(tenant_id,waba,name,city,center_lat,center_lng,radius_km)VALUES($1,$2,'Otro canal','Comitán',16.25,-92.13,20)",[tenant,second]);
+  await f.db.query('UPDATE taxi_bot_h3_cells SET price_cents=4500 WHERE h3_index=$1',[scope.originCell]);
+  await f.db.query('INSERT INTO taxi_bot_h3_cells(tenant_id,waba,h3_index,price_cents)VALUES($1,$2,$3,5500)',[tenant,second,scope.originCell]);
+  await assert.rejects(f.db.exec(baseZonesSql),/Conflicting channel overrides/);await f.db.exec('ROLLBACK');
+  assert.equal(await f.scalar('SELECT count(*)::int FROM taxi_bot_h3_cells'),3);
+ }finally{await f.db.close();}
+});
+test('base zones: an edit applies to all channels of that base and invalidates their map versions without borrowing another base price',async()=>{
+ const f=await fixture();try{
+  const scope=await f.seedH3(),second='+529630000088';
+  await f.db.query("INSERT INTO taxi_bot_channels(tenant_id,waba,enabled,name,city,center_lat,center_lng,radius_km,dispatcher)VALUES($1,$2,true,'Segundo canal','Comitán',16.25,-92.13,20,'+529630000099')",[tenant,second]);
+  const before=parseZones(await f.scalar('SELECT taxi_bot_admin_read($1,$2,$3,$4)',[tenant,second,'zones',{}]));
+  assert.equal((await f.admin('upsert_zones',{cells:[scope.originCell],label:'Precio de la base',cents:7900})).state,'saved');
+  assert.equal(f.obj(await f.scalar('SELECT taxi_bot_h3_quote($1,$2,$3,$4)',[tenant,second,scope.originCell,scope.destinationCell])).cents,7900);
+  assert.notEqual(parseZones(await f.scalar('SELECT taxi_bot_admin_read($1,$2,$3,$4)',[tenant,second,'zones',{}])).version,before.version);
+  await f.db.query('UPDATE h3_zonas SET precio=1 WHERE h3_index=$1',[scope.originCell]);
+  assert.equal(f.obj(await f.scalar('SELECT taxi_bot_h3_quote($1,$2,$3,$4)',[tenant,second,scope.originCell,scope.destinationCell])).cents,7900);
+  const setup=f.obj(await f.scalar('SELECT taxi_bot_driver_read($1,$2)',[tenant,second]));assert.equal(setup.zoneCount,2);
+  await f.admin('remove_zones',{cells:[scope.originCell]},1);
+  assert.equal(f.obj(await f.scalar('SELECT taxi_bot_h3_quote($1,$2,$3,$4)',[tenant,second,scope.originCell,scope.destinationCell])).state,'uncovered');
+ }finally{await f.db.close();}
+});
 
 test('driver setup SQL: save persists the bot mapping, replay is exact, stale edits and cross-base reassignment are rejected',async()=>{
  const f=await fixture();try{
@@ -91,7 +140,7 @@ test('driver setup SQL: pending offer blocks contact edits until the offer is re
 test('coverage SQL: same-count price edits invalidate the server token; per-channel saves advance its revision',async()=>{
  const f=await fixture();try{
   const scope=await f.seedH3(),read=()=>f.scalar('SELECT taxi_bot_admin_read($1,$2,$3,$4)',[tenant,waba,'zones',{}]);
-  const first=f.obj(await read());await f.db.query('UPDATE h3_zonas SET precio=precio+1 WHERE h3_index=$1',[scope.originCell]);
+  const first=f.obj(await read());await f.db.query('UPDATE taxi_bot_base_zones SET price_cents=price_cents+100 WHERE h3_index=$1',[scope.originCell]);
   const changed=f.obj(await read());assert.equal(first.totalCells,changed.totalCells);assert.notEqual(first.version,changed.version);
   await f.admin('upsert_zones',{cells:[scope.originCell],label:'Tarifa privada',cents:9900});assert.notEqual(f.obj(await read()).version,changed.version);
  }finally{await f.db.close();}
@@ -106,8 +155,8 @@ test('channel correction SQL: paused unused number moves its zones and prices at
   const payload={...correctedConfig,newWaba:target},first=await f.admin('rename_channel',payload,1,request);
   assert.equal(first.state,'saved');assert.deepEqual(await f.admin('rename_channel',payload,1,request),first);
   assert.equal(await f.scalar('SELECT waba FROM taxi_bot_channels'),target);assert.equal(await f.scalar('SELECT enabled FROM taxi_bot_channels'),false);
-  assert.equal(await f.scalar('SELECT count(*)::int FROM taxi_bot_h3_cells WHERE waba=$1',[target]),2);
-  assert.equal(await f.scalar('SELECT price_cents FROM taxi_bot_h3_cells WHERE h3_index=$1',[scope.originCell]),5700);
+  assert.equal(await f.scalar('SELECT count(*)::int FROM taxi_bot_base_zones WHERE tenant_id=$1',[tenant]),2);
+  assert.equal(await f.scalar('SELECT price_cents FROM taxi_bot_base_zones WHERE h3_index=$1',[scope.originCell]),5700);
   assert.equal(await f.scalar('SELECT telefono_whatsapp FROM empresas WHERE id=$1',[tenant]),target);
   assert.equal(await f.scalar('SELECT count(*)::int FROM taxi_bot_sessions'),0);
  }finally{await f.db.close();}
@@ -210,7 +259,7 @@ test('taxi admin SQL: a base price overrides its cell without changing the share
   const f=await fixture();try{
     const scope=await f.seedH3(),otherWaba='+529630000077';
     await f.db.query("INSERT INTO taxi_bot_channels(tenant_id,waba,name,city,center_lat,center_lng,radius_km,enabled,dispatcher)VALUES($1,$2,'Otra base','Comitán',16.25,-92.13,20,true,'+529630000099')",[other,otherWaba]);
-    await f.db.query('INSERT INTO taxi_bot_h3_cells(tenant_id,waba,h3_index)VALUES($1,$2,$3),($1,$2,$4)',[other,otherWaba,scope.originCell,scope.destinationCell]);
+    await f.db.query("INSERT INTO taxi_bot_base_zones(tenant_id,h3_index,label,price_cents)VALUES($1,$2,'Otra base origen',4500),($1,$3,'Otra base destino',6500)",[other,scope.originCell,scope.destinationCell]);
     assert.equal((await f.admin('upsert_zones',{cells:[scope.destinationCell],label:'Centro de mi base',cents:8500})).state,'saved');
     assert.equal(f.obj(await f.scalar('SELECT taxi_bot_h3_quote($1,$2,$3,$4)',[tenant,waba,scope.originCell,scope.destinationCell])).cents,8500);
     assert.equal(f.obj(await f.scalar('SELECT taxi_bot_h3_quote($1,$2,$3,$4)',[other,otherWaba,scope.originCell,scope.destinationCell])).cents,6500);
@@ -224,7 +273,7 @@ test('taxi admin SQL: response loss and replay apply a price once; changed reque
     const first=await f.admin('upsert_zones',payload,0,id);assert.equal(first.state,'saved');assert.deepEqual(await f.admin('upsert_zones',payload,0,id),first);
     assert.equal(await f.scalar('SELECT revision FROM taxi_bot_channels'),1);assert.equal(await f.scalar('SELECT count(*)::int FROM taxi_bot_admin_operations'),1);
     assert.equal((await f.admin('upsert_zones',{...payload,cents:5900},0,id)).state,'request_conflict');
-    assert.equal((await f.admin('upsert_zones',{...payload,cents:5900},0)).state,'revision_conflict');assert.equal(await f.scalar('SELECT price_cents FROM taxi_bot_h3_cells WHERE h3_index=$1',[scope.originCell]),4900);
+    assert.equal((await f.admin('upsert_zones',{...payload,cents:5900},0)).state,'revision_conflict');assert.equal(await f.scalar('SELECT price_cents FROM taxi_bot_base_zones WHERE h3_index=$1',[scope.originCell]),4900);
   }finally{await f.db.close();}
 });
 
@@ -316,7 +365,7 @@ test('taxi SQL: a summary without an expiry is rejected both on creation and con
   }finally{await f.db.close();}
 });
 
-test('taxi H3 SQL: exact scoped endpoints use the higher live catalog price, including two endpoints in one cell',async()=>{
+test('taxi H3 SQL: every channel of a base uses its owned tariffs, including two endpoints in one cell',async()=>{
   const f=await fixture();try{
     assert.equal(await f.scalar('SELECT pricing_mode FROM taxi_bot_channels'),'road_distance','An upgrade must preserve the old channel rule.');
     await f.db.query("INSERT INTO taxi_bot_channels(tenant_id,waba,name,city,center_lat,center_lng,radius_km)VALUES($1,'+529630000088','Otra base sintética','Comitán',16.25,-92.13,20)",[tenant]);
@@ -324,16 +373,16 @@ test('taxi H3 SQL: exact scoped endpoints use the higher live catalog price, inc
     const scope=await f.seedH3();
     const quote=f.obj(await f.scalar('SELECT taxi_bot_h3_quote($1,$2,$3,$4)',[tenant,waba,scope.originCell,scope.destinationCell]));assert.equal(quote.cents,6500);assert.equal(quote.state,'priced');
     const same=f.obj(await f.scalar('SELECT taxi_bot_h3_quote($1,$2,$3,$3)',[tenant,waba,scope.originCell]));assert.equal(same.cents,4500);
-    await f.db.query('UPDATE h3_zonas SET precio=75.50 WHERE h3_index=$1',[scope.destinationCell]);
+    await f.db.query('UPDATE taxi_bot_base_zones SET price_cents=7550 WHERE h3_index=$1',[scope.destinationCell]);
     const updated=f.obj(await f.scalar('SELECT taxi_bot_h3_quote($1,$2,$3,$4)',[tenant,waba,scope.originCell,scope.destinationCell]));assert.equal(updated.cents,7550);
     assert.equal(await f.scalar('SELECT count(*)::int FROM viajes'),0);
   }finally{await f.db.close();}
 });
 
-test('taxi H3 SQL: a missing endpoint, another tenant or another channel never borrows a global zone price',async()=>{
+test('taxi H3 SQL: a missing endpoint or another tenant never borrows a global zone price',async()=>{
   const f=await fixture();try{
     const scope=await f.seedH3();
-    await f.db.query('DELETE FROM taxi_bot_h3_cells WHERE h3_index=$1',[scope.destinationCell]);
+    await f.db.query('DELETE FROM taxi_bot_base_zones WHERE h3_index=$1',[scope.destinationCell]);
     const quote=f.obj(await f.scalar('SELECT taxi_bot_h3_quote($1,$2,$3,$4)',[tenant,waba,scope.originCell,scope.destinationCell]));assert.equal(quote.state,'uncovered');assert.equal(quote.cents,undefined);
     for(const args of [[other,waba],[tenant,'+529630000055']]){
       assert.equal(f.obj(await f.scalar('SELECT taxi_bot_h3_quote($1,$2,$3,$4)',[...args,scope.originCell,scope.destinationCell])).state,'channel_unavailable');
@@ -343,14 +392,13 @@ test('taxi H3 SQL: a missing endpoint, another tenant or another channel never b
   }finally{await f.db.close();}
 });
 
-test('taxi H3 SQL: invalid resolution, amount or fraction leaves a pending fare instead of rounding or defaulting',async()=>{
+test('taxi H3 SQL: a base tariff cannot store invalid amounts and missing prices stay pending without fallback',async()=>{
   const f=await fixture();try{
     const scope=await f.seedH3();
-    for(const price of ['NaN','Infinity','-1','0','19.999','100001']){
-      await f.db.query('UPDATE h3_zonas SET precio=$1::numeric WHERE h3_index=$2',[price,scope.destinationCell]);
-      assert.equal(f.obj(await f.scalar('SELECT taxi_bot_h3_quote($1,$2,$3,$4)',[tenant,waba,scope.originCell,scope.destinationCell])).state,'invalid_zone');
+    for(const price of ['NaN','Infinity','-1','0','19.999','10000001']){
+      await assert.rejects(f.db.query('UPDATE taxi_bot_base_zones SET price_cents=$1::text::integer WHERE h3_index=$2',[price,scope.destinationCell]));
     }
-    await f.db.query('UPDATE h3_zonas SET precio=65,resolucion=9 WHERE h3_index=$1',[scope.destinationCell]);
+    await f.db.query('UPDATE taxi_bot_base_zones SET price_cents=NULL WHERE h3_index=$1',[scope.destinationCell]);
     assert.equal(f.obj(await f.scalar('SELECT taxi_bot_h3_quote($1,$2,$3,$4)',[tenant,waba,scope.originCell,scope.destinationCell])).state,'invalid_zone');
     await assert.rejects(f.scalar('SELECT taxi_bot_h3_quote($1,$2,$3,$4)',[tenant,waba,'invalid-cell',scope.destinationCell]),/invalid taxi H3 cell/);
   }finally{await f.db.close();}
@@ -359,7 +407,7 @@ test('taxi H3 SQL: invalid resolution, amount or fraction leaves a pending fare 
 test('taxi H3 SQL: quote and bindings are private and a disabled or distance-priced channel cannot return H3 prices',async()=>{
   const f=await fixture();try{
     const scope=await f.seedH3();
-    await f.db.exec('SET ROLE anon');await assert.rejects(f.scalar('SELECT count(*) FROM taxi_bot_h3_cells'),/permission denied/);await assert.rejects(f.scalar('SELECT taxi_bot_h3_quote($1,$2,$3,$4)',[tenant,waba,scope.originCell,scope.destinationCell]),/permission denied/);await f.db.exec('RESET ROLE');
+    await f.db.exec('SET ROLE anon');await assert.rejects(f.scalar('SELECT count(*) FROM taxi_bot_base_zones'),/permission denied/);await assert.rejects(f.scalar('SELECT taxi_bot_h3_quote($1,$2,$3,$4)',[tenant,waba,scope.originCell,scope.destinationCell]),/permission denied/);await f.db.exec('RESET ROLE');
     await f.db.exec('SET ROLE service_role');assert.equal(f.obj(await f.scalar('SELECT taxi_bot_h3_quote($1,$2,$3,$4)',[tenant,waba,scope.originCell,scope.destinationCell])).cents,6500);await f.db.exec('RESET ROLE');
     for(const update of ["pricing_mode='road_distance'","pricing_mode='h3_zone_max',enabled=false"]){
       await f.db.exec('UPDATE taxi_bot_channels SET '+update);assert.equal(f.obj(await f.scalar('SELECT taxi_bot_h3_quote($1,$2,$3,$4)',[tenant,waba,scope.originCell,scope.destinationCell])).state,'channel_unavailable');
@@ -372,7 +420,7 @@ test('taxi H3 SQL: changing a shown price before commit rolls back the trip and 
     const scope=await f.seedH3(),e=await f.enqueue('Resumen H3'),claim=await f.begin(e.eventId);
     await f.commit(e.eventId,claim,{...f.decision(),draft:{...f.draft,quoteCents:6500,quoteH3:scope}});
     const confirm=await f.enqueue('Sí'),cc=await f.begin(confirm.eventId);
-    await f.db.query('UPDATE h3_zonas SET precio=75 WHERE h3_index=$1',[scope.destinationCell]);
+    await f.db.query('UPDATE taxi_bot_base_zones SET price_cents=7500 WHERE h3_index=$1',[scope.destinationCell]);
     await assert.rejects(f.commit(confirm.eventId,cc,{...f.decision('confirm'),confirmation:f.draft.confirmation,candidates:[{deviceId:1,name:'Unidad 1'}]}),/tariff changed/);
     assert.equal(await f.scalar('SELECT count(*)::int FROM viajes'),0);assert.equal(await f.scalar('SELECT count(*)::int FROM taxi_bot_offers'),0);assert.equal(await f.scalar('SELECT count(*)::int FROM taxi_bot_outbox'),0);
     await f.commit(confirm.eventId,cc,{...f.decision(),draft:{...f.draft,quoteCents:7500,quoteH3:scope,confirmation:crypto.randomUUID()}});
@@ -578,37 +626,34 @@ test('taxi end-to-end: signed webhook → durable queue → real tool decoder �
   }finally{await f.db.close();}
 });
 
-test('taxi admin SQL: the existing 2541-cell catalog is paginated separately from base coverage',async()=>{
-  const f=await fixture();try{
-    const localCatalog=readFileSync(new URL('../estrella-taxis-backend/supabase/h3_limpio.sql',import.meta.url),'utf8');
-    await f.db.exec(localCatalog);
+test('taxi admin SQL: all 2541 owned cells are immediately available, paginated and searchable without channel assignment',async()=>{
+  const f=await fixture({seedCoverageBeforeMigration:true});try{
     const seen=new Set<string>();let after:string|undefined;
     for(let pageNumber=0;pageNumber<27;pageNumber++){
       const page=parseZones(await f.scalar('SELECT taxi_bot_admin_read($1,$2,$3,$4)',[tenant,waba,'zones',{source:'catalog',...(after?{after}:{})}]));
       assert.equal(page.totalCells,2541);assert.equal(page.totalAreas,94);assert.ok(page.zones.length<=100);
-      for(const z of page.zones){assert.equal(z.assigned,false);assert.equal(seen.has(z.cell),false);seen.add(z.cell);}
+      for(const z of page.zones){assert.equal(z.assigned,true);assert.equal(z.source,'base');assert.equal(seen.has(z.cell),false);seen.add(z.cell);}
       if(!page.hasMore)break;after=page.zones.at(-1)?.cell;
     }
     assert.equal(seen.size,2541);assert.equal(await f.scalar('SELECT count(*)::int FROM taxi_bot_h3_cells'),0);
-    const base=parseZones(await f.scalar('SELECT taxi_bot_admin_read($1,$2,$3,$4)',[tenant,waba,'zones',{}]));assert.equal(base.totalCells,0);
+    const base=parseZones(await f.scalar('SELECT taxi_bot_admin_read($1,$2,$3,$4)',[tenant,waba,'zones',{}]));assert.equal(base.totalCells,2541);
     const search=parseZones(await f.scalar('SELECT taxi_bot_admin_read($1,$2,$3,$4)',[tenant,waba,'zones',{source:'catalog',search:'Pilita Seca'}]));
     assert.ok(search.zones.length>0);assert.ok(search.zones.every((z)=>z.label==='Pilita Seca'));
     const viewport=parseZones(await f.scalar('SELECT taxi_bot_admin_read($1,$2,$3,$4)',[tenant,waba,'zones',{source:'catalog',cells:[...seen].slice(0,3)}]));assert.equal(viewport.zones.length,3);assert.equal(viewport.totalCells,2541);
   }finally{await f.db.close();}
 });
-test('taxi admin SQL: catalog assignment preserves original prices, custom overrides and tenant isolation',async()=>{
+test('taxi admin SQL: channel assignment is retired, shared base edits preserve price and isolation',async()=>{
   const f=await fixture();try{
     const scope=await f.seedH3(),request=crypto.randomUUID(),payload={cells:[scope.originCell,scope.destinationCell]};
-    await f.db.exec('DELETE FROM taxi_bot_h3_cells');
-    assert.equal((await f.admin('assign_catalog',payload,0,request)).state,'saved');
-    assert.equal((await f.admin('assign_catalog',payload,0,request)).state,'saved');
-    assert.equal(await f.scalar('SELECT revision FROM taxi_bot_channels'),1);assert.equal(await f.scalar('SELECT count(*)::int FROM taxi_bot_h3_cells'),2);
+    assert.equal((await f.admin('assign_catalog',payload,0,request)).state,'action_retired');
+    assert.equal((await f.admin('assign_catalog',payload,0,request)).state,'action_retired');
+    assert.equal(await f.scalar('SELECT revision FROM taxi_bot_channels'),0);assert.equal(await f.scalar('SELECT count(*)::int FROM taxi_bot_base_zones'),2);
     assert.equal(f.obj(await f.scalar('SELECT taxi_bot_h3_quote($1,$2,$3,$4)',[tenant,waba,scope.originCell,scope.destinationCell])).cents,6500);
-    await f.admin('upsert_zones',{cells:[scope.originCell],label:'Precio propio',cents:9000},1);
-    assert.equal((await f.admin('assign_catalog',payload,2)).state,'saved');assert.equal(await f.scalar('SELECT price_cents FROM taxi_bot_h3_cells WHERE h3_index=$1',[scope.originCell]),9000);
-    const page=parseZones(await f.scalar('SELECT taxi_bot_admin_read($1,$2,$3,$4)',[tenant,waba,'zones',{source:'catalog'}]));assert.ok(page.zones.every((z)=>z.assigned));assert.equal(page.zones.find((z)=>z.cell===scope.originCell)?.cents,4500);
+    await f.admin('upsert_zones',{cells:[scope.originCell],label:'Precio propio',cents:9000},0);
+    assert.equal((await f.admin('assign_catalog',payload,1)).state,'action_retired');assert.equal(await f.scalar('SELECT price_cents FROM taxi_bot_base_zones WHERE h3_index=$1',[scope.originCell]),9000);
+    const page=parseZones(await f.scalar('SELECT taxi_bot_admin_read($1,$2,$3,$4)',[tenant,waba,'zones',{source:'catalog'}]));assert.ok(page.zones.every((z)=>z.assigned));assert.equal(page.zones.find((z)=>z.cell===scope.originCell)?.cents,9000);
     const invalid=taxiH3Scope(f.draft.origin,{...f.draft.destination,lat:16.27,lng:-92.15}).destinationCell;
-    assert.equal((await f.admin('assign_catalog',{cells:[scope.originCell,invalid]},3)).state,'invalid_catalog');assert.equal(await f.scalar('SELECT revision FROM taxi_bot_channels'),3);assert.equal(await f.scalar('SELECT count(*)::int FROM h3_zonas'),2);
+    assert.equal((await f.admin('assign_catalog',{cells:[scope.originCell,invalid]},1)).state,'action_retired');assert.equal(await f.scalar('SELECT revision FROM taxi_bot_channels'),1);assert.equal(await f.scalar('SELECT count(*)::int FROM h3_zonas'),2);
     await assert.rejects(f.scalar('SELECT taxi_bot_admin_read($1,$2,$3,$4)',[other,waba,'zones',{source:'catalog'}]),/channel not found/);
     assert.equal(await f.scalar('SELECT count(*)::int FROM taxi_bot_h3_cells WHERE tenant_id=$1',[other]),0);
   }finally{await f.db.close();}

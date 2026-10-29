@@ -305,16 +305,16 @@ Deno.test("taxi admin: validation boundary rejects excess selection and an extra
   }
 });
 
-Deno.test("taxi admin: existing catalog cells use the same tenant, revision and coverage rules", async () => {
+Deno.test("taxi admin: channel assignment is retired without changing base coverage, with permissions preserved", async () => {
   const f = fixture(), payload = { cells: [cell] };
   f.plan("assign_catalog", payload);
   equal(
     (await f.handler(
       f.request({ ...f.writeBody, action: "assign_catalog", payload }),
     )).status,
-    200,
+    400,
   );
-  equal(f.counts().writes, 1);
+  equal(f.counts().writes, 0);
   const denied = fixture({ role: "operador" });
   equal(
     (await denied.handler(
@@ -336,7 +336,7 @@ Deno.test("taxi admin: existing catalog cells use the same tenant, revision and 
     )).status,
     400,
   );
-  equal(f.counts().writes, 1);
+  equal(f.counts().writes, 0);
 });
 Deno.test("taxi admin: catalog selection is explicit and response counts cannot be inferred from one page", async () => {
   const f = fixture();

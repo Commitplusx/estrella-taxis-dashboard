@@ -93,8 +93,8 @@ export default function TaxiBotAdminPage(
     [mapZones, setMapZones] = useState<AdminZone[]>([]),
     [search, setSearch] = useState(""),
     [zoneLoading, setZoneLoading] = useState(false);
-  const [zoneSource, setZoneSource] = useState<"base" | "catalog">("catalog"),
-    [focusCell, setFocusCell] = useState<string | null>(null);
+  const zoneSource = 'base' as const;
+  const [focusCell, setFocusCell] = useState<string | null>(null);
   const [coverageProgress, setCoverageProgress] = useState<{ loaded: number; total: number } | null>(null);
   const [mapScope, setMapScope] = useState("");
   const [selected, setSelected] = useState<string[]>([]),
@@ -290,10 +290,9 @@ export default function TaxiBotAdminPage(
       const result = await client.apply(command);
       setPending(null);
       const zonesChanged = command.action === "upsert_zones" ||
-        command.action === "assign_catalog" || command.action === "remove_zones";
+        command.action === "remove_zones";
       if (zonesChanged) {
         setSearch("");
-        setZoneSource("base");
       }
       setNotice(
         result.state === "queued"
@@ -691,20 +690,6 @@ export default function TaxiBotAdminPage(
             </span>
           </div>
           <div className="taxi-catalog-controls">
-            <label>
-              Mostrar<select
-                aria-label="Zonas que quieres ver"
-                value={zoneSource}
-                onChange={(e) =>
-                  setZoneSource(
-                    e.target.value === "catalog" ? "catalog" : "base",
-                  )}
-                disabled={busy || Boolean(pending)}
-              >
-                <option value="catalog">Todas las zonas</option>
-                <option value="base">Listas para cotizar</option>
-              </select>
-            </label>
             <p aria-live="polite">
               {zoneLoading ? "Cargando zonas…" : (
                 <>
@@ -715,10 +700,7 @@ export default function TaxiBotAdminPage(
                 </>
               )}
               <small>
-                {zoneSource === "catalog"
-                  ? "Este es el mapa de zonas de la base."
-                  : "Estas zonas tienen una tarifa habilitada para este WhatsApp."}{" "}
-                Puedes ver toda la cobertura o acercarte para editar una zona.
+                Estas zonas pertenecen a {baseName}. Puedes editar sus nombres y tarifas directamente.
               </small>
             </p>
           </div>
@@ -872,24 +854,6 @@ export default function TaxiBotAdminPage(
                   {busy ? "Guardando…" : "Guardar zona y precio"}
                 </button>
                 <small>El precio guardado se usará en los próximos viajes de esta base.</small>
-                {zoneSource === "catalog" && selected.length > 0 &&
-                  canConfigure && (
-                  <>
-                    <button
-                      type="button"
-                      className="taxi-secondary"
-                      disabled={busy || Boolean(pending)}
-                      onClick={() =>
-                        write("assign_catalog", { cells: selected })}
-                    >
-                      <Plus size={17} />Habilitar con la tarifa registrada
-                    </button>
-                    <small>
-                      Conserva los nombres y precios registrados. Los cambios
-                      de tarifa que ya guardaste no se reemplazan.
-                    </small>
-                  </>
-                )}
                 {selected.some((cell) =>
                   zones.some((z) => z.cell === cell && z.assigned)
                 ) && canConfigure && (
@@ -912,9 +876,7 @@ export default function TaxiBotAdminPage(
               <section className="taxi-zone-list">
                 <div className="taxi-inline-heading">
                   <h3>
-                    {zoneSource === "catalog"
-                      ? `Zonas de ${baseName}`
-                      : "Zonas listas para cotizar"}
+                    Zonas de {baseName}
                   </h3>
                   {zoneLoading && <span>Cargando…</span>}
                 </div>
@@ -931,9 +893,7 @@ export default function TaxiBotAdminPage(
                   <p className="taxi-empty-inline">
                     {search
                       ? "No encontramos una zona con ese nombre."
-                      : zoneSource === "catalog"
-                      ? "Todavía no hay zonas registradas. Puedes marcar un área en el mapa."
-                      : "Aún no hay zonas listas para cotizar. Elige Todas las zonas y guarda su tarifa."}
+                      : "Todavía no hay zonas registradas. Puedes marcar un área en el mapa."}
                   </p>
                 )}
                 <div className="taxi-zone-rows">
@@ -958,9 +918,7 @@ export default function TaxiBotAdminPage(
                         </span>
                         <small>
                           {g.cells.length} celdas en esta página ·{" "}
-                          {g.source === "base"
-                            ? "Tarifa ajustada"
-                            : "Tarifa registrada"}
+                          Tarifa de la base
                         </small>
                       </span>
                       <b>{money(g.cents)}</b>

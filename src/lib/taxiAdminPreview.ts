@@ -51,7 +51,7 @@ export function createTaxiAdminPreview(): TaxiAdminClient {
           cell: z.cell,
           label: z.label,
           cents: z.cents,
-          source: "catalog",
+          source: "base",
           assigned: true,
         };
       }).sort((a, b) => a.cell.localeCompare(b.cell));

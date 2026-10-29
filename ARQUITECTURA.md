@@ -1,5 +1,7 @@
 # Arquitectura General — Stellar Tracking / Pompeyo
 
+> **Corrección de propiedad H3 — 29-10-2026:** [Zonas propias de Pompeyo](docs/STELLAR_BASE_OWNED_ZONES_20261029.md). La cobertura y sus tarifas pertenecen a la base y se usan directamente desde todos sus canales. Se retira el paso de asignar/habilitar hexágonos por WhatsApp. Las instrucciones anteriores sobre esos vínculos quedan reemplazadas.
+
 > **Configuración vigente — 29-10-2026:** [Conductores del bot, país y caché H3](docs/STELLAR_CHANNEL_SETUP_20261029.md). `taxi-bot-admin` v15 y dos migraciones publicadas en `izrsxygazsalfhpaualj`. La base aparece activa; su canal está en pausa, sin conductores ni celdas vinculadas. Alta de conductores directamente en Configuración con unidades reales de Traccar. No se enviaron mensajes ni se activó el canal. Las notas anteriores de estado son historial.
 
 > **Corrección posterior de bases — 29-10-2026:** [Carga y estado con acceso privado](docs/STELLAR_BASES_ACCESS_20261029.md). `/bot` usa el administrador autenticado para listar bases y cambiar su estado; se retira de esa ruta el formulario heredado de otros giros. Función `taxi-bot-admin` v14 publicada y lectura local con sesión real comprobada; Pompeyo continúa inactiva. Las notas anteriores sobre acceso directo al esquema no describen esta ruta corregida.

@@ -49,7 +49,7 @@ export default function TaxiDriversPanel({ tenantId, waba, canEdit, preview, dis
     {loading && <p role="status">Consultando unidades y conductores…</p>}
     {preview && <p>Entra con tu cuenta para elegir las unidades reales de Traccar.</p>}
     {data && <>
-      <p className="taxi-setup-status">{data.activeCount} {data.activeCount === 1 ? 'conductor activo' : 'conductores activos'} · {data.zoneCount.toLocaleString('es-MX')} hexágonos guardados para este canal.
+      <p className="taxi-setup-status">{data.activeCount} {data.activeCount === 1 ? 'conductor activo' : 'conductores activos'} · {data.zoneCount.toLocaleString('es-MX')} hexágonos de la base.
         {' '}<button className="taxi-text-button" onClick={onZones} disabled={disabled || dirty || busy || Boolean(pending)}>Ver zonas y tarifas</button></p>
       {data.drivers.length > 0 && <ul className="taxi-driver-list">{data.drivers.map(driver => <li key={driver.deviceId}>
         <div><strong>{driver.name}</strong><small>{data.units.find(unit => unit.id === driver.deviceId)?.name ?? 'Unidad no disponible en tu cuenta'} · {driver.phone} · {driver.active ? 'Activo' : 'En pausa'}</small></div>

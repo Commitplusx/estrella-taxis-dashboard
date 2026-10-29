@@ -1,5 +1,7 @@
 # Pompeyo: alta de conductores, número y cobertura
 
+> Corrección posterior: [los hexágonos son propios de la base](STELLAR_BASE_OWNED_ZONES_20261029.md). Se retira la habilitación por canal que describía esta nota.
+
 Proyecto independiente: `izrsxygazsalfhpaualj`. Superficie: panel React y `taxi-bot-admin`. No modifica Pollo Robin’s ni su worker.
 
 ## Ruta de operación
