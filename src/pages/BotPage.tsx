@@ -43,6 +43,28 @@ const defaultForm = {
   activo: true,
 };
 
+function isErrorRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function describeLoadError(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (typeof error === 'string' && error.trim()) return error.trim();
+  if (!isErrorRecord(error)) return 'Ocurrió un error inesperado.';
+
+  const code = typeof error.code === 'string' ? error.code : '';
+  if (code === '42501') {
+    return 'Esta pantalla no tiene permiso para consultar las bases en el proyecto privado. Para configurar WhatsApp, entra a Bot de WhatsApp.';
+  }
+  if (code === '42P01' || code === 'PGRST205') {
+    return 'Esta pantalla usa una tabla que no existe en la base actual. Para configurar WhatsApp, entra a Bot de WhatsApp.';
+  }
+  if (typeof error.message === 'string' && error.message.trim()) {
+    return error.message.trim();
+  }
+  return 'No pudimos consultar las bases. Revisa la conexión e inténtalo de nuevo.';
+}
+
 export default function BotPage() {
   const { userRole, empresaId } = useAuth();
   const [empresas, setEmpresas] = useState<Empresa[]>([]);
@@ -78,7 +100,7 @@ export default function BotPage() {
     loadEmpresas().then(rows => {
       if (active) setEmpresas(rows);
     }).catch((error: unknown) => {
-      if (active) toast.error('No pudimos cargar las bases: ' + (error instanceof Error ? error.message : String(error)));
+      if (active) toast.error('No pudimos cargar las bases: ' + describeLoadError(error));
     }).finally(() => {
       if (active) setLoading(false);
     });
@@ -90,7 +112,7 @@ export default function BotPage() {
     try {
       setEmpresas(await loadEmpresas());
     } catch (error: unknown) {
-      toast.error('No pudimos cargar las bases: ' + (error instanceof Error ? error.message : String(error)));
+      toast.error('No pudimos cargar las bases: ' + describeLoadError(error));
     } finally {
       setLoading(false);
     }
@@ -206,6 +228,15 @@ export default function BotPage() {
               </button>
             </div>
           )}
+        </div>
+      )}
+
+      {!showForm && userRole === 'superadmin' && (
+        <div className="mb-6 flex flex-col gap-3 rounded-xl border border-blue-200 bg-blue-50 p-4 sm:flex-row sm:items-center sm:justify-between" role="status">
+          <p className="text-sm text-blue-950">La configuración del canal de WhatsApp de Pompeyo se administra en su panel dedicado.</p>
+          <Link to="/taxi-bot" className="inline-flex shrink-0 items-center justify-center rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-blue-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700">
+            Abrir Bot de WhatsApp
+          </Link>
         </div>
       )}
 
