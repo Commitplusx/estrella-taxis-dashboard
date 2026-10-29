@@ -14,6 +14,8 @@ import {
   parsePackageRecord,
   parsePackageRows,
   parsePackageWrite,
+  parseTaxiCompanyPackageAssignment,
+  parseTaxiCompanyPackageAssignments,
 } from "../_shared/tracking/packages.ts";
 import {
   cells,
@@ -118,6 +120,70 @@ export function createTaxiAdminHandler(
             }),
           );
           return json({ packages: parsePackageRows(rows) });
+        }
+        if (raw.action === "packages_assignments_list") {
+          exact(raw, ["action"]);
+          const rows = await deps.store.read(
+            "empresas",
+            new URLSearchParams({
+              select: "id,nombre_empresa,ciudad,activo,paquete_id",
+              tipo_negocio: "eq.taxi",
+              order: "nombre_empresa.asc",
+              limit: "101",
+            }),
+          );
+          if (rows.length > 100) {
+            throw new TrackingError(413, "company_limit", "Hay más de cien bases. Acota la asignación de planes antes de continuar.");
+          }
+          return json({ assignments: parseTaxiCompanyPackageAssignments(rows) });
+        }
+        if (raw.action === "packages_assign") {
+          exact(raw, ["action", "companyId", "expectedPackageId", "packageId"]);
+          const companyId = uuid(raw.companyId);
+          const expectedPackageId = raw.expectedPackageId === null ? null : uuid(raw.expectedPackageId);
+          const packageId = raw.packageId === null ? null : uuid(raw.packageId);
+          const companyRows = await deps.store.read(
+            "empresas",
+            new URLSearchParams({
+              select: "id,nombre_empresa,ciudad,activo,paquete_id,tipo_negocio",
+              id: "eq." + companyId,
+              limit: "1",
+            }),
+          );
+          const companyRow = companyRows[0];
+          if (!record(companyRow) || companyRow.tipo_negocio !== "taxi") {
+            throw new TrackingError(404, "taxi_company_not_found", "No encontramos esa base de taxis.");
+          }
+          const current = parseTaxiCompanyPackageAssignment(companyRow);
+          if (current.paquete_id !== expectedPackageId) {
+            throw new TrackingError(409, "package_assignment_conflict", "La asignación cambió. Actualiza la pantalla antes de guardar.");
+          }
+          if (packageId !== null) {
+            const packageRows = await deps.store.read(
+              "paquetes",
+              new URLSearchParams({
+                select: "id,activo",
+                id: "eq." + packageId,
+                limit: "1",
+              }),
+            );
+            const targetPackage = packageRows[0];
+            if (!record(targetPackage)) {
+              throw new TrackingError(404, "package_not_found", "Ese plan ya no existe. Actualiza la lista.");
+            }
+            if (targetPackage.activo !== true) {
+              throw new TrackingError(409, "package_inactive", "Activa el plan antes de asignarlo a una base.");
+            }
+          }
+          const updatedRows = await deps.store.writeCompanyPackage(companyId, expectedPackageId, packageId);
+          if (updatedRows.length !== 1) {
+            throw new TrackingError(409, "package_assignment_conflict", "La asignación cambió. Actualiza la pantalla antes de guardar.");
+          }
+          const updated = parseTaxiCompanyPackageAssignment(updatedRows[0]);
+          if (updated.paquete_id !== packageId) {
+            throw new TrackingError(503, "package_assignment_uncertain", "No se confirmó el plan guardado. Actualiza la lista antes de volver a intentarlo.");
+          }
+          return json({ state: "saved", assignment: updated });
         }
         if (raw.action === "packages_create") {
           exact(raw, ["action", "requestId", "package"]);

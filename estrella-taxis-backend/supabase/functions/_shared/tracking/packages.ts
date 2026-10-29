@@ -21,6 +21,14 @@ export interface PackageRecord extends PackageWrite {
   id: string;
 }
 
+export interface TaxiCompanyPackageAssignment {
+  id: string;
+  nombre_empresa: string;
+  ciudad: string | null;
+  activo: boolean;
+  paquete_id: string | null;
+}
+
 function invalid(status: 400 | 502, message: string): never {
   throw new TrackingError(status, status === 400 ? "invalid_package" : "invalid_package_data", message);
 }
@@ -122,4 +130,43 @@ export function parsePackageRows(value: unknown): PackageRecord[] {
     return invalid(502, "No pudimos cargar la lista de planes.");
   }
   return value.map(parsePackageRecord);
+}
+
+export function parseTaxiCompanyPackageAssignment(value: unknown): TaxiCompanyPackageAssignment {
+  if (!record(value)) return invalid(502, "Una base no tiene el formato esperado.");
+  let id: string;
+  try {
+    id = uuid(value.id);
+  } catch {
+    return invalid(502, "Una base tiene un identificador no válido.");
+  }
+  const name = typeof value.nombre_empresa === "string" ? value.nombre_empresa.trim() : "";
+  let packageId: string | null = null;
+  if (value.paquete_id !== null) {
+    try {
+      packageId = uuid(value.paquete_id);
+    } catch {
+      return invalid(502, "Una asignación tiene un plan no válido.");
+    }
+  }
+  if (!name || name.length > 160 || typeof value.activo !== "boolean" ||
+    !(value.paquete_id === null || typeof value.paquete_id === "string") ||
+    !(value.ciudad === null ||
+      (typeof value.ciudad === "string" && value.ciudad.length <= 160))) {
+    return invalid(502, "Una base tiene datos no válidos para asignar el plan.");
+  }
+  return {
+    id,
+    nombre_empresa: name,
+    ciudad: typeof value.ciudad === "string" && value.ciudad.trim() ? value.ciudad.trim() : null,
+    activo: value.activo,
+    paquete_id: packageId,
+  };
+}
+
+export function parseTaxiCompanyPackageAssignments(value: unknown): TaxiCompanyPackageAssignment[] {
+  if (!Array.isArray(value) || value.length > 100) {
+    return invalid(502, "No pudimos cargar las bases para asignar sus planes.");
+  }
+  return value.map(parseTaxiCompanyPackageAssignment);
 }

@@ -89,7 +89,7 @@ export default function Sidebar({ onClose }: SidebarProps) {
     ...(isSuperadmin ? [{ to: '/catalog', icon: <ShoppingBag size={16} />, label: 'Catálogo Global', roles: ['superadmin'] }] : []),
     { to: '/bot', icon: <Bot size={16} />, label: 'Bot de Voz', roles: ['superadmin', 'admin_empresa'], feature: 'bot_voz' },
     { to: '/users', icon: <Users size={16} />, label: 'Usuarios', roles: ['superadmin', 'admin_empresa'] },
-    { to: '/packages', icon: <Package size={16} />, label: 'Planes', roles: ['superadmin'] },
+    { to: '/packages', icon: <Package size={16} />, label: 'Planes y asignación', roles: ['superadmin'] },
   ].filter(item => item.always || (item.roles && userRole && item.roles.includes(userRole)));
 
   // Menús para Giros Comerciales (Restaurante, Farmacia, Refaccionaria, etc.)

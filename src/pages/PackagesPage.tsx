@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { packageAdminClient } from '../lib/packageAdminClient';
-import type { PackageFeature, PackageRecord, PackageWrite } from '../../estrella-taxis-backend/supabase/functions/_shared/tracking/packages.ts';
+import type { PackageFeature, PackageRecord, PackageWrite, TaxiCompanyPackageAssignment } from '../../estrella-taxis-backend/supabase/functions/_shared/tracking/packages.ts';
 import {
   Package, Plus, Pencil, Trash2, Check, X, ToggleLeft, ToggleRight,
   Star, DollarSign, Bot, MessageCircle, Wifi, GripVertical, AlertCircle,
-  CheckCircle2, Cpu, BarChart3, FileText,
+  CheckCircle2, Cpu, BarChart3, FileText, Building2, MapPin,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -65,6 +65,10 @@ function getPlanGradient(precio: number): string {
 export default function PackagesPage() {
   const { userRole } = useAuth();
   const [paquetes, setPaquetes] = useState<PackageRecord[]>([]);
+  const [assignments, setAssignments] = useState<TaxiCompanyPackageAssignment[]>([]);
+  const [assignmentDrafts, setAssignmentDrafts] = useState<Record<string, string>>({});
+  const [assignmentLoading, setAssignmentLoading] = useState(true);
+  const [assignmentSavingId, setAssignmentSavingId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -88,17 +92,43 @@ export default function PackagesPage() {
   // eslint-disable-next-line react-hooks/rules-of-hooks
   const fetchPaquetes = async () => {
     setLoading(true);
+    setAssignmentLoading(true);
     try {
-      setPaquetes(await packageAdminClient.list());
+      const [packages, bases] = await Promise.all([
+        packageAdminClient.list(),
+        packageAdminClient.listAssignments(),
+      ]);
+      setPaquetes(packages);
+      setAssignments(bases);
+      setAssignmentDrafts(Object.fromEntries(bases.map(base => [base.id, base.paquete_id ?? ''])));
     } catch (error: unknown) {
-      toast.error('Error al cargar los planes: ' + (error instanceof Error ? error.message : String(error)));
+      toast.error('No pudimos cargar planes y bases: ' + (error instanceof Error ? error.message : String(error)));
     } finally {
       setLoading(false);
+      setAssignmentLoading(false);
     }
   };
 
   // eslint-disable-next-line react-hooks/rules-of-hooks
   useEffect(() => { fetchPaquetes(); }, []);
+
+  const saveAssignment = async (base: TaxiCompanyPackageAssignment) => {
+    const draft = assignmentDrafts[base.id] ?? base.paquete_id ?? '';
+    const packageId = draft || null;
+    if (packageId === base.paquete_id) return;
+    setAssignmentSavingId(base.id);
+    try {
+      const updated = await packageAdminClient.assign(base.id, base.paquete_id, packageId);
+      setAssignments(current => current.map(item => item.id === updated.id ? updated : item));
+      setAssignmentDrafts(current => ({ ...current, [updated.id]: updated.paquete_id ?? '' }));
+      toast.success(`Plan actualizado para ${updated.nombre_empresa}.`);
+    } catch (error: unknown) {
+      toast.error('No se pudo asignar el plan: ' + (error instanceof Error ? error.message : String(error)));
+      await fetchPaquetes();
+    } finally {
+      setAssignmentSavingId(null);
+    }
+  };
 
   const openCreate = () => {
     setEditingId(null);
@@ -212,13 +242,80 @@ export default function PackagesPage() {
           <div>
             <h1 className="text-xl sm:text-2xl font-bold text-gray-900 flex items-center gap-2">
               <Package size={24} className="text-blue-600" />
-              Planes de Servicio
+              Planes y asignación
             </h1>
-            <p className="text-sm text-gray-500 mt-1">Administra los paquetes que ofreces a tus clientes.</p>
+            <p className="text-sm text-gray-500 mt-1">Aquí creas los planes y eliges cuál tiene cada base.</p>
+          </div>
+        </div>
+
+        <section id="asignacion" className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden scroll-mt-6">
+          <div className="px-5 py-4 sm:px-6 border-b border-gray-100">
+            <h2 className="text-base sm:text-lg font-bold text-gray-900 flex items-center gap-2">
+              <Building2 size={18} className="text-blue-600" /> Asignar plan a una base
+            </h2>
+            <p className="mt-1 text-sm text-gray-500">Cada base tiene un plan. Los cambios se guardan aquí en el servidor.</p>
+          </div>
+          {assignmentLoading ? (
+            <div className="px-5 py-6 sm:px-6 text-sm text-gray-500">Cargando bases…</div>
+          ) : assignments.length === 0 ? (
+            <div className="px-5 py-6 sm:px-6 text-sm text-gray-500">Todavía no hay bases de taxi para asignar.</div>
+          ) : (
+            <div className="divide-y divide-gray-100">
+              {assignments.map(base => {
+                const draft = assignmentDrafts[base.id] ?? base.paquete_id ?? '';
+                const changed = (base.paquete_id ?? '') !== draft;
+                const currentPackage = paquetes.find(item => item.id === base.paquete_id);
+                return (
+                  <div key={base.id} className="px-5 py-4 sm:px-6 flex flex-col md:flex-row md:items-center gap-3 md:gap-6">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className={`h-2 w-2 rounded-full shrink-0 ${base.activo ? 'bg-emerald-500' : 'bg-gray-300'}`} />
+                        <p className="font-semibold text-gray-900 truncate">{base.nombre_empresa}</p>
+                        {!base.activo && <span className="text-xs text-gray-500">Inactiva</span>}
+                      </div>
+                      {base.ciudad && <p className="mt-1 ml-4 text-sm text-gray-500 flex items-center gap-1"><MapPin size={13} />{base.ciudad}</p>}
+                    </div>
+                    <div className="flex flex-col sm:flex-row gap-2 sm:items-center md:w-[min(100%,28rem)]">
+                      <select
+                        aria-label={`Plan de ${base.nombre_empresa}`}
+                        value={draft}
+                        disabled={assignmentSavingId === base.id}
+                        onChange={event => setAssignmentDrafts(current => ({ ...current, [base.id]: event.target.value }))}
+                        className="min-w-0 flex-1 border border-gray-300 rounded-xl px-3.5 py-2.5 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50"
+                      >
+                        <option value="">Sin plan asignado</option>
+                        {base.paquete_id && !currentPackage && (
+                          <option value={base.paquete_id} disabled>Plan actual sin datos</option>
+                        )}
+                        {paquetes.filter(item => item.activo || item.id === base.paquete_id).map(item => (
+                          <option key={item.id} value={item.id}>
+                            {item.nombre} · ${item.precio_mensual.toLocaleString('es-MX')}/mes{!item.activo ? ' · Inactivo' : ''}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        onClick={() => saveAssignment(base)}
+                        disabled={!changed || assignmentSavingId === base.id}
+                        className="inline-flex justify-center items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold bg-gray-900 text-white hover:bg-black disabled:bg-gray-100 disabled:text-gray-400 transition-colors"
+                      >
+                        <Check size={15} /> {assignmentSavingId === base.id ? 'Guardando…' : 'Guardar'}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </section>
+
+        <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-bold text-gray-900">Planes disponibles</h2>
+            <p className="mt-1 text-sm text-gray-500">Crea o edita los paquetes que puedes asignar arriba.</p>
           </div>
           <button
             onClick={openCreate}
-            className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-bold transition shadow-sm"
+            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-bold transition shadow-sm"
           >
             <Plus size={16} /> Nuevo Plan
           </button>

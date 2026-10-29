@@ -5,6 +5,7 @@ export interface TrackingStore {
   read(table: string, query: URLSearchParams): Promise<unknown[]>;
   writeScores(rows: readonly Record<string, unknown>[]): Promise<void>;
   writePackages(method: 'POST' | 'PATCH' | 'DELETE', query: URLSearchParams, payload?: PackageWrite & { id?: string }): Promise<unknown[]>;
+  writeCompanyPackage(companyId: string, expectedPackageId: string | null, packageId: string | null): Promise<unknown[]>;
   rpc(name: string, params: Record<string, unknown>): Promise<unknown>;
 }
 export class RestTrackingStore implements TrackingStore {
@@ -43,6 +44,20 @@ export class RestTrackingStore implements TrackingStore {
     });
     if (!Array.isArray(data) || data.length > 1) {
       throw new TrackingError(502, 'package_write_contract', 'No pudimos confirmar el cambio del plan.');
+    }
+    return data;
+  }
+  async writeCompanyPackage(companyId: string, expectedPackageId: string | null, packageId: string | null): Promise<unknown[]> {
+    const query = new URLSearchParams({ id: `eq.${companyId}` });
+    query.set('paquete_id', expectedPackageId === null ? 'is.null' : `eq.${expectedPackageId}`);
+    query.set('select', 'id,nombre_empresa,ciudad,activo,paquete_id');
+    const { data } = await requestJson(this.fetcher, `${this.base}/rest/v1/empresas?${query.toString()}`, {
+      method: 'PATCH',
+      headers: { ...this.headers(), Prefer: 'return=representation' },
+      body: JSON.stringify({ paquete_id: packageId }),
+    });
+    if (!Array.isArray(data) || data.length > 1) {
+      throw new TrackingError(502, 'company_package_write_contract', 'No pudimos confirmar la asignación del plan.');
     }
     return data;
   }

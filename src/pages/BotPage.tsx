@@ -1,17 +1,10 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { api, type TraccarUser } from '../lib/traccarApi';
-import { Phone, Bot, Building2, MapPin, Save, Plus, Trash2, Edit2, Users, X } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Phone, Bot, Building2, MapPin, Save, Plus, Trash2, Edit2, Users, X, Package } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuth } from '../context/AuthContext';
-
-interface Paquete {
-  id: string;
-  nombre: string;
-  precio_mensual: number;
-  incluye_bot: boolean;
-  incluye_whatsapp: boolean;
-}
 
 interface Empresa {
   id: string;
@@ -24,8 +17,6 @@ interface Empresa {
   prompt_personalizado: string | null;
   ciudad: string | null;
   activo: boolean;
-  paquete_id: string | null;
-  paquete?: Paquete;
   ignored_phones?: string[] | null;
   created_at: string;
 }
@@ -50,13 +41,11 @@ const defaultForm = {
   ciudad: '',
   prompt_personalizado: '',
   activo: true,
-  paquete_id: '',
 };
 
 export default function BotPage() {
   const { userRole, empresaId } = useAuth();
   const [empresas, setEmpresas] = useState<Empresa[]>([]);
-  const [paquetes, setPaquetes] = useState<Paquete[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<Empresa | null>(null);
@@ -65,9 +54,8 @@ export default function BotPage() {
   const [form, setForm] = useState(defaultForm);
   const [saving, setSaving] = useState(false);
 
-  const fetchEmpresas = async () => {
-    setLoading(true);
-    let empresaQuery = supabase.from('empresas').select('*, paquete:paquetes(*)').order('created_at', { ascending: false });
+  const loadEmpresas = useCallback(async (): Promise<Empresa[]> => {
+    let empresaQuery = supabase.from('empresas').select('*').order('created_at', { ascending: false });
     
     // Si es admin_empresa, solo ve la suya
     if (userRole === 'admin_empresa') {
@@ -79,21 +67,34 @@ export default function BotPage() {
       }
     }
 
-    const [empRes, paqRes] = await Promise.all([
-      empresaQuery,
-      supabase.from('paquetes').select('*').eq('activo', true).order('precio_mensual', { ascending: true })
-    ]);
-    if (!empRes.error) setEmpresas(empRes.data || []);
-    if (!paqRes.error) setPaquetes(paqRes.data || []);
-    setLoading(false);
-  };
-
-  useEffect(() => { 
-    // Solo permitir superadmin o admin_empresa
-    if (userRole === 'superadmin' || userRole === 'admin_empresa') {
-      fetchEmpresas(); 
-    }
+    const empRes = await empresaQuery;
+    if (empRes.error) throw empRes.error;
+    return empRes.data || [];
   }, [userRole, empresaId]);
+
+  useEffect(() => {
+    if (userRole !== 'superadmin' && userRole !== 'admin_empresa') return;
+    let active = true;
+    loadEmpresas().then(rows => {
+      if (active) setEmpresas(rows);
+    }).catch((error: unknown) => {
+      if (active) toast.error('No pudimos cargar las bases: ' + (error instanceof Error ? error.message : String(error)));
+    }).finally(() => {
+      if (active) setLoading(false);
+    });
+    return () => { active = false; };
+  }, [userRole, loadEmpresas]);
+
+  const fetchEmpresas = async () => {
+    setLoading(true);
+    try {
+      setEmpresas(await loadEmpresas());
+    } catch (error: unknown) {
+      toast.error('No pudimos cargar las bases: ' + (error instanceof Error ? error.message : String(error)));
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const openCreate = () => {
     setEditing(null);
@@ -113,47 +114,30 @@ export default function BotPage() {
       ciudad: emp.ciudad || '',
       prompt_personalizado: emp.prompt_personalizado || '',
       activo: emp.activo,
-      paquete_id: emp.paquete_id || '',
     });
     setShowForm(true);
   };
 
   const handleSave = async () => {
-    const selectedPaquete = paquetes.find(p => p.id === form.paquete_id);
-    const requiresBot = selectedPaquete ? selectedPaquete.incluye_bot : true;
-    const requiresWA = selectedPaquete ? selectedPaquete.incluye_whatsapp : true;
-    const requiresIA = requiresBot || requiresWA;
-
     if (!form.nombre_empresa) {
       toast.error('El nombre de la empresa es obligatorio.');
       return;
     }
 
-    if (requiresIA && !form.nombre_bot) {
-      toast.error('El nombre del bot es obligatorio para este plan.');
-      return;
-    }
-
-    if (requiresBot && !form.telefono_telnyx) {
-      toast.error('El teléfono para llamadas (Telnyx) es obligatorio para este plan.');
-      return;
-    }
-
-    if (requiresWA && !form.telefono_whatsapp) {
-      toast.error('El teléfono para WhatsApp es obligatorio para este plan.');
+    if ((form.telefono_telnyx.trim() || form.telefono_whatsapp.trim()) && !form.nombre_bot.trim()) {
+      toast.error('Escribe el nombre del bot para configurar sus canales.');
       return;
     }
 
     setSaving(true);
     const payload = {
       ...form,
-      nombre_bot: requiresIA ? form.nombre_bot : 'N/A',
-      telefono_telnyx: requiresBot ? form.telefono_telnyx : 'N/A',
-      telefono_whatsapp: requiresWA ? form.telefono_whatsapp : null,
+      nombre_bot: form.nombre_bot.trim() || 'N/A',
+      telefono_telnyx: form.telefono_telnyx.trim() || 'N/A',
+      telefono_whatsapp: form.telefono_whatsapp.trim() || null,
       dispatcher_phone: form.dispatcher_phone || null,
-      prompt_personalizado: requiresIA ? (form.prompt_personalizado || null) : null,
+      prompt_personalizado: form.prompt_personalizado || null,
       ciudad: form.ciudad || null,
-      paquete_id: form.paquete_id || null,
     };
 
     if (editing) {
@@ -205,17 +189,22 @@ export default function BotPage() {
           <div>
             <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
               <Bot className="text-gray-400" size={24} />
-              Empresas y Planes
+              Bases y canales
             </h1>
-            <p className="text-sm text-gray-500 mt-1">Gestión de inquilinos y configuración omnicanal</p>
+            <p className="text-sm text-gray-500 mt-1">Configura los datos y canales de cada base.</p>
           </div>
           {userRole === 'superadmin' && (
-            <button
-              onClick={openCreate}
-              className="flex items-center gap-2 bg-gray-900 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-800 transition-colors shadow-sm w-full sm:w-auto justify-center"
-            >
-              <Plus size={16} /> Nueva Empresa
-            </button>
+            <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+              <Link to="/packages#asignacion" className="flex items-center gap-2 border border-gray-300 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors justify-center">
+                <Package size={16} /> Asignar planes
+              </Link>
+              <button
+                onClick={openCreate}
+                className="flex items-center gap-2 bg-gray-900 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-800 transition-colors shadow-sm justify-center"
+              >
+                <Plus size={16} /> Nueva base
+              </button>
+            </div>
           )}
         </div>
       )}
@@ -240,22 +229,12 @@ export default function BotPage() {
                     {/* Badges Escritorio */}
                     <div className="hidden sm:flex items-center gap-2">
                       <span className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider bg-gray-100 px-2.5 py-1 rounded-md">{emp.tipo_negocio}</span>
-                      {emp.paquete && (
-                        <span className="text-[11px] font-semibold text-blue-700 uppercase tracking-wider bg-blue-50 px-2.5 py-1 rounded-md border border-blue-100">
-                          {emp.paquete.nombre}
-                        </span>
-                      )}
                     </div>
                   </div>
                   
                   {/* Badges Móvil */}
                   <div className="flex sm:hidden items-center gap-2 mb-5">
                     <span className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider bg-gray-100 px-2.5 py-1 rounded-md">{emp.tipo_negocio}</span>
-                    {emp.paquete && (
-                      <span className="text-[11px] font-semibold text-blue-700 uppercase tracking-wider bg-blue-50 px-2.5 py-1 rounded-md border border-blue-100">
-                        {emp.paquete.nombre}
-                      </span>
-                    )}
                   </div>
 
                   {/* Grid de Datos (Bot, WA, etc) */}
@@ -307,7 +286,7 @@ export default function BotPage() {
                     <Bot size={18} className={emp.activo ? 'text-green-500' : 'text-gray-400'} />
                     <span className="hidden lg:inline">{emp.activo ? 'Desactivar' : 'Activar'}</span>
                   </button>
-                  <button onClick={() => setManagingExceptions(emp)} className="flex items-center justify-center gap-2 w-full p-2.5 text-sm font-medium text-gray-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors" title="Excepciones">
+                  <button onClick={() => setManagingExceptions(emp)} className="flex items-center justify-center gap-2 w-full p-2.5 text-sm font-medium text-gray-600 hover:text-red-800 hover:bg-gray-100 rounded-lg transition-colors" title="Excepciones">
                     <Phone size={18} className="text-gray-400" />
                     <span className="hidden lg:inline">Excepciones</span>
                   </button>
@@ -315,12 +294,12 @@ export default function BotPage() {
                     <Users size={18} className="text-gray-400" />
                     <span className="hidden lg:inline">Usuarios</span>
                   </button>
-                  <button onClick={() => openEdit(emp)} className="flex items-center justify-center gap-2 w-full p-2.5 text-sm font-medium text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="Editar">
+                  <button onClick={() => openEdit(emp)} className="flex items-center justify-center gap-2 w-full p-2.5 text-sm font-medium text-gray-600 hover:text-blue-800 hover:bg-gray-100 rounded-lg transition-colors" title="Editar">
                     <Edit2 size={18} className="text-gray-400" />
                     <span className="hidden lg:inline">Editar</span>
                   </button>
                   {userRole === 'superadmin' && (
-                    <button onClick={() => handleDelete(emp.id)} className="flex items-center justify-center gap-2 w-full p-2.5 text-sm font-medium text-gray-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors" title="Eliminar">
+                    <button onClick={() => handleDelete(emp.id)} className="flex items-center justify-center gap-2 w-full p-2.5 text-sm font-medium text-gray-600 hover:text-red-800 hover:bg-gray-100 rounded-lg transition-colors" title="Eliminar">
                       <Trash2 size={18} className="text-gray-400" />
                       <span className="hidden lg:inline">Eliminar</span>
                     </button>
@@ -339,11 +318,6 @@ export default function BotPage() {
 
       {/* Formulario Limpio */}
       {showForm && (() => {
-        const selectedPaquete = paquetes.find(p => p.id === form.paquete_id);
-        const requiresBot = selectedPaquete ? selectedPaquete.incluye_bot : true;
-        const requiresWA = selectedPaquete ? selectedPaquete.incluye_whatsapp : true;
-        const requiresIA = requiresBot || requiresWA;
-        
         return (
           <div className="bg-white rounded-2xl border border-gray-200 shadow-sm w-full max-w-4xl mx-auto overflow-hidden">
             <div className="px-6 py-5 border-b border-gray-100 bg-gray-50/50 flex items-center justify-between">
@@ -360,16 +334,14 @@ export default function BotPage() {
 
             <div className="p-6 space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                <div className={!requiresIA ? "col-span-1 md:col-span-2" : ""}>
+                <div>
                   <label className="text-xs font-semibold text-gray-700 mb-1.5 block uppercase tracking-wide">Nombre de la Empresa *</label>
                   <input className="w-full border border-gray-300 rounded-lg px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm" value={form.nombre_empresa} onChange={e => setForm(f => ({...f, nombre_empresa: e.target.value}))} placeholder="Ej. Taxis Estrella" />
                 </div>
-                {requiresIA && (
-                  <div>
-                    <label className="text-xs font-semibold text-gray-700 mb-1.5 block uppercase tracking-wide">Nombre del Bot IA *</label>
-                    <input className="w-full border border-gray-300 rounded-lg px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm" value={form.nombre_bot} onChange={e => setForm(f => ({...f, nombre_bot: e.target.value}))} placeholder="Ej. Pompeyo" />
-                  </div>
-                )}
+                <div>
+                  <label className="text-xs font-semibold text-gray-700 mb-1.5 block uppercase tracking-wide">Nombre del bot (si aplica)</label>
+                  <input className="w-full border border-gray-300 rounded-lg px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm" value={form.nombre_bot} onChange={e => setForm(f => ({...f, nombre_bot: e.target.value}))} placeholder="Ej. Pompeyo" />
+                </div>
                 <div>
                   <label className="text-xs font-semibold text-gray-700 mb-1.5 block uppercase tracking-wide">Tipo de Negocio</label>
                   <select 
@@ -397,45 +369,24 @@ export default function BotPage() {
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5 pt-6 border-t border-gray-100">
-                {requiresBot && (
-                  <div>
-                    <label className="text-xs font-semibold text-gray-700 mb-1.5 block uppercase tracking-wide">Teléfono Voz (Telnyx) *</label>
-                    <input className="w-full border border-gray-300 rounded-lg px-3.5 py-2.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm" value={form.telefono_telnyx} onChange={e => setForm(f => ({...f, telefono_telnyx: e.target.value}))} placeholder="+15676031156" />
-                  </div>
-                )}
-                {requiresWA && (
-                  <div>
-                    <label className="text-xs font-semibold text-gray-700 mb-1.5 block uppercase tracking-wide">WhatsApp IA (YCloud) *</label>
-                    <input className="w-full border border-gray-300 rounded-lg px-3.5 py-2.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm" value={form.telefono_whatsapp} onChange={e => setForm(f => ({...f, telefono_whatsapp: e.target.value}))} placeholder="+529611234567" />
-                  </div>
-                )}
-                <div className={(!requiresBot && !requiresWA) ? "col-span-1 md:col-span-2" : (requiresBot && requiresWA ? "col-span-1 md:col-span-2" : "")}>
+                <div>
+                  <label className="text-xs font-semibold text-gray-700 mb-1.5 block uppercase tracking-wide">Teléfono Voz (Telnyx)</label>
+                  <input className="w-full border border-gray-300 rounded-lg px-3.5 py-2.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm" value={form.telefono_telnyx} onChange={e => setForm(f => ({...f, telefono_telnyx: e.target.value}))} placeholder="+15676031156" />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-gray-700 mb-1.5 block uppercase tracking-wide">WhatsApp IA (YCloud)</label>
+                  <input className="w-full border border-gray-300 rounded-lg px-3.5 py-2.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm" value={form.telefono_whatsapp} onChange={e => setForm(f => ({...f, telefono_whatsapp: e.target.value}))} placeholder="+529611234567" />
+                </div>
+                <div className="col-span-1 md:col-span-2">
                   <label className="text-xs font-semibold text-gray-700 mb-1.5 block uppercase tracking-wide">WhatsApp Despachador (Humano)</label>
                   <input className="w-full border border-gray-300 rounded-lg px-3.5 py-2.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm" value={form.dispatcher_phone} onChange={e => setForm(f => ({...f, dispatcher_phone: e.target.value}))} placeholder="+529611234567" />
                 </div>
               </div>
 
               <div className="pt-6 border-t border-gray-100">
-                <label className="text-xs font-semibold text-gray-700 mb-1.5 block uppercase tracking-wide">Paquete Facturado</label>
-                <select 
-                  className="w-full border border-gray-300 rounded-lg px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white disabled:bg-gray-50 disabled:text-gray-500 shadow-sm" 
-                  value={form.paquete_id} 
-                  onChange={e => setForm(f => ({...f, paquete_id: e.target.value}))}
-                  disabled={userRole !== 'superadmin'}
-                >
-                  <option value="">Sin paquete asignado</option>
-                  {paquetes.map(p => (
-                    <option key={p.id} value={p.id}>{p.nombre} — ${p.precio_mensual}/mes</option>
-                  ))}
-                </select>
+                <label className="text-xs font-semibold text-gray-700 mb-1.5 block uppercase tracking-wide">Prompt base del bot (si aplica)</label>
+                <textarea rows={5} className="w-full border border-gray-300 rounded-lg px-3.5 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono shadow-sm bg-gray-50 focus:bg-white transition-colors" value={form.prompt_personalizado} onChange={e => setForm(f => ({...f, prompt_personalizado: e.target.value}))} />
               </div>
-
-              {requiresIA && (
-                <div>
-                  <label className="text-xs font-semibold text-gray-700 mb-1.5 block uppercase tracking-wide">Prompt Base del Bot</label>
-                  <textarea rows={5} className="w-full border border-gray-300 rounded-lg px-3.5 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono shadow-sm bg-gray-50 focus:bg-white transition-colors" value={form.prompt_personalizado} onChange={e => setForm(f => ({...f, prompt_personalizado: e.target.value}))} />
-                </div>
-              )}
 
               <div className="flex items-center gap-3">
                 <input 

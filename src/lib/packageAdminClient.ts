@@ -2,8 +2,11 @@ import { record } from "../../estrella-taxis-backend/supabase/functions/_shared/
 import {
   parsePackageRecord,
   parsePackageRows,
+  parseTaxiCompanyPackageAssignment,
+  parseTaxiCompanyPackageAssignments,
   type PackageRecord,
   type PackageWrite,
+  type TaxiCompanyPackageAssignment,
 } from "../../estrella-taxis-backend/supabase/functions/_shared/tracking/packages.ts";
 import { trackingCall } from "./trackingClient";
 
@@ -16,6 +19,22 @@ export const packageAdminClient = {
   async list(): Promise<PackageRecord[]> {
     const response = responseRecord(await trackingCall("taxi-bot-admin", { action: "packages_list" }));
     return parsePackageRows(response.packages);
+  },
+
+  async listAssignments(): Promise<TaxiCompanyPackageAssignment[]> {
+    const response = responseRecord(await trackingCall("taxi-bot-admin", { action: "packages_assignments_list" }));
+    return parseTaxiCompanyPackageAssignments(response.assignments);
+  },
+
+  async assign(companyId: string, expectedPackageId: string | null, packageId: string | null): Promise<TaxiCompanyPackageAssignment> {
+    const response = responseRecord(await trackingCall("taxi-bot-admin", {
+      action: "packages_assign",
+      companyId,
+      expectedPackageId,
+      packageId,
+    }));
+    if (response.state !== "saved") throw new Error("No se confirmó la asignación del plan.");
+    return parseTaxiCompanyPackageAssignment(response.assignment);
   },
 
   async create(requestId: string, packageData: PackageWrite): Promise<PackageRecord> {
