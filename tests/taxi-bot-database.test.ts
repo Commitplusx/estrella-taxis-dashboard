@@ -24,16 +24,20 @@ const h3PricingSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migr
 const adminSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261028145826_taxi_bot_admin_zones.sql',import.meta.url),'utf8');
 const traceSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261028160342_taxi_bot_trace_state_quality.sql',import.meta.url),'utf8');
 const accessSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261029165842_taxi_customer_access.sql',import.meta.url),'utf8');
+const mapCacheSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261029194000_taxi_channel_edit_map_cache.sql',import.meta.url),'utf8');
+const driverSetupSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261029193220_taxi_bot_driver_setup.sql',import.meta.url),'utf8');
 const tenant='11111111-1111-4111-8111-111111111111',other='22222222-2222-4222-8222-222222222222',waba='+529630000001',customer='+529630000002',driverPhone='+529630000003';
 async function fixture(){
   const db=new PGlite();await db.exec(`CREATE ROLE anon;CREATE ROLE authenticated;CREATE ROLE service_role BYPASSRLS;
-    CREATE TABLE empresas(id uuid PRIMARY KEY,tipo_negocio text DEFAULT 'taxi');INSERT INTO empresas(id)VALUES('${tenant}'),('${other}');
+    CREATE TABLE empresas(id uuid PRIMARY KEY,tipo_negocio text DEFAULT 'taxi',telefono_whatsapp text);INSERT INTO empresas(id)VALUES('${tenant}'),('${other}');
     CREATE TABLE webhook_queue(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),payload jsonb,status text,processed_at timestamptz);
     CREATE TABLE conductores(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),tenant_id uuid,device_id integer UNIQUE,telefono_whatsapp text,nombre text,activo boolean DEFAULT true);
     CREATE TABLE viajes(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),token text UNIQUE NOT NULL,tenant_id uuid,device_id integer,taxi_name text,cliente_tel text NOT NULL,cliente_nombre text,origen text NOT NULL,destino text NOT NULL,origen_lat double precision,origen_lng double precision,estado text NOT NULL,conductores_contactados integer[]DEFAULT '{}',created_at timestamptz DEFAULT now());
     ALTER TABLE viajes ENABLE ROW LEVEL SECURITY;CREATE POLICY legacy_open ON viajes FOR ALL USING(true)WITH CHECK(true);GRANT ALL ON viajes TO anon,authenticated,service_role;`);
   await db.exec(h3CatalogSql);await db.exec(sql);await db.query("INSERT INTO taxi_bot_channels(tenant_id,waba,enabled,name,city,center_lat,center_lng,radius_km,dispatcher)VALUES($1,$2,true,'Base de prueba','Comitán',16.25,-92.13,20,$3)",[tenant,waba,'+529630000099']);await db.exec(h3PricingSql);await db.exec(adminSql);await db.exec(traceSql);
   await db.exec(accessSql);
+  await db.exec(mapCacheSql);
+  await db.exec(driverSetupSql);
   // These legacy protocol fixtures explicitly act as customers too. Driver-only access has separate tests below.
   await db.query('INSERT INTO taxi_bot_allowed_customers(tenant_id,phone)VALUES($1,$2),($1,$3),($1,$4)',[tenant,customer,driverPhone,'+529630000004']);
   await db.query("INSERT INTO conductores(tenant_id,device_id,telefono_whatsapp,nombre)VALUES($1,1,$2,'Unidad 1'),($1,2,'+529630000004','Unidad 2'),($3,3,'+529630000005','Ajena')",[tenant,driverPhone,other]);
@@ -60,6 +64,72 @@ async function fixture(){
   const admin=async(action:string,payload:Record<string,unknown>,expected=0,request=crypto.randomUUID(),company=tenant,number=waba)=>obj(await scalar('SELECT taxi_bot_admin_apply($1,$2,$3,$4,$5,$6,$7)',[company,number,42,request,expected,action,payload]));
   return{db,scalar,obj,enqueue,begin,decision,commit,prepare,confirm,draft,seedH3,admin};
 }
+
+test('driver setup SQL: save persists the bot mapping, replay is exact, stale edits and cross-base reassignment are rejected',async()=>{
+ const f=await fixture();try{
+  const request=crypto.randomUUID(),save=(device=4,name='Persona sintética',expected:string|null=null,id=request,base=tenant)=>f.scalar('SELECT taxi_bot_driver_apply($1,$2,$3,$4,$5,$6,$7,$8)',[base,42,id,device,name,'+529630000066',true,expected]);
+  const saved=f.obj(await save());assert.equal(saved.state,'saved');assert.deepEqual(await save(),saved);
+  assert.equal(await f.scalar('SELECT count(*)::int FROM conductores WHERE device_id=4'),1);
+  assert.equal(f.obj(await save(4,'Cambio con mismo request')).state,'request_conflict');
+  assert.equal(f.obj(await save(4,'Cambio sin versión',null,crypto.randomUUID())).state,'revision_conflict');
+  assert.equal(f.obj(await save(4,'De otra base',null,crypto.randomUUID(),other)).state,'device_conflict');
+  const driver=f.obj(saved.driver);assert.equal(f.obj(await save(4,'Nombre corregido',String(driver.version),crypto.randomUUID())).state,'saved');
+  assert.equal(await f.scalar('SELECT nombre FROM conductores WHERE device_id=4'),'Nombre corregido');
+  assert.equal(f.obj(await save(5,'Mismo WhatsApp',null,crypto.randomUUID())).state,'phone_conflict');
+  const own=f.obj(await f.scalar('SELECT taxi_bot_driver_read($1,$2)',[tenant,waba]));assert.equal(own.activeCount,3);assert.equal(own.zoneCount,0);assert.ok(Array.isArray(own.drivers));assert.equal(own.drivers.length,3);
+  for(const role of ['anon','authenticated']){await f.db.exec('SET ROLE '+role);await assert.rejects(save(6),/permission denied/);await assert.rejects(f.scalar('SELECT taxi_bot_driver_read($1,$2)',[tenant,waba]),/permission denied/);await f.db.exec('RESET ROLE');}
+ }finally{await f.db.close();}
+});
+test('driver setup SQL: pending offer blocks contact edits until the offer is resolved',async()=>{
+ const f=await fixture();try{
+  await f.prepare();await f.confirm();const driver=f.obj(await f.scalar('SELECT taxi_bot_driver_record(d) FROM conductores d WHERE device_id=1'));
+  const save=()=>f.scalar('SELECT taxi_bot_driver_apply($1,$2,$3,$4,$5,$6,$7,$8)',[tenant,42,crypto.randomUUID(),1,'Otro nombre',driverPhone,true,driver.version]);
+  assert.equal(f.obj(await save()).state,'driver_busy');
+  await f.db.exec("UPDATE taxi_bot_offers SET state='rejected'");assert.equal(f.obj(await save()).state,'saved');
+ }finally{await f.db.close();}
+});
+test('coverage SQL: same-count price edits invalidate the server token; per-channel saves advance its revision',async()=>{
+ const f=await fixture();try{
+  const scope=await f.seedH3(),read=()=>f.scalar('SELECT taxi_bot_admin_read($1,$2,$3,$4)',[tenant,waba,'zones',{}]);
+  const first=f.obj(await read());await f.db.query('UPDATE h3_zonas SET precio=precio+1 WHERE h3_index=$1',[scope.originCell]);
+  const changed=f.obj(await read());assert.equal(first.totalCells,changed.totalCells);assert.notEqual(first.version,changed.version);
+  await f.admin('upsert_zones',{cells:[scope.originCell],label:'Tarifa privada',cents:9900});assert.notEqual(f.obj(await read()).version,changed.version);
+ }finally{await f.db.close();}
+});
+const correctedConfig={name:'Base corregida',city:'Comitán',dispatcher:'+529630000099',centerLat:16.25,centerLng:-92.13,radiusKm:20,pricingMode:'h3_zone_max',baseCents:null,perKmCents:null,enabled:false};
+test('channel correction SQL: paused unused number moves its zones and prices atomically and response loss replays safely',async()=>{
+ const f=await fixture();try{
+  const scope=await f.seedH3(),target='+529630000088',request=crypto.randomUUID();
+  await f.admin('upsert_zones',{cells:[scope.originCell],label:'Precio de esta base',cents:5700});
+  await f.db.query('UPDATE taxi_bot_channels SET enabled=false WHERE waba=$1',[waba]);
+  await f.db.query('UPDATE empresas SET telefono_whatsapp=$1 WHERE id=$2',[waba,tenant]);
+  const payload={...correctedConfig,newWaba:target},first=await f.admin('rename_channel',payload,1,request);
+  assert.equal(first.state,'saved');assert.deepEqual(await f.admin('rename_channel',payload,1,request),first);
+  assert.equal(await f.scalar('SELECT waba FROM taxi_bot_channels'),target);assert.equal(await f.scalar('SELECT enabled FROM taxi_bot_channels'),false);
+  assert.equal(await f.scalar('SELECT count(*)::int FROM taxi_bot_h3_cells WHERE waba=$1',[target]),2);
+  assert.equal(await f.scalar('SELECT price_cents FROM taxi_bot_h3_cells WHERE h3_index=$1',[scope.originCell]),5700);
+  assert.equal(await f.scalar('SELECT telefono_whatsapp FROM empresas WHERE id=$1',[tenant]),target);
+  assert.equal(await f.scalar('SELECT count(*)::int FROM taxi_bot_sessions'),0);
+ }finally{await f.db.close();}
+});
+test('channel correction SQL: active channel, occupied target and historical conversations cannot be overwritten',async()=>{
+ const f=await fixture();try{
+  const payload={...correctedConfig,newWaba:'+529630000088'};
+  assert.equal((await f.admin('rename_channel',payload)).state,'pause_channel_first');
+  await f.prepare();await f.db.exec('UPDATE taxi_bot_channels SET enabled=false');
+  assert.equal((await f.admin('rename_channel',payload)).state,'channel_has_history');
+  await f.db.query("INSERT INTO taxi_bot_channels(tenant_id,waba,enabled,name,city,center_lat,center_lng,radius_km)VALUES($1,$2,false,'Otra base','Comitán',16.25,-92.13,20)",[other,payload.newWaba]);
+  assert.equal((await f.admin('rename_channel',payload)).state,'channel_conflict');
+  assert.equal(await f.scalar('SELECT count(*)::int FROM taxi_bot_channels'),2);assert.equal(await f.scalar('SELECT count(*)::int FROM taxi_bot_sessions'),1);
+ }finally{await f.db.close();}
+});
+test('activation SQL: missing driver and missing saved H3 coverage have distinct errors',async()=>{
+ const f=await fixture();try{
+  const config={...correctedConfig,enabled:true};
+  assert.equal((await f.admin('configure',config)).state,'activation_zones_missing');await f.db.exec('DELETE FROM conductores');
+  assert.equal((await f.admin('configure',config)).state,'activation_driver_missing');
+ }finally{await f.db.close();}
+});
 
 test('customer access: an empty list rejects intake before creating events, sessions or queue rows',async()=>{
  const f=await fixture();try{

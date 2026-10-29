@@ -23,6 +23,9 @@ import {
 import { type TaxiAdminClient, taxiAdminClient } from "../lib/taxiAdminClient";
 import { createTaxiAdminPreview } from "../lib/taxiAdminPreview";
 import { loadTaxiCoverage } from "../lib/taxiCoverage";
+import { loadCachedTaxiCoverage } from '../lib/taxiCoverageCache';
+import publicConfig from '../../deployment/stellar/web-public.json';
+import TaxiDriversPanel from '../components/TaxiDriversPanel';
 import { buildZoneColors, zoneColor } from "../lib/taxiZoneColors";
 import { TrackingClientError } from "../lib/trackingClient";
 import TaxiCustomerAccessPanel from '../components/TaxiCustomerAccessPanel';
@@ -241,15 +244,20 @@ export default function TaxiBotAdminPage(
     setFocusCell(null);
   }, [zoneSource]);
   useEffect(() => {
-    if (!channel) return;
+    if (!channel || tab !== 'zones') return;
     const abort = new AbortController();
     const loadedScope = channel.tenantId + "|" + channel.waba + "|" + zoneSource;
     setMapScope("");
     setMapZones([]);
     setCoverageProgress({ loaded: 0, total: 0 });
-    void loadTaxiCoverage(client, channel.tenantId, channel.waba, zoneSource, abort.signal, (loaded, total) => {
+    const progress = (loaded: number, total: number) => {
       if (!abort.signal.aborted) setCoverageProgress({ loaded, total });
-    }).then((zones) => {
+    };
+    const coverage = !preview && context?.catalogVersion ? loadCachedTaxiCoverage(client, {
+      project: publicConfig.url, actorId: context.actorId, tenantId: channel.tenantId, waba: channel.waba,
+      source: zoneSource, version: `${channel.revision}:${context.catalogVersion}`,
+    }, abort.signal, progress) : loadTaxiCoverage(client, channel.tenantId, channel.waba, zoneSource, abort.signal, progress);
+    void coverage.then((zones) => {
       if (!abort.signal.aborted) {
         setMapZones(zones);
         setMapScope(loadedScope);
@@ -266,7 +274,7 @@ export default function TaxiBotAdminPage(
       if (!abort.signal.aborted) setCoverageProgress(null);
     });
     return () => abort.abort();
-  }, [channel?.tenantId, channel?.waba, zoneSource, client, zoneReload]);
+  }, [channel?.tenantId, channel?.waba, channel?.revision, context?.catalogVersion, context?.actorId, preview, zoneSource, client, zoneReload, tab]);
   const apply = async (command: AdminCommand) => {
     if (preview) {
       setNotice(
@@ -299,11 +307,12 @@ export default function TaxiBotAdminPage(
       setQuote(null);
       try {
         const data = await refreshContext();
-        setWaba(command.waba);
+        const savedWaba = command.action === 'rename_channel' && typeof command.payload.newWaba === 'string' ? command.payload.newWaba : command.waba;
+        setWaba(savedWaba);
         setTenant(command.tenantId);
         setNewChannel(false);
         setFormVersion((v) => v + 1);
-        if (data.channels.some((c) => c.waba === command.waba)) {
+        if (data.channels.some((c) => c.waba === savedWaba)) {
           // React effects reload with the current scope and cleared search, never this async closure.
           setZoneReload((v) => v + 1);
           if (tab === "operations") await loadOperations();
@@ -618,16 +627,22 @@ export default function TaxiBotAdminPage(
         </div>
       )}
       {tenantId && tab === "config" && (
+        <>
+        {channel && <TaxiDriversPanel key={tenantId + '|' + waba} tenantId={tenantId} waba={waba} canEdit={canConfigure} preview={preview} disabled={busy || Boolean(pending)}
+          onZones={() => setTab('zones')} onLockChange={setQualityLocked} />}
         <TaxiChannelForm
           key={tenantId + "|" + (newChannel ? "new" : waba) + "|" + formVersion}
           channel={newChannel ? null : channel}
           tenantId={tenantId}
-          busy={busy || Boolean(pending)}
+          busy={busy || Boolean(pending) || qualityLocked}
           canEdit={canConfigure}
           runtimeReady={context.runtimeReady}
-          onSave={(number, revision, payload) =>
-            write("configure", payload, revision, number)}
+          onSave={(number, revision, payload) => {
+            const rename = channel && number !== channel.waba;
+            write(rename ? 'rename_channel' : 'configure', rename ? { ...payload, newWaba: number } : payload, revision, rename ? channel.waba : number);
+          }}
         />
+        </>
       )}
       {channel && tab === "quality" && (
         <TaxiQualityPanel

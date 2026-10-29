@@ -31,6 +31,7 @@ class PackageStore implements TrackingStore {
   async read(table: string, query: URLSearchParams): Promise<unknown[]> {
     this.reads.push(table);
     this.readQueries.push({ table, query });
+    if (table === 'taxi_bot_map_version') return [{ version: '11111111-1111-4111-8111-111111111111' }];
     if (table === "paquetes") return [{ ...packageRow, activo: this.packageActive }];
     if (table === "empresas") return [{
       id: "5b27f946-ecf1-4d52-8778-17ff60619804",

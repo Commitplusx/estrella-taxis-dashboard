@@ -1,5 +1,7 @@
 # Arquitectura General — Stellar Tracking / Pompeyo
 
+> **Configuración vigente — 29-10-2026:** [Conductores del bot, país y caché H3](docs/STELLAR_CHANNEL_SETUP_20261029.md). `taxi-bot-admin` v15 y dos migraciones publicadas en `izrsxygazsalfhpaualj`. La base aparece activa; su canal está en pausa, sin conductores ni celdas vinculadas. Alta de conductores directamente en Configuración con unidades reales de Traccar. No se enviaron mensajes ni se activó el canal. Las notas anteriores de estado son historial.
+
 > **Corrección posterior de bases — 29-10-2026:** [Carga y estado con acceso privado](docs/STELLAR_BASES_ACCESS_20261029.md). `/bot` usa el administrador autenticado para listar bases y cambiar su estado; se retira de esa ruta el formulario heredado de otros giros. Función `taxi-bot-admin` v14 publicada y lectura local con sesión real comprobada; Pompeyo continúa inactiva. Las notas anteriores sobre acceso directo al esquema no describen esta ruta corregida.
 
 > **Estado posterior vigente — 29-10-2026:** [Clientes autorizados de Pompeyo](docs/STELLAR_AUTHORIZED_CUSTOMERS_20261029.md), proyecto independiente `izrsxygazsalfhpaualj` en Estrella orgs. Nueve migraciones publicadas; administrador v10 y webhook/consumidor v9. Acceso cerrado a clientes no listados; sólo el propietario terminado en 9156 está autorizado. Panel web y OpenStreetMap en local. Bot pausado, sin canales ni conductores registrados. Pompeyo es el único negocio de esta instalación; las notas de Robin’s/Estrella envios siguientes son historial.

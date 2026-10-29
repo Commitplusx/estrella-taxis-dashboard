@@ -64,6 +64,7 @@ function fixture(
         equal(q.get("traccar_user_id"), "eq.42");
         return [{ empresa_id: tenant, rol: options.role ?? "admin_empresa" }];
       }
+      if (table === 'taxi_bot_map_version') return [{ version: '11111111-1111-4111-8111-111111111111' }];
       if (table === "empresas") {
         return [{
           id: tenant,

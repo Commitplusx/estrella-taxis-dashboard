@@ -4,6 +4,7 @@ import { taxiAdminClient } from '../lib/taxiAdminClient';
 import { issueTrackingCredential } from '../lib/trackingClient';
 import { bindTaxiAccount, restoreTrackingUser } from '../lib/taxiSession';
 import { useNativeApp } from '../hooks/useNativeApp';
+import { taxiCoverageCache } from '../lib/taxiCoverageCache';
 
 export type UserRole = 'superadmin' | 'admin_empresa' | 'operador';
 
@@ -103,6 +104,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(u);
     };
     const failedSession = () => {
+      taxiCoverageCache().clear();
       localStorage.removeItem('traccar_token');
       setUser(null); setUserRole(null); setEmpresaId(null); setEmpresaData(null); setPaqueteActual(null);
     };
@@ -142,6 +144,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch (e) {
       console.error('Error during logout:', e);
     } finally {
+      taxiCoverageCache().clear();
       localStorage.removeItem('traccar_token');
       setUser(null);
       setUserRole(null);

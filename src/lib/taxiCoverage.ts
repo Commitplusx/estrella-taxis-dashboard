@@ -9,6 +9,7 @@ export async function loadTaxiCoverage(
   source: "base" | "catalog",
   signal: AbortSignal,
   onProgress: (loaded: number, total: number) => void,
+  expectedVersion?: string,
 ): Promise<AdminZone[]> {
   const zones: AdminZone[] = [];
   let after: string | undefined;
@@ -17,6 +18,7 @@ export async function loadTaxiCoverage(
     signal.throwIfAborted();
     const page = await client.zones(tenantId, waba, { source, ...(after ? { after } : {}) }, signal);
     signal.throwIfAborted();
+    if (expectedVersion && page.version !== expectedVersion) throw new Error('Las zonas o sus precios cambiaron durante la carga. Pulsa Actualizar para ver el mapa vigente.');
     if (page.totalCells > 10000) {
       throw new Error("La cobertura supera 10,000 celdas. Hace falta dividir el mapa antes de cargarlo completo.");
     }

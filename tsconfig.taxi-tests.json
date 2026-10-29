@@ -7,6 +7,7 @@
     "tests/stellar-config.test.ts",
     "tests/taxi-session.test.ts",
     "tests/taxi-coverage.test.ts",
+    "tests/taxi-coverage-cache.test.ts",
     "tests/taxi-zone-colors.test.ts",
     "estrella-taxis-backend/scripts/check-taxi-bot-quality.ts"
   ]

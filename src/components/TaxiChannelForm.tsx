@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { Power, Save } from "lucide-react";
 import type { AdminChannel } from "../../estrella-taxis-backend/supabase/functions/_shared/bot/taxis/adminContracts.ts";
+import { channelPhone, splitChannelPhone } from '../../estrella-taxis-backend/supabase/functions/_shared/bot/taxis/channelPhone.ts';
+import TaxiPhoneField, { type TaxiPhoneValue } from './TaxiPhoneField';
 interface Props {
   channel: AdminChannel | null;
   tenantId: string;
@@ -16,11 +18,13 @@ interface Props {
 export default function TaxiChannelForm(
   { channel, busy, canEdit, runtimeReady, onSave }: Props,
 ) {
+  const [number, setNumber] = useState<TaxiPhoneValue>(() => splitChannelPhone(channel?.waba ?? ''));
+  const [dispatcher, setDispatcher] = useState<TaxiPhoneValue>(() => splitChannelPhone(channel?.dispatcher ?? ''));
+  const targetNumber = channelPhone(number.country, number.national);
+  const renaming = Boolean(channel && targetNumber && targetNumber !== channel.waba);
   const [form, setForm] = useState({
-    waba: channel?.waba ?? "",
     name: channel?.name ?? "",
     city: channel?.city ?? "",
-    dispatcher: channel?.dispatcher ?? "",
     lat: String(channel?.centerLat ?? 16.25),
     lng: String(channel?.centerLng ?? -92.13),
     radius: String(channel?.radiusKm ?? 20),
@@ -37,10 +41,8 @@ export default function TaxiChannelForm(
     [error, setError] = useState("");
   const change = (
     key:
-      | "waba"
       | "name"
       | "city"
-      | "dispatcher"
       | "lat"
       | "lng"
       | "radius"
@@ -53,25 +55,32 @@ export default function TaxiChannelForm(
     const money = (v: string) =>
       v.trim() === "" ? null : Math.round(Number(v) * 100);
     if (
-      !form.waba || !form.name || !form.city ||
+      !targetNumber || !form.name || !form.city ||
       !Number.isFinite(Number(form.lat)) ||
       !Number.isFinite(Number(form.lng)) || Number(form.radius) <= 0
     ) {
       setError("Completa el número, nombre, ciudad y cobertura de la base.");
       return;
     }
+    const dispatcherNumber = dispatcher.national.trim() ? channelPhone(dispatcher.country, dispatcher.national) : null;
+    if (dispatcher.national.trim() && !dispatcherNumber) { setError('Revisa el país y el teléfono de atención de la base.'); return; }
+    if (form.mode === 'road_distance' && (money(form.base) === null || !Number.isFinite(money(form.base)) || Number(money(form.base)) < 0 ||
+      money(form.km) === null || !Number.isFinite(money(form.km)) || Number(money(form.km)) <= 0)) {
+      setError('Para cobrar por carretera escribe la tarifa base y un precio por kilómetro mayor que cero. Si cobras por zonas, elige Por zonas H3.'); return;
+    }
+    if (renaming && channel?.enabled) { setError('Primero guarda el canal en pausa antes de corregir su número.'); return; }
     setError("");
-    onSave(form.waba, expected, {
+    onSave(targetNumber, expected, {
       name: form.name,
       city: form.city,
-      dispatcher: form.dispatcher || null,
+      dispatcher: dispatcherNumber,
       centerLat: Number(form.lat),
       centerLng: Number(form.lng),
       radiusKm: Number(form.radius),
       pricingMode: form.mode,
       baseCents: money(form.base),
       perKmCents: money(form.km),
-      enabled: form.enabled,
+      enabled: renaming ? false : form.enabled,
     });
   };
   return (
@@ -89,21 +98,8 @@ export default function TaxiChannelForm(
             required
           />
         </label>
-        <label>
-          Número de WhatsApp<input
-            type="tel"
-            value={form.waba}
-            onChange={(e) => change("waba", e.target.value)}
-            readOnly={Boolean(channel)}
-            placeholder="+52…"
-            required
-          />
-          <small>
-            {channel
-              ? "El número identifica este canal. Para otro número, crea un canal nuevo."
-              : "Incluye el código de país. El número debe conectarse también con el proveedor."}
-          </small>
-        </label>
+        <TaxiPhoneField label="Número de WhatsApp" value={number} onChange={setNumber} required disabled={channel?.enabled}
+          help={channel?.enabled ? 'Guarda el canal en pausa para editar el número.' : 'Debe coincidir exactamente con YCloud. Si allí aparece +521, conserva el 1 antes de los diez dígitos.'} />
         <label>
           Ciudad<input
             value={form.city}
@@ -112,17 +108,8 @@ export default function TaxiChannelForm(
             required
           />
         </label>
-        <label>
-          Teléfono de atención de la base<input
-            type="tel"
-            value={form.dispatcher}
-            onChange={(e) => change("dispatcher", e.target.value)}
-            placeholder="+52…"
-          />
-          <small>
-            Aquí llegan las solicitudes que requieren ayuda de una persona.
-          </small>
-        </label>
+        <TaxiPhoneField label="Teléfono de atención de la base" value={dispatcher} onChange={setDispatcher}
+          help="Aquí llegan las solicitudes que requieren ayuda de una persona." />
         <label>
           Latitud del centro<input
             type="number"
@@ -198,8 +185,8 @@ export default function TaxiChannelForm(
         <label className="taxi-enable">
           <input
             type="checkbox"
-            checked={form.enabled}
-            disabled={!runtimeReady && !form.enabled}
+            checked={!renaming && form.enabled}
+            disabled={renaming || !runtimeReady && !form.enabled}
             onChange={(e) => setForm({ ...form, enabled: e.target.checked })}
           />
           <span>
@@ -213,6 +200,7 @@ export default function TaxiChannelForm(
           <Power size={20} />
         </label>
       </fieldset>
+      {renaming && <p className="taxi-notice">Al guardar se corregirá el número y se conservarán sus zonas y tarifas. El canal quedará en pausa. Si ya tiene conversaciones o viajes, usa un canal nuevo para conservar su historial.</p>}
       {error && <p className="taxi-error" role="alert">{error}</p>}
       <div className="taxi-form-footer">
         <p>Los datos se guardan en el servidor y quedan ligados a esta base.</p>

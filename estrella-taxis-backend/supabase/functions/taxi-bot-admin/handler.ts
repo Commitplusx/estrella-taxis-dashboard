@@ -1,4 +1,5 @@
 import {taxiQualityRequest}from"./quality.ts";
+import { driverRequest } from './drivers.ts';
 import { customerPhones, parseCustomerAccess } from '../_shared/bot/taxis/customerAccess.ts';
 import { FleetApi, type FleetIdentity } from "../_shared/tracking/auth.ts";
 import { record, TrackingError, uuid } from "../_shared/tracking/contracts.ts";
@@ -291,6 +292,9 @@ export function createTaxiAdminHandler(
           return { id: uuid(t.id), name: String(t.nombre_empresa),
             plan: record(t.paquete) && t.paquete.activo === true ? parseAdminPlan(t.paquete) : null };
         });
+        const versions = await deps.store.read('taxi_bot_map_version', new URLSearchParams({ select: 'version', id: 'eq.true', limit: '1' }));
+        if (versions.length !== 1 || !record(versions[0])) throw new TrackingError(503, 'map_version_unavailable', 'No pudimos comprobar la versión de las zonas. Actualiza el panel.');
+        const catalogVersion = uuid(versions[0].version);
         if (!tenants.length) {
           return json({
             actorId: identity.userId,
@@ -298,6 +302,7 @@ export function createTaxiAdminHandler(
             channels: [],
             runtimeReady: deps.runtimeReady,
             canConfigure: scope.configure,
+            catalogVersion,
           });
         }
         const channels = await deps.store.read(
@@ -322,6 +327,7 @@ export function createTaxiAdminHandler(
           channels: channels.map(channelFromRow),
           runtimeReady: deps.runtimeReady,
           canConfigure: scope.configure,
+          catalogVersion,
         });
       }
       const tenant = uuid(raw.tenantId);
@@ -367,6 +373,10 @@ export function createTaxiAdminHandler(
         }),
       );
       const channel = rows.length ? channelFromRow(rows[0]) : null;
+      if (raw.action === 'drivers' || raw.action === 'driver_save') {
+        if (!channel) throw new TrackingError(404, 'channel_not_found', 'Primero guarda el WhatsApp de la base en pausa.');
+        return json(await driverRequest(raw, tenant, waba, identity, scope.configure, deps.fleet, deps.store, req.signal));
+      }
       if(['quality','quality_attempts','quality_trace','quality_review','training_export'].includes(raw.action)){if(!channel)throw new TrackingError(404,'channel_not_found','Primero configura el canal.');const result=await taxiQualityRequest(raw,tenant,waba,identity.userId,scope.configure,deps.store);if(result)return result;}
 
       if (["zones", "operations", "quote"].includes(raw.action)) {
@@ -481,7 +491,7 @@ export function createTaxiAdminHandler(
       }
       const command = parseCommand(raw);
       if (
-        ["configure", "upsert_zones", "assign_catalog", "remove_zones"]
+        ["configure", "rename_channel", "upsert_zones", "assign_catalog", "remove_zones"]
           .includes(command.action) && !scope.configure
       ) {
         throw new TrackingError(
@@ -490,7 +500,7 @@ export function createTaxiAdminHandler(
           "Sólo la administración de la base puede cambiar zonas y tarifas.",
         );
       }
-      if (command.action === "configure") {
+      if (command.action === "configure" || command.action === 'rename_channel') {
         if (
           Number(command.payload.baseCents) > 1000000 ||
           Number(command.payload.perKmCents) > 1000000
@@ -574,6 +584,10 @@ export function createTaxiAdminHandler(
         );
       }
       const errors: Record<string, string> = {
+        activation_driver_missing: 'Registra al menos un conductor activo en Configuración → Conductores de esta base, justo arriba del WhatsApp.',
+        activation_zones_missing: 'Guarda las zonas para este canal en Zonas y tarifas. Ver los hexágonos en el mapa todavía no los vincula con el canal.',
+        pause_channel_first: 'Apaga el canal y guarda antes de cambiar el número.',
+        channel_has_history: 'Este canal ya tiene conversaciones o viajes. Conserva su historial y registra el otro número como un canal nuevo.',
         revision_conflict:
           "Alguien cambió estos datos. Actualiza el panel y revisa el cambio antes de guardar.",
         request_conflict:

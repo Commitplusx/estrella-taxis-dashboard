@@ -1,6 +1,7 @@
 import { coord, phone, record, text } from "./contracts.ts";
 import { taxiH3Cell } from "./h3.ts";
 import { TrackingError, uuid } from "../../tracking/contracts.ts";
+import { validChannelPhone } from './channelPhone.ts';
 export interface AdminTenant {
   id: string;
   name: string;
@@ -78,12 +79,14 @@ export interface AdminContext {
   channels: AdminChannel[];
   runtimeReady: boolean;
   canConfigure: boolean;
+  catalogVersion?: string;
 }
 export interface ZonePage {
   zones: AdminZone[];
   hasMore: boolean;
   totalCells: number;
   totalAreas: number;
+  version?: string;
 }
 export interface OperationsPage {
   sessions: AdminConversation[];
@@ -92,6 +95,7 @@ export interface OperationsPage {
 }
 export type AdminWriteAction =
   | "configure"
+  | "rename_channel"
   | "upsert_zones"
   | "assign_catalog"
   | "remove_zones"
@@ -194,7 +198,7 @@ export function parseCommand(raw: unknown): AdminCommand {
   ]);
   const action = raw.action;
   if (
-    action !== "configure" && action !== "upsert_zones" &&
+    action !== "configure" && action !== "rename_channel" && action !== "upsert_zones" &&
     action !== "assign_catalog" && action !== "remove_zones" &&
     action !== "takeover" && action !== "resume" && action !== "send"
   ) return fail("Esa operación no está disponible.");
@@ -204,7 +208,7 @@ export function parseCommand(raw: unknown): AdminCommand {
   }
   const p = raw.payload;
   let payload: Record<string, unknown>;
-  if (action === "configure") {
+  if (action === "configure" || action === 'rename_channel') {
     exact(p, [
       "name",
       "city",
@@ -216,6 +220,7 @@ export function parseCommand(raw: unknown): AdminCommand {
       "baseCents",
       "perKmCents",
       "enabled",
+      ...(action === 'rename_channel' ? ['newWaba'] : []),
     ]);
     const dispatcher = p.dispatcher === null ? null : phone(p.dispatcher);
     if (
@@ -243,6 +248,12 @@ export function parseCommand(raw: unknown): AdminCommand {
       perKmCents: cents(p.perKmCents, true),
       enabled: p.enabled,
     };
+    const target = action === 'rename_channel' ? p.newWaba : waba;
+    if (typeof target !== 'string' || !validChannelPhone(target)) return fail('Revisa el código de país y el número de WhatsApp. Para México usa +52 y el número local.');
+    if (action === 'rename_channel') {
+      if (target === waba || p.enabled) return fail('Guarda primero el canal apagado para cambiar su número.');
+      payload.newWaba = target;
+    }
   } else if (action === "upsert_zones") {
     exact(p, ["cells", "label", "cents"]);
     if (!text(p.label, 100)) return fail("Ponle un nombre a la zona.");
@@ -310,6 +321,7 @@ export function parseContext(value: unknown): AdminContext {
     channels,
     runtimeReady: value.runtimeReady,
     canConfigure: value.canConfigure,
+    ...(value.catalogVersion === undefined ? {} : { catalogVersion: uuid(value.catalogVersion) }),
   };
 }
 export function parseZones(value: unknown): ZonePage {
@@ -317,7 +329,15 @@ export function parseZones(value: unknown): ZonePage {
     !record(value) || !Array.isArray(value.zones) || value.zones.length > 501 ||
     typeof value.hasMore !== "boolean"
   ) throw new Error("No pudimos leer las zonas.");
+  let version: string | undefined;
+  if (value.version !== undefined) {
+    if (typeof value.version !== 'string') throw new Error('No pudimos comprobar la versión del mapa.');
+    const parts = value.version.split(':');
+    if (parts.length !== 2 || !/^\d+$/.test(parts[0])) throw new Error('La versión del mapa no es válida.');
+    version = revision(Number(parts[0])) + ':' + uuid(parts[1]);
+  }
   return {
+    ...(version ? { version } : {}),
     hasMore: value.hasMore,
     totalCells: revision(value.totalCells),
     totalAreas: revision(value.totalAreas),
