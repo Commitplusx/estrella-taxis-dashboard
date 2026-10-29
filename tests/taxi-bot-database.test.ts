@@ -17,6 +17,7 @@ import {parseInterpretation}from'../estrella-taxis-backend/supabase/functions/_s
 import {parseQualityDetail,parseQualityPage}from'../estrella-taxis-backend/supabase/functions/_shared/bot/taxis/qualityContracts.ts';
 import {createTaxiInterpreter,TAXI_INTERPRETER_CONTRACT}from'../estrella-taxis-backend/supabase/functions/_shared/bot/taxis/interpreter.ts';
 import {fingerprint}from'../estrella-taxis-backend/supabase/functions/_shared/tracking/contracts.ts';
+const denyAdminWrite = async (): Promise<never> => { throw new Error('No administration writes in this fixture.'); };
 const sql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261027220000_taxi_bot_transactions.sql',import.meta.url),'utf8');
 const h3CatalogSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20260901110001_create_h3_zonas.sql',import.meta.url),'utf8');
 const h3PricingSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261027223402_taxi_bot_h3_pricing.sql',import.meta.url),'utf8');
@@ -81,7 +82,7 @@ test('customer access: removing a queued customer closes the event before starti
   const e=await f.enqueue();await f.db.query('DELETE FROM taxi_bot_allowed_customers WHERE phone=$1',[customer]);
   const never=async():Promise<never>=>{throw new Error('No model, alias, GPS, price, transport or table read allowed');};
   const services:TaxiServices={interpret:never,resolve:never,quote:never,candidates:never};
-  const store:TrackingStore={read:never,writeScores:never,rpc:async(name,args)=>{assert.equal(name,'taxi_bot_begin');return f.scalar('SELECT taxi_bot_begin($1)',[args.p_event]);}};
+  const store:TrackingStore={writePackages:denyAdminWrite,writeCompanyPackage:denyAdminWrite,writeCompanyStatus:denyAdminWrite,read:never,writeScores:never,rpc:async(name,args)=>{assert.equal(name,'taxi_bot_begin');return f.scalar('SELECT taxi_bot_begin($1)',[args.p_event]);}};
   const engine=new TaxiEngine(store,services,{webhookSecret:'fixture-secret',workerSecret:'fixture-worker-secret-at-least-32-characters',ycloudKey:'fixture-key',now:()=>Date.now()},never);
   assert.equal(await engine.process(String(e.eventId)),'blocked');
   assert.equal(await f.scalar('SELECT count(*)::int FROM taxi_bot_sessions'),0);assert.equal(await f.scalar('SELECT status FROM webhook_queue'),'done');
@@ -101,7 +102,7 @@ test('customer access: pending and already-claimed outputs are checked again bef
   const claimed=(await f.db.query<Record<string,unknown>>('SELECT * FROM taxi_bot_outbox_claim($1,$2)',[tenant,waba])).rows;
   assert.equal(claimed.length,1);await f.db.query('DELETE FROM taxi_bot_allowed_customers WHERE phone=$1',[customer]);
   let providerCalls=0;const never=async():Promise<never>=>{throw new Error('No interpretation');};
-  const store:TrackingStore={read:never,writeScores:never,rpc:async(name,args)=>{
+  const store:TrackingStore={writePackages:denyAdminWrite,writeCompanyPackage:denyAdminWrite,writeCompanyStatus:denyAdminWrite,read:never,writeScores:never,rpc:async(name,args)=>{
    if(name==='taxi_bot_outbox_claim')return claimed;
    if(name==='taxi_bot_outbox_permitted')return f.scalar('SELECT taxi_bot_outbox_permitted($1,$2)',[args.p_id,args.p_lease]);
    assert.equal(name,'taxi_bot_outbox_complete');return f.scalar('SELECT taxi_bot_outbox_complete($1,$2,$3,$4,$5)',[args.p_id,args.p_lease,args.p_state,args.p_provider,args.p_error]);
@@ -321,7 +322,7 @@ test('taxi H3 integration: real service quote → current summary → recheck �
   const f=await fixture();try{
     const scope=await f.seedH3(),event=await f.enqueue('Soy Persona Prueba, de Centro a Terminal'),claim=await f.begin(event.eventId);
     const channel:TaxiChannel={tenantId:tenant,waba,enabled:true,name:'Base sintética',city:'Comitán',centerLat:16.25,centerLng:-92.13,radiusKm:20,dispatcher:'+529630000099',model:'fixture',baseCents:null,perKmCents:null,pricingMode:'h3_zone_max'};
-    const store:TrackingStore={read:async()=>{throw new Error('Undeclared catalog read.');},writeScores:async()=>{throw new Error('No score writes.');},rpc:async(name,args)=>{
+    const store:TrackingStore={writePackages:denyAdminWrite,writeCompanyPackage:denyAdminWrite,writeCompanyStatus:denyAdminWrite,read:async()=>{throw new Error('Undeclared catalog read.');},writeScores:async()=>{throw new Error('No score writes.');},rpc:async(name,args)=>{
       assert.equal(name,'taxi_bot_h3_quote');return f.scalar('SELECT taxi_bot_h3_quote($1,$2,$3,$4)',[args.p_tenant,args.p_waba,args.p_origin,args.p_destination]);
     }};
     const noProvider:Fetcher=async()=>{throw new Error('No Maps/model call is declared for this deterministic fixture.');};
@@ -460,7 +461,7 @@ test('taxi SQL: service-only functions and live conversation limits remain enfor
 test('taxi end-to-end: signed webhook → durable queue → real tool decoder → summary → one trip → provider ACK → driver acceptance',async()=>{
   const f=await fixture();try{
     const rpcArgs:Record<string,string[]>={taxi_bot_outbox_permitted:['p_id','p_lease'],taxi_bot_trace_start:['p_event','p_lease','p_revision','p_meta'],taxi_bot_trace_fail:['p_event','p_lease','p_code','p_packet'],taxi_bot_enqueue:['p_tenant','p_waba','p_message','p_hash','p_payload'],taxi_bot_begin:['p_event'],taxi_bot_commit:['p_event','p_lease','p_revision','p_decision'],taxi_bot_outbox_complete:['p_id','p_lease','p_state','p_provider','p_error'],taxi_bot_maintain:[]};
-    const store:TrackingStore={
+    const store:TrackingStore={writePackages:denyAdminWrite,writeCompanyPackage:denyAdminWrite,writeCompanyStatus:denyAdminWrite,
       read:async(table,q)=>{
         if(table==='taxi_bot_channels')return(await f.db.query<Record<string,unknown>>('SELECT * FROM taxi_bot_channels WHERE waba=$1',[q.get('waba')?.slice(3)])).rows;
         if(table==='empresas')return[{id:tenant,activo:true,tipo_negocio:'taxi',paquete:{activo:true,incluye_whatsapp:true,incluye_bot:false}}];
@@ -652,7 +653,7 @@ test('taxi engine trace SQL: a lost commit response cannot overwrite committed h
  const f=await fixture();try{
   const e=await f.enqueue('Hola');let modelCalls=0,commitCalls=0;
   const keys:Record<string,string[]>={taxi_bot_begin:['p_event'],taxi_bot_trace_start:['p_event','p_lease','p_revision','p_meta'],taxi_bot_trace_fail:['p_event','p_lease','p_code','p_packet'],taxi_bot_commit:['p_event','p_lease','p_revision','p_decision']};
-  const store:TrackingStore={read:async(table)=>{if(table==='taxi_bot_channels')return(await f.db.query<Record<string,unknown>>('SELECT * FROM taxi_bot_channels')).rows;if(table==='empresas')return[{id:tenant,activo:true,tipo_negocio:'taxi',paquete:{activo:true,incluye_whatsapp:true}}];throw new Error('Unexpected table');},writeScores:async()=>{throw new Error('No score writes');},rpc:async(name,args)=>{const order=keys[name];assert.ok(order,'Every fixture RPC must be declared');const result=await f.scalar('SELECT '+name+'('+order.map((_,i)=>'$'+(i+1)).join(',')+')',order.map((key)=>args[key]));if(name==='taxi_bot_commit'){commitCalls++;throw new Error('Simulated lost HTTP response after the real commit');}return result;}};
+  const store:TrackingStore={writePackages:denyAdminWrite,writeCompanyPackage:denyAdminWrite,writeCompanyStatus:denyAdminWrite,read:async(table)=>{if(table==='taxi_bot_channels')return(await f.db.query<Record<string,unknown>>('SELECT * FROM taxi_bot_channels')).rows;if(table==='empresas')return[{id:tenant,activo:true,tipo_negocio:'taxi',paquete:{activo:true,incluye_whatsapp:true}}];throw new Error('Unexpected table');},writeScores:async()=>{throw new Error('No score writes');},rpc:async(name,args)=>{const order=keys[name];assert.ok(order,'Every fixture RPC must be declared');const result=await f.scalar('SELECT '+name+'('+order.map((_,i)=>'$'+(i+1)).join(',')+')',order.map((key)=>args[key]));if(name==='taxi_bot_commit'){commitCalls++;throw new Error('Simulated lost HTTP response after the real commit');}return result;}};
   const never=async():Promise<never>=>{throw new Error('Unexpected service');};const services:TaxiServices={interpret:async(current)=>{modelCalls++;assert.equal(current,'Hola');return{intent:'smalltalk',fields:{}};},resolve:never,quote:never,candidates:never};
   const engine=new TaxiEngine(store,services,{webhookSecret:'fixture-signature-secret',workerSecret:'fixture-worker-secret-at-least-32-characters',ycloudKey:'fixture-key',now:()=>Date.now()},never);
   await assert.rejects(engine.process(String(e.eventId)),/lost HTTP response/);

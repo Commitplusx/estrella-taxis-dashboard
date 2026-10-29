@@ -11,7 +11,8 @@ const channel:TaxiChannel={tenantId:'11111111-1111-4111-8111-111111111111',waba:
 const origin={text:'Centro',lat:16.25,lng:-92.13,placeId:null},destination={text:'Terminal',lat:16.26,lng:-92.14,placeId:null},scope=taxiH3Scope(origin,destination);
 const config={mapsKey:'',modelKey:'',traccarUrl:'https://tracking.test/api',traccarEmail:'fixture@example.invalid',traccarPassword:'not-a-real-password'};
 const denyFetch:Fetcher=async()=>{throw new Error('No Google/model/provider call is authorized in this H3 fixture.');};
-function h3Store(answer:unknown){let calls=0;const store:TrackingStore={read:async()=>{throw new Error('H3 prices must use the scoped RPC.');},writeScores:async()=>{throw new Error('No tracking score writes.');},rpc:async(name,args)=>{
+const denyAdminWrite = async (): Promise<never> => { throw new Error('No administration writes in this fixture.'); };
+function h3Store(answer:unknown){let calls=0;const store:TrackingStore={writePackages:denyAdminWrite,writeCompanyPackage:denyAdminWrite,writeCompanyStatus:denyAdminWrite,read:async()=>{throw new Error('H3 prices must use the scoped RPC.');},writeScores:async()=>{throw new Error('No tracking score writes.');},rpc:async(name,args)=>{
   calls++;equal(name,'taxi_bot_h3_quote');equal(args,{p_tenant:channel.tenantId,p_waba:channel.waba,p_origin:scope.originCell,p_destination:scope.destinationCell});return answer;
 }};return{store,calls:()=>calls};}
 const priced=(cents=6500)=>({state:'priced',mode:'h3_zone_max',cents,...scope});

@@ -10,6 +10,9 @@ const now=Date.parse('2026-10-27T18:00:00Z'),key='11111111-1111-4111-8111-111111
 const body={requestId:key,deviceIds:[1],from:'2026-10-26T06:00:00Z',to:'2026-10-27T05:59:59Z'};
 const ok=(value:unknown,status=200,headers:Record<string,string>={})=>new Response(JSON.stringify(value),{status,headers:{'Content-Type':'application/json',...headers}});
 class Store implements TrackingStore {
+  async writePackages(): Promise<unknown[]> { throw new Error('No package writes.'); }
+  async writeCompanyPackage(): Promise<unknown[]> { throw new Error('No package assignment writes.'); }
+  async writeCompanyStatus(): Promise<unknown[]> { throw new Error('No base status writes.'); }
   begun=0;completed=0;written:readonly Record<string,unknown>[]=[];
   permitted=true;claimState='proceed';completeResult=true;history:unknown[]=[];replayed:unknown=null;
   async read(table:string,_query:URLSearchParams):Promise<unknown[]> {

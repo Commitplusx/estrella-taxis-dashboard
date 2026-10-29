@@ -87,7 +87,7 @@ export default function Sidebar({ onClose }: SidebarProps) {
     { to: '/drivers', icon: <UserCheck size={16} />, label: 'Conductores', always: true },
     { to: '/taxi-bot', icon: <Bot size={16} />, label: 'Bot de WhatsApp', always: true },
     ...(isSuperadmin ? [{ to: '/catalog', icon: <ShoppingBag size={16} />, label: 'Catálogo Global', roles: ['superadmin'] }] : []),
-    { to: '/bot', icon: <Bot size={16} />, label: 'Bot de Voz', roles: ['superadmin', 'admin_empresa'], feature: 'bot_voz' },
+    { to: '/bot', icon: <Bot size={16} />, label: 'Bases y canales', roles: ['superadmin', 'admin_empresa'] },
     { to: '/users', icon: <Users size={16} />, label: 'Usuarios', roles: ['superadmin', 'admin_empresa'] },
     { to: '/packages', icon: <Package size={16} />, label: 'Planes y asignación', roles: ['superadmin'] },
   ].filter(item => item.always || (item.roles && userRole && item.roles.includes(userRole)));

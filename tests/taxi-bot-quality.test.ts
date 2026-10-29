@@ -25,6 +25,9 @@ const expected = {
 function fixture() {
   let reads = 0, writes = 0;
   const store: TrackingStore = {
+    writePackages: async () => { throw new Error('No package writes.'); },
+    writeCompanyPackage: async () => { throw new Error('No package assignment writes.'); },
+    writeCompanyStatus: async () => { throw new Error('No base status writes.'); },
     read: async () => {
       throw new Error("No direct table reads.");
     },
@@ -81,6 +84,9 @@ Deno.test("quality labels: verified reviewer and literal expected interpretation
 Deno.test("quality listing: authorized cursor preserves microseconds and one bounded date window", async () => {
   let calls = 0;
   const store: TrackingStore = {
+    writePackages: async () => { throw new Error('No package writes.'); },
+    writeCompanyPackage: async () => { throw new Error('No package assignment writes.'); },
+    writeCompanyStatus: async () => { throw new Error('No base status writes.'); },
     read: async () => {
       throw new Error("No direct reads");
     },

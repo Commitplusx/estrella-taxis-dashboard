@@ -6,9 +6,10 @@ import { record } from '../estrella-taxis-backend/supabase/functions/_shared/tra
 function assert(value: unknown): asserts value { if (!value) throw new Error('Assertion failed'); }
 function equal(a: unknown, b: unknown) { assert(JSON.stringify(a) === JSON.stringify(b)); }
 const tenant='11111111-1111-4111-8111-111111111111',other='22222222-2222-4222-8222-222222222222',customer='+529630000002';
+const denyAdminWrite = async (): Promise<never> => { throw new Error('No administration writes in this fixture.'); };
 function fixture(role='admin_empresa',result:unknown={restricted:true,revision:1,phones:[customer],state:'saved'}) {
   let writes=0,reads=0;
-  const store:TrackingStore={read:async(table,q)=>{
+  const store:TrackingStore={writePackages:denyAdminWrite,writeCompanyPackage:denyAdminWrite,writeCompanyStatus:denyAdminWrite,read:async(table,q)=>{
     if(table==='perfiles'){equal(q.get('traccar_user_id'),'eq.42');return[{empresa_id:tenant,rol:role}];}
     equal(table,'empresas');equal(q.get('id'),'eq.'+tenant);return[{id:tenant,tipo_negocio:'taxi'}];
   },writeScores:async()=>{throw new Error('Forbidden score write');},rpc:async(name,args)=>{

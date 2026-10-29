@@ -2,6 +2,7 @@ import {taxiQualityRequest}from"./quality.ts";
 import { customerPhones, parseCustomerAccess } from '../_shared/bot/taxis/customerAccess.ts';
 import { FleetApi, type FleetIdentity } from "../_shared/tracking/auth.ts";
 import { record, TrackingError, uuid } from "../_shared/tracking/contracts.ts";
+import { parseTaxiBase, taxiBaseColumns } from '../_shared/tracking/companies.ts';
 import {
   corsHeaders,
   errorResponse,
@@ -101,6 +102,45 @@ export function createTaxiAdminHandler(
       }
       const identity = await deps.fleet.identity(req),
         scope = await access(identity);
+      if (raw.action === 'companies_list') {
+        exact(raw, ['action']);
+        const query = new URLSearchParams({
+          select: taxiBaseColumns, tipo_negocio: 'eq.taxi', order: 'nombre_empresa.asc', limit: '101',
+        });
+        if (scope.tenant) query.set('id', 'eq.' + scope.tenant);
+        const rows = await deps.store.read('empresas', query);
+        if (rows.length > 100) throw new TrackingError(413, 'company_limit', 'Hay más de cien bases. Acota la consulta antes de continuar.');
+        const bases = rows.map(parseTaxiBase);
+        if (new Set(bases.map(base => base.id)).size !== bases.length || scope.tenant && bases.some(base => base.id !== scope.tenant)) {
+          throw new TrackingError(502, 'invalid_base_scope', 'No pudimos comprobar las bases de tu cuenta.');
+        }
+        return json({ bases, canManage: identity.admin });
+      }
+      if (raw.action === 'companies_set_active') {
+        exact(raw, ['action', 'companyId', 'expectedActive', 'active']);
+        if (!identity.admin) throw new TrackingError(403, 'superadmin_required', 'Sólo el superadministrador puede activar o desactivar una base.');
+        const id = uuid(raw.companyId);
+        if (typeof raw.expectedActive !== 'boolean' || typeof raw.active !== 'boolean') {
+          throw new TrackingError(400, 'invalid_base_status', 'Actualiza la base antes de cambiar su estado.');
+        }
+        const rows = await deps.store.read('empresas', new URLSearchParams({
+          select: taxiBaseColumns, id: 'eq.' + id, tipo_negocio: 'eq.taxi', limit: '1',
+        }));
+        if (!rows.length) throw new TrackingError(404, 'taxi_company_not_found', 'No encontramos esa base de taxis.');
+        const current = parseTaxiBase(rows[0]);
+        if (current.id !== id) throw new TrackingError(502, 'invalid_base_scope', 'No pudimos comprobar la base solicitada.');
+        if (current.activo === raw.active) return json({ state: 'saved', base: current });
+        if (current.activo !== raw.expectedActive) {
+          throw new TrackingError(409, 'company_status_conflict', 'El estado cambió. Actualiza la lista antes de volver a intentarlo.');
+        }
+        const saved = await deps.store.writeCompanyStatus(id, raw.expectedActive, raw.active);
+        if (saved.length !== 1) throw new TrackingError(409, 'company_status_conflict', 'El estado cambió mientras guardabas. Actualiza la lista.');
+        const base = parseTaxiBase(saved[0]);
+        if (base.id !== id || base.activo !== raw.active) {
+          throw new TrackingError(503, 'company_status_uncertain', 'No se confirmó el estado guardado. Actualiza la lista antes de repetir.');
+        }
+        return json({ state: 'saved', base });
+      }
       if (raw.action.startsWith("packages_")) {
         if (!identity.admin) {
           throw new TrackingError(
@@ -463,15 +503,19 @@ export function createTaxiAdminHandler(
         }
         if (command.payload.enabled) {
           const p = tenantRow.paquete;
+          if (tenantRow.activo !== true) {
+            throw new TrackingError(409, 'activation_incomplete', 'La base está inactiva. Actívala en Bases y canales antes de encender WhatsApp.');
+          }
+          if (!record(p) || p.activo !== true || p.incluye_whatsapp !== true) {
+            throw new TrackingError(409, 'activation_incomplete', 'Asigna a esta base un plan activo que incluya WhatsApp en Planes y asignación.');
+          }
           if (
-            !deps.runtimeReady || tenantRow.activo !== true || !record(p) ||
-            p.activo !== true ||
-            p.incluye_whatsapp !== true
+            !deps.runtimeReady
           ) {
             throw new TrackingError(
               409,
               "activation_incomplete",
-              "Puedes guardar el canal apagado. Para activarlo faltan el transporte de WhatsApp o los permisos del plan.",
+              "WhatsApp todavía no está listo en el servidor. Puedes guardar el canal apagado mientras completas la conexión.",
             );
           }
         }

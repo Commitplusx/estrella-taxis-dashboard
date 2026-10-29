@@ -1,11 +1,13 @@
 import { record, TrackingError } from './contracts.ts';
 import { requestJson, type Fetcher } from './http.ts';
 import type { PackageWrite } from './packages.ts';
+import { taxiBaseColumns } from './companies.ts';
 export interface TrackingStore {
   read(table: string, query: URLSearchParams): Promise<unknown[]>;
   writeScores(rows: readonly Record<string, unknown>[]): Promise<void>;
   writePackages(method: 'POST' | 'PATCH' | 'DELETE', query: URLSearchParams, payload?: PackageWrite & { id?: string }): Promise<unknown[]>;
   writeCompanyPackage(companyId: string, expectedPackageId: string | null, packageId: string | null): Promise<unknown[]>;
+  writeCompanyStatus(companyId: string, expectedActive: boolean, active: boolean): Promise<unknown[]>;
   rpc(name: string, params: Record<string, unknown>): Promise<unknown>;
 }
 export class RestTrackingStore implements TrackingStore {
@@ -58,6 +60,19 @@ export class RestTrackingStore implements TrackingStore {
     });
     if (!Array.isArray(data) || data.length > 1) {
       throw new TrackingError(502, 'company_package_write_contract', 'No pudimos confirmar la asignación del plan.');
+    }
+    return data;
+  }
+  async writeCompanyStatus(companyId: string, expectedActive: boolean, active: boolean): Promise<unknown[]> {
+    const query = new URLSearchParams({
+      id: `eq.${companyId}`, tipo_negocio: 'eq.taxi', activo: `eq.${expectedActive}`, select: taxiBaseColumns,
+    });
+    const { data } = await requestJson(this.fetcher, `${this.base}/rest/v1/empresas?${query}`, {
+      method: 'PATCH', headers: { ...this.headers(), Prefer: 'return=representation' },
+      body: JSON.stringify({ activo: active }),
+    });
+    if (!Array.isArray(data) || data.length > 1) {
+      throw new TrackingError(502, 'company_status_write_contract', 'No pudimos confirmar el estado de la base.');
     }
     return data;
   }

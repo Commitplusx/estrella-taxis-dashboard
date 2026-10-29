@@ -77,7 +77,7 @@ export default function TaxiBotAdminPage(
     [tenantId, setTenant] = useState(""),
     [waba, setWaba] = useState(""),
     [tab, setTab] = useState<"zones" | "operations" | "quality" | "config" | "access">(
-      window.location.hash === '#autorizados' ? 'access' : "zones",
+      window.location.hash === '#autorizados' ? 'access' : window.location.hash === '#configuracion' ? 'config' : "zones",
     );
   const [qualityLocked, setQualityLocked] = useState(false);
   const [zoneReload, setZoneReload] = useState(0);
@@ -142,7 +142,9 @@ export default function TaxiBotAdminPage(
     setLoading(true);
     setError("");
     refreshContext(abort.signal).then((data) => {
-      const t = data.tenants[0]?.id ?? "";
+      const requestedBase = new URLSearchParams(window.location.search).get('base');
+      if (requestedBase && !data.tenants.some(base => base.id === requestedBase)) throw new Error('Tu cuenta no tiene acceso a esa base.');
+      const t = requestedBase ?? data.tenants[0]?.id ?? "";
       setTenant(t);
       setWaba(data.channels.find((c) => c.tenantId === t)?.waba ?? "");
     }).catch((e: unknown) => {

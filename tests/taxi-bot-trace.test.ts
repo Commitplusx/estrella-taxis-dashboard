@@ -201,6 +201,9 @@ Deno.test("trace: a turn has a hard limit on recorded service calls with no auto
 Deno.test("trace: missing durable start stops before model, tools and commit rather than claiming an unrecorded success", async () => {
   let writes = 0;
   const store: TrackingStore = {
+    writePackages: never,
+    writeCompanyPackage: never,
+    writeCompanyStatus: never,
     read: async (table) => {
       if (table === "taxi_bot_channels") {
         return [{

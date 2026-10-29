@@ -1,5 +1,7 @@
 # Arquitectura General — Stellar Tracking / Pompeyo
 
+> **Corrección posterior de bases — 29-10-2026:** [Carga y estado con acceso privado](docs/STELLAR_BASES_ACCESS_20261029.md). `/bot` usa el administrador autenticado para listar bases y cambiar su estado; se retira de esa ruta el formulario heredado de otros giros. Función `taxi-bot-admin` v14 publicada y lectura local con sesión real comprobada; Pompeyo continúa inactiva. Las notas anteriores sobre acceso directo al esquema no describen esta ruta corregida.
+
 > **Estado posterior vigente — 29-10-2026:** [Clientes autorizados de Pompeyo](docs/STELLAR_AUTHORIZED_CUSTOMERS_20261029.md), proyecto independiente `izrsxygazsalfhpaualj` en Estrella orgs. Nueve migraciones publicadas; administrador v10 y webhook/consumidor v9. Acceso cerrado a clientes no listados; sólo el propietario terminado en 9156 está autorizado. Panel web y OpenStreetMap en local. Bot pausado, sin canales ni conductores registrados. Pompeyo es el único negocio de esta instalación; las notas de Robin’s/Estrella envios siguientes son historial.
 
 > **Estado remoto comprobado — 29-10-2026:** [Proyecto independiente Stellar Tracking](docs/STELLAR_DATABASE_SEPARATION_20261029.md), en Estrella envios. SQL y cinco funciones publicados; bot deshabilitado, consumidor instalado sin iniciar. GPS continúa Wialon → Traccar/MySQL. Configuración privada, canal, conductores y migración de clientes pendientes. Las notas siguientes son historial y no acreditan activación.

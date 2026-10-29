@@ -55,6 +55,9 @@ function fixture(
   let planned: { action: string; payload: Record<string, unknown> } | null =
     null;
   const store: TrackingStore = {
+    writePackages: async () => { throw new Error('No package writes in this fixture.'); },
+    writeCompanyPackage: async () => { throw new Error('No package assignment writes in this fixture.'); },
+    writeCompanyStatus: async () => { throw new Error('No base status writes in this fixture.'); },
     read: async (table, q) => {
       reads++;
       if (table === "perfiles") {
