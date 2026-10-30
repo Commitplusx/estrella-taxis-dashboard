@@ -46,12 +46,16 @@ export function createTaxiServices(store:TrackingStore,fetcher:Fetcher,config:{m
     let point:LocationResult;
     try{point=await resolvePoint(selected?`${address}, ${selected.label}`:address,c,signal);}catch(error:unknown){if(signal?.aborted||!(selected&&streetReference(address,selected.label,selected.aliases)))throw error;point={kind:'unavailable'};}
     if(point.kind==='resolved'){
-      if(!selected||selected.cells.includes(taxiH3Scope(point.place,point.place).originCell))return point;
+      if(!selected)return point;
+      const cell=taxiH3Scope(point.place,point.place).originCell;
+      if(selected.priceSource==='reference')return{kind:'resolved',place:{...point.place,area:{...representativeArea(selected),cell,priceSource:'reference',reference:address}}};
+      if(selected.cells.includes(cell))return point;
       return {kind:'reference_conflict',label:selected.label};
     }
     const matches=mentioned.length?mentioned:selected?[selected]:await semanticNeighborhoods(address,rows,fetcher,config.modelKey,c.model,signal,observe);
     if(matches.length===1&&streetReference(address,matches[0].label,matches[0].aliases)){
-      const a=representativeArea(matches[0]),[lat,lng]=cellToLatLng(a.cell);
+      if(matches[0].priceSource==='reference')return{kind:'unavailable'};
+      const a=representativeArea(matches[0]);if(a.cell===null)return{kind:'unavailable'};const[lat,lng]=cellToLatLng(a.cell);
       return {kind:'resolved',place:{text:`Zona aproximada: ${a.label}. ${address}`,lat,lng,placeId:null,area:{...a,reference:address}}};
     }
     if(matches.length)return {kind:'ambiguous',labels:matches.map(r=>r.label),neighborhoods:matches.map(representativeArea)};
@@ -64,7 +68,10 @@ export function createTaxiServices(store:TrackingStore,fetcher:Fetcher,config:{m
       if(c.pricingMode==='h3_zone_max'){
         if(origin.area?.cents===null||destination.area?.cents===null)return null;
         const scope=taxiH3Scope(origin,destination);
-        const quote=await store.rpc('taxi_bot_h3_quote',{p_tenant:c.tenantId,p_waba:c.waba,p_origin:scope.originCell,p_destination:scope.destinationCell});
+        const originReference=origin.area?.priceSource==='reference'?origin.area:null,destinationReference=destination.area?.priceSource==='reference'?destination.area:null;
+        const quote=originReference||destinationReference
+          ?await store.rpc('taxi_bot_h3_quote_with_references',{p_tenant:c.tenantId,p_waba:c.waba,p_origin:scope.originCell,p_destination:scope.destinationCell,p_origin_reference:originReference,p_destination_reference:destinationReference})
+          :await store.rpc('taxi_bot_h3_quote',{p_tenant:c.tenantId,p_waba:c.waba,p_origin:scope.originCell,p_destination:scope.destinationCell});
         if(!record(quote)||!['priced','uncovered','invalid_zone','channel_unavailable'].includes(String(quote.state))||quote.mode!=='h3_zone_max')throw new TrackingError(502,'taxi_h3_contract','No se pudo validar la tarifa H3.');
         if(quote.state==='channel_unavailable')throw new TrackingError(503,'taxi_h3_channel_changed','El canal cambió mientras se consultaba la tarifa.');
         if(quote.state!=='priced')return null;

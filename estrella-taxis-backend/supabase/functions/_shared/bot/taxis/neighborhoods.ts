@@ -14,10 +14,11 @@ export function mentionedNeighborhoods(query:string,rows:Neighborhood[]):Neighbo
  return rows.filter(row=>[row.label,...row.aliases].some(alias=>{const candidate=neighborhoodKey(alias);return candidate.length>=4&&key.includes(' '+candidate+' ');}));
 }
 export function representativeArea(row:Neighborhood):NeighborhoodArea{
+ if(row.cells.length===0)return{label:row.label,version:row.version,cents:row.cents,cell:null,priceSource:'reference'};
  const centers=row.cells.map(cell=>({cell,point:cellToLatLng(cell)}));
  const lat=centers.reduce((s,c)=>s+c.point[0],0)/centers.length,lng=centers.reduce((s,c)=>s+c.point[1],0)/centers.length;
  const nearest=centers.reduce((best,c)=>Math.hypot(c.point[0]-lat,c.point[1]-lng)<Math.hypot(best.point[0]-lat,best.point[1]-lng)?c:best);
- return {label:row.label,version:row.version,cents:row.cents,cell:nearest.cell};
+ return {label:row.label,version:row.version,cents:row.cents,cell:nearest.cell,priceSource:'h3'};
 }
 export async function semanticNeighborhoods(query:string,rows:Neighborhood[],fetcher:Fetcher,key:string,model:string,signal?:AbortSignal,observe?:(value:ModelMetadata)=>void):Promise<Neighborhood[]>{
  if(!rows.length||!key||!model)return [];

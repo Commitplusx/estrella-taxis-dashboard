@@ -50,7 +50,7 @@ export function emptyDraft():Draft{return {fareMode:'unquoted',name:null,origin:
 export function parsePlace(value:unknown):Place|null {
   if(!record(value)||!text(value.text,400)||!coord(value.lat,value.lng)||typeof value.lng!=='number'||!(value.placeId===null||typeof value.placeId==='string'))return null;
   const area=value.area===undefined?null:parseNeighborhoodArea(value.area);
-  if(value.area!==undefined&&(!area||!record(value.area)||typeof value.area.reference!=='string'||!streetReference(value.area.reference,area.label)||!String(value.text).startsWith('Zona aproximada: ')||!String(value.text).includes(value.area.reference)))return null;
+  if(value.area!==undefined&&(!area||!record(value.area)||typeof value.area.reference!=='string'||!streetReference(value.area.reference,area.label)||area.cell===null||area.priceSource==='h3'&&(!String(value.text).startsWith('Zona aproximada: ')||!String(value.text).includes(value.area.reference))||area.priceSource==='reference'&&String(value.text).startsWith('Zona aproximada: ')))return null;
   return {text:String(value.text),lat:value.lat,lng:value.lng,placeId:value.placeId,...(area&&record(value.area)&&typeof value.area.reference==='string'?{area:{...area,reference:value.area.reference}}:{})};
 }
 export function parseInbound(payload:unknown,now=Date.now()):TaxiInbound|null {

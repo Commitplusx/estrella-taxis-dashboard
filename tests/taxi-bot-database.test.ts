@@ -37,7 +37,9 @@ const addressGeocodeSql=readFileSync(new URL('../estrella-taxis-backend/supabase
 const neighborhoodsSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261030210000_taxi_neighborhoods.sql',import.meta.url),'utf8');
 const dispatchSafetySql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261030223000_taxi_dispatch_safety.sql',import.meta.url),'utf8');
 const conversationEmojisSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261030234500_taxi_conversation_emojis.sql',import.meta.url),'utf8');
+const pdfLocalFaresSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261031120000_taxi_document_local_fares.sql',import.meta.url),'utf8');
 const tenant='11111111-1111-4111-8111-111111111111',other='22222222-2222-4222-8222-222222222222',waba='+529630000001',customer='+529630000002',driverPhone='+529630000003';
+const pompeyo='4cf9acf1-f07e-4a01-9396-eb5bde3e7411';
 test('neighborhood SQL: reads only base-owned H3, keeps prices single-sourced and private',async()=>{
  const f=await fixture();try{
   await f.seedH3();const rows=await f.scalar('SELECT taxi_bot_neighborhood_read($1)',[tenant]);assert.ok(Array.isArray(rows)&&rows.length===2);
@@ -70,6 +72,30 @@ test('neighborhood SQL: aliases cannot redirect another colony and changed cover
   await assert.rejects(f.scalar('SELECT taxi_bot_validate_quote($1,$2,$3)',[tenant,waba,{...draft,origin:{...draft.origin,area:{...area,reference:'Zona sintética origen'}}}]),/reference required/);
   const args=[tenant,42,crypto.randomUUID(),origin.label,origin.version,{label:origin.label,aliases:['Zona sintética destino'],description:'',cents:4500}];assert.equal(f.obj(await f.scalar('SELECT taxi_bot_neighborhood_apply($1,$2,$3,$4,$5,$6)',args)).state,'alias_conflict');
   await f.db.query('UPDATE taxi_bot_base_zones SET price_cents=4700 WHERE tenant_id=$1 AND label=$2',[tenant,origin.label]);await assert.rejects(f.scalar('SELECT taxi_bot_validate_quote($1,$2,$3)',[tenant,waba,draft]),/neighborhood changed/);assert.equal(await f.scalar('SELECT count(*)::int FROM viajes'),0);
+ }finally{await f.db.close();}
+});
+test('neighborhood SQL: paper fares update only matching H3 groups and keep unmapped localities as reference prices',async()=>{
+ const f=await fixture({seedPdfLocalFares:true});try{
+  assert.equal(await f.scalar('SELECT count(*)::int FROM taxi_bot_base_zones WHERE tenant_id=$1',[pompeyo]),293);
+  assert.equal(await f.scalar('SELECT count(DISTINCT label)::int FROM taxi_bot_base_zones WHERE tenant_id=$1',[pompeyo]),16);
+  assert.equal(await f.scalar('SELECT count(*)::int FROM taxi_bot_base_zones WHERE tenant_id=$1 AND ((label IN(\'1ro de mayo\',\'Infonavit\',\'Colonia Miguel Aleman\',\'Fovisste\',\'Popular\',\'Los pinos\',\'Mariano N Ruiz\',\'Centro\') AND price_cents=5500) OR (label IN(\'El brasilito\',\'Jacarandas\',\'Las brisas\',\'Valle Balun Canan\') AND price_cents=6500) OR (label IN(\'Junchavin\',\'Bugambilias primera seccion\',\'Bugambilias segunda seccion\',\'Paraiso comiteco\') AND price_cents=8000))',[pompeyo]),293);
+  const rows=await f.scalar('SELECT taxi_bot_neighborhood_read($1)',[pompeyo]);assert.ok(Array.isArray(rows));assert.equal(rows.length,27);
+  const pending=rows.map(f.obj).filter(row=>row.priceSource==='reference');assert.equal(pending.length,11);
+  const expected=new Map([['La Esmeralda',5500],['Campo de la Mariano N. Ruiz',5500],['San Juan',5500],['27 de Junio',5500],['Manuel Velasco',8000],['Reforma',8000],['La Esperanza',8000],['Chula Vista',8000],['Monte Cristo',8000],['Chichima Sabinal',16000],['Chichima Acapetahua',16000]]);
+  for(const row of pending){assert.equal(row.cells.length,0);assert.equal(row.cents,expected.get(String(row.label)));assert.equal(row.minCents,row.cents);assert.equal(row.maxCents,row.cents);}
+  assert.equal(await f.scalar('SELECT count(*)::int FROM taxi_bot_base_zones WHERE tenant_id=$1 AND label IN(\'La Esmeralda\',\'San Juan\',\'27 de Junio\',\'Manuel Velasco\',\'Reforma\',\'La Esperanza\',\'Chula Vista\',\'Monte Cristo\',\'Chichima Sabinal\',\'Chichima Acapetahua\')',[pompeyo]),0);
+ }finally{await f.db.close();}
+});
+test('neighborhood SQL: reference locality fare is validated against its revision and exact H3 coverage at quote and commit',async()=>{
+ const f=await fixture();try{
+  const scope=await f.seedH3();await f.db.query("INSERT INTO taxi_bot_neighborhoods(tenant_id,label,reference_price_cents)VALUES($1,'La Esmeralda',5500)",[tenant]);
+  const rows=await f.scalar('SELECT taxi_bot_neighborhood_read($1)',[tenant]);assert.ok(Array.isArray(rows));const ref=f.obj(rows.find(value=>f.obj(value).label==='La Esmeralda'));
+  const area={label:ref.label,version:ref.version,cents:ref.cents,cell:scope.originCell,priceSource:'reference',reference:'Calle Norte número 20'};
+  const quote=f.obj(await f.scalar('SELECT taxi_bot_h3_quote_with_references($1,$2,$3,$4,$5,$6)',[tenant,waba,scope.originCell,scope.destinationCell,area,null]));assert.equal(quote.state,'priced');assert.equal(quote.cents,6500);
+  const draft={...f.draft,fareMode:'quoted' as const,origin:{...f.draft.origin,text:'Calle Norte número 20',area},quoteCents:6500,quoteH3:scope};await f.scalar('SELECT taxi_bot_validate_quote($1,$2,$3)',[tenant,waba,draft]);
+  await assert.rejects(f.scalar('SELECT taxi_bot_h3_quote_with_references($1,$2,$3,$4,$5,$6)',[tenant,waba,scope.originCell,scope.destinationCell,{...area,cents:9000},null]),/taxi neighborhood changed/);
+  const saved=f.obj(await f.scalar('SELECT taxi_bot_neighborhood_apply($1,$2,$3,$4,$5,$6)',[tenant,42,crypto.randomUUID(),ref.label,ref.version,{label:ref.label,aliases:[],description:'',cents:7200}]));assert.equal(saved.state,'saved');assert.equal(f.obj(saved.neighborhood).cents,7200);
+  await assert.rejects(f.scalar('SELECT taxi_bot_validate_quote($1,$2,$3)',[tenant,waba,draft]),/taxi neighborhood changed/);
  }finally{await f.db.close();}
 });
 test('neighborhood SQL: confirmed service preserves approximation and literal reference in trip and driver message, replay creates one trip',async()=>{
@@ -222,7 +248,7 @@ test('person account SQL: durable lease prevents duplicate provisioning and free
   assert.deepEqual(await f.scalar('SELECT taxi_account_pending($1,$2)',[43,tenant]),[]);
  }finally{await f.db.close();}
 });
-async function fixture(options:{legacy?:boolean;seedCoverageBeforeMigration?:boolean}={}){
+async function fixture(options:{legacy?:boolean;seedCoverageBeforeMigration?:boolean;seedPdfLocalFares?:boolean}={}){
   const db=new PGlite();await db.exec(`CREATE ROLE anon;CREATE ROLE authenticated;CREATE ROLE service_role BYPASSRLS;
     CREATE TABLE empresas(id uuid PRIMARY KEY,tipo_negocio text DEFAULT 'taxi',telefono_whatsapp text);INSERT INTO empresas(id)VALUES('${tenant}'),('${other}');
     CREATE TABLE webhook_queue(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),payload jsonb,status text,processed_at timestamptz);
@@ -245,6 +271,14 @@ async function fixture(options:{legacy?:boolean;seedCoverageBeforeMigration?:boo
     await db.exec("CREATE TABLE perfiles(traccar_user_id integer PRIMARY KEY CHECK(traccar_user_id>0),empresa_id uuid REFERENCES empresas(id),rol text CHECK(rol IN('superadmin','admin_empresa','operador')),created_at timestamptz DEFAULT now())");
     await db.exec(personAccountsSql);
     await db.exec(optionalFareSql);await db.exec(neighborhoodsSql);await db.exec(dispatchSafetySql);await db.exec(conversationEmojisSql);
+    if(options.seedPdfLocalFares){
+      await db.query("INSERT INTO empresas(id,tipo_negocio)VALUES($1,'taxi')",[pompeyo]);
+      const groups=[['1ro de mayo',18,4500,4500],['Infonavit',2,4500,4500],['Colonia Miguel Aleman',13,4500,4500],['Fovisste',5,4500,4500],['Popular',7,4500,4500],['Los pinos',14,4500,4500],['Mariano N Ruiz',145,4500,5000],['Centro',10,4500,4500],['El brasilito',14,5000,5000],['Jacarandas',2,5000,5000],['Las brisas',10,4500,4500],['Valle Balun Canan',33,4500,4500],['Junchavin',2,5000,5000],['Bugambilias primera seccion',4,6000,6000],['Bugambilias segunda seccion',6,6000,6000],['Paraiso comiteco',8,5000,5000]] as const;
+      let next=0;const values:string[]=[];
+      for(const [label,count,low,high]of groups)for(let index=0;index<count;index++){const cell='8a'+(next++).toString(16).padStart(13,'0'),cents=low===high?low:index===0?low:high;values.push(`('${pompeyo}','${cell}','${label}',${cents})`);}
+      await db.exec('INSERT INTO taxi_bot_base_zones(tenant_id,h3_index,label,price_cents)VALUES'+values.join(','));
+    }
+    await db.exec(pdfLocalFaresSql);
   }
   // These legacy protocol fixtures explicitly act as customers too. Driver-only access has separate tests below.
   await db.query('INSERT INTO taxi_bot_allowed_customers(tenant_id,phone)VALUES($1,$2),($1,$3),($1,$4)',[tenant,customer,driverPhone,'+529630000004']);

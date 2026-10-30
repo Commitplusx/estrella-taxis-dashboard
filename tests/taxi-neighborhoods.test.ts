@@ -12,7 +12,7 @@ function assert(value:unknown,message='Assertion failed'):asserts value{if(!valu
 function equal(a:unknown,b:unknown){assert(JSON.stringify(a)===JSON.stringify(b),JSON.stringify(a)+' != '+JSON.stringify(b));}
 async function rejects(fn:()=>unknown){let rejected=false;try{await fn();}catch{rejected=true;}assert(rejected);}
 const now=Date.now(),cell=latLngToCell(16.25,-92.13,10),[lat,lng]=cellToLatLng(cell);
-const row:Neighborhood={label:'El Piedrón',aliases:['Piedron'],description:'Junto a la cancha de prueba',cents:6500,minCents:6500,maxCents:6500,cells:[cell],version:'a'.repeat(32)};
+const row:Neighborhood={label:'El Piedrón',aliases:['Piedron'],description:'Junto a la cancha de prueba',cents:6500,minCents:6500,maxCents:6500,cells:[cell],version:'a'.repeat(32),priceSource:'h3'};
 const channel:TaxiChannel={tenantId:'11111111-1111-4111-8111-111111111111',waba:'+529630000001',enabled:true,name:'Base sintética',city:'Comitán',centerLat:16.25,centerLng:-92.13,radiusKm:20,dispatcher:null,model:'fixture',baseCents:null,perKmCents:null,pricingMode:'h3_zone_max'};
 const session=():TaxiSession=>({revision:0,mode:'bot',active:null,history:[],draft:emptyDraft()});
 const message=(text:string):TaxiInbound=>({id:crypto.randomUUID(),from:'+529630000002',to:channel.waba,at:new Date(now).toISOString(),type:'text',text,button:null,location:null});
@@ -38,6 +38,14 @@ Deno.test('neighborhood service: a name alone is never a door; written reference
  const first=await s.resolve('El Piedrón',channel);assert(first.kind==='ambiguous');equal(first.neighborhoods,[area]);
  const next=await s.resolve('Frente a la escuela, casa azul',channel,undefined,area);assert(next.kind==='resolved');assert(next.place.text.startsWith('Zona aproximada: '));equal(next.place.lat,lat);equal(next.place.area?.reference,'Frente a la escuela, casa azul');
  equal((await s.resolve('Piedron',channel,undefined,area)).kind,'ambiguous');
+});
+Deno.test('unmapped locality: asks for a street, resolves only an exact geocoded point and carries the reference fare with the quote',async()=>{
+ const pending:Neighborhood={label:'La Esmeralda',aliases:[],description:'Tarifa temporal del documento local.',cents:5500,minCents:5500,maxCents:5500,cells:[],version:'c'.repeat(32),priceSource:'reference'};
+ const f:Fetcher=async input=>{const url=new URL(String(input));assert(url.searchParams.get('address')?.includes('Calle Norte número 20'));return Response.json({status:'OK',results:[{partial_match:false,geometry:{location_type:'ROOFTOP',location:{lat,lng}},formatted_address:'Calle Norte 20, La Esmeralda',place_id:'fixture-place'}]});};
+ const start=await createTaxiServices(store([pending]),f,{...config,mapsKey:'fixture'}).resolve('La Esmeralda',channel);assert(start.kind==='ambiguous');equal(start.neighborhoods,[representativeArea(pending)]);assert(start.neighborhoods?.[0].cell===null);
+ const area=start.neighborhoods[0],resolved=await createTaxiServices(store([pending]),f,{...config,mapsKey:'fixture'}).resolve('Calle Norte número 20',channel,undefined,area);assert(resolved.kind==='resolved');equal(resolved.place.area?.priceSource,'reference');equal(resolved.place.area?.cents,5500);equal(resolved.place.area?.cell,cell);equal(resolved.place.text,'Calle Norte 20, La Esmeralda');
+ let checked=false;const base=store([pending]),rpcStore:TrackingStore={...base,rpc:async(name,args)=>{if(name==='taxi_bot_neighborhood_read')return[pending];equal(name,'taxi_bot_h3_quote_with_references');equal(args.p_origin_reference,resolved.place.area);equal(args.p_destination_reference,null);checked=true;return{state:'priced',mode:'h3_zone_max',cents:5500,originCell:cell,destinationCell:latLngToCell(16.26,-92.14,10)};}};
+ const priced=await createTaxiServices(rpcStore,f,{...config,mapsKey:'fixture'}).quote(resolved.place,{text:'Centro',lat:16.26,lng:-92.14,placeId:null},channel);equal(priced,5500);assert(checked);
 });
 Deno.test('neighborhood service: mixed prices and road-distance approximation never invent a quoted fare',async()=>{
  const s=createTaxiServices(store(),deny,config),p={text:'Zona aproximada: El Piedrón. Calle Prueba 20',lat,lng,placeId:null,area:{...representativeArea(row),cents:null,reference:'Calle Prueba 20'}};
