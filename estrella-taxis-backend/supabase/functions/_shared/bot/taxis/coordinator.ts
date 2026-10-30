@@ -5,6 +5,7 @@ import { activeRideChange, cancellationQuestion, cancelsTaxi, confirmsTaxi, cour
 import { getDistanceFromLatLonInKm } from '../../algorithms/headingMatcher.ts';
 import { taxiH3Scope } from './h3.ts';
 import type { NeighborhoodArea } from './neighborhoodContracts.ts';
+import { localityDisplayName } from './neighborhoods.ts';
 export type LocationResult={kind:'resolved';place:Place}|{kind:'ambiguous';labels:string[];neighborhoods?:NeighborhoodArea[]}|{kind:'reference_conflict';label:string}|{kind:'unavailable'};
 export interface TaxiServices {
   interpret:(text:string,session:TaxiSession,channel:TaxiChannel,signal?:AbortSignal,observe?:(metadata:ModelMetadata)=>void)=>Promise<Interpretation>;
@@ -148,7 +149,7 @@ async function decideTaxi(messages:TaxiInbound[],session:TaxiSession,channel:Tax
   }
   if(d.awaitingLocation==='choice'&&!d.pendingLocation&&!unresolved.length&&(interpretation.fields.origin||interpretation.fields.destination))d.awaitingLocation=!d.origin?'origin':!d.destination?'destination':null;
   if(native[0]?.location) {
-    const p=native[0].location;const place:Place={text:`Ubicación compartida (${p.lat.toFixed(5)}, ${p.lng.toFixed(5)})`,lat:p.lat,lng:p.lng,placeId:null};
+    const p=native[0].location;const place:Place={text:`Ubicación compartida (${p.lat.toFixed(5)}, ${p.lng.toFixed(5)})`,lat:p.lat,lng:p.lng,placeId:null,source:'gps'};
     if(!within(place,channel))return human('outside_service_area','La ubicación queda fuera de la zona configurada. La base debe confirmar ese servicio.');
     const target=selectedRole??(unresolved.length===1?unresolved[0]:d.awaitingLocation==='origin'||d.awaitingLocation==='destination'?d.awaitingLocation:null)??(!current&&d.awaitingLocation!=='choice'&&!(d.origin&&d.destination)?(!d.origin?'origin':'destination'):null);
     if(!target)return {...reply('¿Ese pin cambia el punto de recogida o el destino?','location_target_unclear'),action:'draft',draft:{...d,confirmation:null,expiresAt:null,quoteCents:null,quoteH3:null,awaitingLocation:'choice',pendingLocation:{place,expiresAt:new Date(now+10*60000).toISOString()}}};
@@ -159,8 +160,8 @@ async function decideTaxi(messages:TaxiInbound[],session:TaxiSession,channel:Tax
   if(unresolved.length===1){
     const field=unresolved[0],areas=recognized[field];
     const conflict=referenceConflicts[field];if(conflict)return requestLocation(d,field,'neighborhood_reference_conflict',`La ubicación que encontré no cae en ${conflict}. ¿Me confirmas la colonia o me das otra calle o referencia? Si prefieres, comparte el pin.`);
-    if(areas?.length===1)return requestLocation(d,field,'neighborhood_reference_required',`Ubico ${areas[0].label}. ¿En qué calle o con qué referencia ${field==='origin'?'te recogemos':'queda el destino'}? También puedes compartir el pin, si prefieres.`);
-    if(areas?.length)return requestLocation(d,field,'neighborhood_ambiguous',`Encontré estas zonas: ${areas.map(a=>a.label).join(', ')}. ¿Cuál es? Después dime la calle o una referencia.`);
+    if(areas?.length===1)return requestLocation(d,field,'neighborhood_reference_required',`Ubico ${localityDisplayName(areas[0])}. ¿En qué calle o con qué referencia ${field==='origin'?'te recogemos':'queda el destino'}? También puedes compartir el pin, si prefieres.`);
+    if(areas?.length)return requestLocation(d,field,'neighborhood_ambiguous',`Encontré estas opciones: ${areas.map(localityDisplayName).join(', ')}. ¿Cuál es? Después dime la calle o una referencia.`);
     return requestLocation(d,field,'unresolved_location',`Para ubicar bien ${field==='origin'?'la recogida':'el destino'}, ¿me pasas calle, número y colonia? Si te queda más fácil, también puedes compartir el punto con el botón.`);
   }
   if(unresolved.length>1){const field=unresolved.find(value=>referenceConflicts[value]);if(field)return requestLocation(d,field,'neighborhood_reference_conflict',`La ubicación que encontré no cae en ${referenceConflicts[field]}. ¿Me confirmas la colonia o me das otra calle o referencia? Si prefieres, comparte el pin.`);}

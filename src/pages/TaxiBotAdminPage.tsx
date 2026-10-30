@@ -677,9 +677,8 @@ export default function TaxiBotAdminPage(
           )}
         </div>
       )}
-      {channel && tab === 'neighborhoods' && <TaxiNeighborhoodsPanel key={tenantId+'|'+waba} tenantId={tenantId} waba={waba} canEdit={canConfigure} preview={preview} disabled={busy||Boolean(pending)} onLockChange={setQualityLocked}
-        onSaved={()=>{setZoneReload(v=>v+1);void refreshContext().catch((cause:unknown)=>setError(cause instanceof Error?cause.message:'La colonia se guardó. Actualiza el mapa para ver los cambios.'));}}
-        onMap={row=>{setTab('zones');setSelected(row&&row.cells.length<=400?row.cells:[]);setFocusCell(row?.cells[0]??null);setLabel(row&&row.cells.length<=400?row.label:'');setPrice(row&&row.cells.length<=400&&row.cents!==null?String(row.cents/100):'');}}/>}
+        {channel && tab === 'neighborhoods' && <TaxiNeighborhoodsPanel key={tenantId+'|'+waba} tenantId={tenantId} waba={waba} canEdit={canConfigure} preview={preview} disabled={busy||Boolean(pending)} onLockChange={setQualityLocked}
+          onSaved={()=>{void refreshContext().catch((cause:unknown)=>setError(cause instanceof Error?cause.message:'La localidad se guardó. Actualiza la lista para ver los cambios.'));}}/>}
       {channel && tab === "zones" && (
         <>
           <div className="taxi-section-heading">

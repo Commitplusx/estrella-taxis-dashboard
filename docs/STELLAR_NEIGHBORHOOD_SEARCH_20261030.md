@@ -1,38 +1,35 @@
-# Colonias y tarifas de Pompeyo
+# GPS H3 y tarifas para direcciones escritas
 
-Importación de la lista local de tarifas, 30 de octubre de 2026. La fuente entregada fue `TARIFAS+LOCALES.pdf`; el PDF no se copia al repositorio.
+## Regla del producto
 
-## Datos guardados
+La base mantiene dos fuentes separadas para encontrar y cotizar una recogida:
 
-La tarifa se guarda en la base de Pompeyo, sin crear un catálogo de tarifas separado. Se conservaron las 2,541 celdas H3 y las 94 zonas que ya tenía la base.
+- **Pin GPS:** el servidor convierte sus coordenadas a H3 y consulta la tarifa del hexágono propio de la base. El mapa y la pantalla **Zonas y tarifas** administran esta cobertura.
+- **Dirección escrita:** el bot busca el barrio, fraccionamiento, colonia o punto en `taxi_bot_localities`, pide calle o referencia y usa la tarifa de esa localidad. El pin es opcional. Esta lista no contiene celdas H3.
 
-Se actualizaron 16 grupos de colonias que ya tenían H3, es decir, 293 celdas:
+Una edición del directorio escrito no agrega, quita ni cambia hexágonos. Una tarifa de localidad tampoco sirve de reemplazo si el pasajero envía un pin GPS. En un recorrido con un extremo escrito y otro GPS, cada extremo usa su fuente correspondiente y el servidor valida de nuevo la tarifa antes de registrar el viaje. Una dirección sin localidad/tarifa resuelta no cae por accidente a la tarifa H3. Las referencias del PDF con importes contradictorios quedan sin precio automático hasta que la base los aclare.
 
-- **$55:** 1ro de mayo, Infonavit, Colonia Miguel Aleman, Fovisste, Popular, Los pinos, Mariano N Ruiz y Centro.
-- **$65:** El brasilito, Jacarandas, Las brisas y Valle Balun Canan.
-- **$80:** Junchavin, Bugambilias primera seccion, Bugambilias segunda seccion y Paraiso comiteco.
+## Lista de tarifas
 
-Se añadieron 11 nombres con una tarifa de referencia y sin celdas H3. El panel los identifica como pendientes de ubicar en el mapa:
+`TARIFAS+LOCALES.pdf` se organiza en categorías independientes: barrios, fraccionamientos, colonias, otros puntos, escuelas, moteles, rancherías, lugares, ejidos, “Cash a” y puntos/rutas. El mismo nombre puede aparecer en categorías distintas y conserva cada precio; si la frase del pasajero no permite distinguirlos, el bot solicita aclaración. Los importes ambiguos, como Rosario Castellanos, se guardan para revisión sin cotizarlos.
 
-- **$55:** La Esmeralda, Campo de la Mariano N. Ruiz, San Juan y 27 de Junio.
-- **$80:** Manuel Velasco, Reforma, La Esperanza, Chula Vista y Monte Cristo.
-- **$160:** Chichima Sabinal y Chichima Acapetahua.
+El panel `/bot` muestra **Colonias y lugares escritos**, con filtros por categoría, búsqueda por nombre/alias y edición de la tarifa. **Zonas y tarifas** continúa siendo el mapa H3 para GPS. Los cambios de localidad se guardan por base y no disparan recarga ni selección en el mapa.
 
-Los valores de referencia aparecen en Colonias y ayudan a cotizar una dirección; por sí solos no representan un punto de recogida ni asignan un taxi. Cuando se configure su ubicación en el mapa, podrán ligarse a la cobertura H3 de la base.
+## Migración y estado
 
-## Búsqueda y cotización
+La migración `20261031160000_taxi_written_localities_h3_separation.sql` crea la tabla de localidades por escrito, traslada las antiguas tarifas de referencia y carga las categorías del PDF. También revierte la importación anterior que había aplicado tarifas del PDF a 293 hexágonos, pero sólo si encuentra exactamente los mismos índices, nombres y precios capturados en la revisión; si esas celdas cambiaron, cancela la migración para no sobrescribir ajustes posteriores.
 
-- El buscador compara nombre y alias de las 94 zonas H3 y las 11 localidades de referencia. La búsqueda semántica sólo puede proponer nombres del mismo conjunto.
-- Mencionar una colonia no basta para asignar el servicio: se pide una calle o referencia. El pin sigue siendo opcional.
-- La tarifa de una localidad pendiente sólo se usa cuando la dirección escrita se geocodifica con precisión dentro de la cobertura real de Pompeyo. Una dirección ambigua o sin coordenadas precisas no produce ubicación aproximada, precio inventado ni despacho.
-- Si el origen o destino ya usa H3 sin una tarifa de referencia, la cotización conserva el algoritmo existente de la base.
+**Estado de datos en producción:** las migraciones de cobertura y localidades ya están aplicadas en el proyecto independiente de Stellar Tracking. La verificación remota encontró 2,541 hexágonos H3 y 191 localidades escritas; conteos, nombres y precios H3 coinciden celda por celda, y las localidades no contienen hexágonos. Las tarifas impresas que se contradicen permanecen sin precio automático.
 
-## Panel y publicación
+**Estado de funciones en producción:** `taxi-bot-admin`, `process-queue` y `ycloud-webhook` están activas en versión 2; las tres respondieron 200 a OPTIONS. Las versiones anteriores quedaron respaldadas en `C:/Users/Kaleb/Desktop/pollo-robins-panel/.codex-tmp/stellar-edge-backup-20261030.json`. No se envió WhatsApp real ni se creó un viaje de prueba.
 
-La pestaña **Colonias de la base** en `/bot` muestra 105 nombres: las 94 zonas con H3 y las 11 tarifas pendientes de mapa. Los grupos existentes conservan su identidad y cobertura; editar su tarifa actualiza todas sus celdas H3. Las referencias nuevas pueden editarse, pero no asignárseles hexágonos hasta ubicarlas.
+**Estado del panel:** el build local está validado. El proyecto de Vercel no aparece enlazado ni disponible en la sesión; por eso no afirmo que la interfaz ya esté publicada en el dominio.
 
-Se aplicó y registró la migración `20261031120000_taxi_document_local_fares` en el proyecto de Supabase de Stellar Tracking. La respuesta del RPC de lectura contiene 105 entradas; el conteo de H3 permanece en 2,541 celdas y 94 grupos, 293 celdas coinciden con los nuevos precios y las 11 referencias siguen sin celdas. Una cotización sintética al RPC de referencia devolvió el estado `priced` a $55. No se creó un viaje ni se envió WhatsApp de prueba.
+## Verificación local
 
-Funciones de Supabase activas: `ycloud-webhook` v16, `process-queue` v16 y `taxi-bot-admin` v23. OPTIONS respondió 200 en las tres funciones.
+- `tests/taxi-neighborhoods.test.ts`: 17 pruebas de contrato, categorías, búsqueda, dirección escrita, GPS y tarifa.
+- `tests/taxi-bot-database.test.ts`: 87 pruebas SQL; incluyen restauración exacta de H3, tarifas escritas separadas, mezcla de extremos de fuentes distintas y confirmación vigente.
+- `deno check` de `taxi-bot-admin/index.ts` y `ycloud-webhook/index.ts`.
+- `npm run build`.
 
-Validación local: pruebas de colonias 16/16, pruebas de base del bot 87/87, `deno check` de las tres funciones, control estático de calidad del bot y `npm run build` aprobados. El build conserva los avisos preexistentes de tamaño del bundle y carga del mapa. No se probó una conversación real con WhatsApp.
+El build conserva avisos existentes sobre tamaño de bundle y carga dinámica de mapas. No se probó una conversación real de WhatsApp, no se enviaron mensajes ni se creó un viaje real.

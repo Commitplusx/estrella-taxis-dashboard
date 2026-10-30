@@ -1,0 +1,16 @@
+{
+  "version": "5",
+  "specifiers": {
+    "npm:h3-js@4.5.0": "4.5.0"
+  },
+  "npm": {
+    "h3-js@4.5.0": {
+      "integrity": "sha512-uKmdPc+DuarnR+XqZxEuWOMw7KzzKROrx3MLeJpFnMOs78S9M5eZ+X5RieS9UcSFQqbeXzbfWuX/W9Pyajinqw=="
+    }
+  },
+  "workspace": {
+    "dependencies": [
+      "npm:h3-js@4.5.0"
+    ]
+  }
+}

@@ -8,7 +8,7 @@ export interface TaxiChannel {
   centerLat:number; centerLng:number; radiusKm:number; dispatcher:string|null;
   model:string; baseCents:number|null; perKmCents:number|null;pricingMode:'h3_zone_max'|'road_distance';
 }
-export interface Place {text:string;lat:number;lng:number;placeId:string|null;area?:(NeighborhoodArea & {reference:string})}
+export interface Place {text:string;lat:number;lng:number;placeId:string|null;source?:'gps'|'written'|'locality';area?:(NeighborhoodArea & {reference:string})}
 export interface PendingLocation {place:Place;expiresAt:string}
 export interface Draft {
   fareMode:'quoted'|'unquoted';
@@ -50,8 +50,11 @@ export function emptyDraft():Draft{return {fareMode:'unquoted',name:null,origin:
 export function parsePlace(value:unknown):Place|null {
   if(!record(value)||!text(value.text,400)||!coord(value.lat,value.lng)||typeof value.lng!=='number'||!(value.placeId===null||typeof value.placeId==='string'))return null;
   const area=value.area===undefined?null:parseNeighborhoodArea(value.area);
+  const source=value.source===undefined?(area?.priceSource==='reference'?'locality':area?.priceSource==='h3'?'gps':'written'):value.source;
+  if(source!=='gps'&&source!=='written'&&source!=='locality')return null;
   if(value.area!==undefined&&(!area||!record(value.area)||typeof value.area.reference!=='string'||!streetReference(value.area.reference,area.label)||area.cell===null||area.priceSource==='h3'&&(!String(value.text).startsWith('Zona aproximada: ')||!String(value.text).includes(value.area.reference))||area.priceSource==='reference'&&String(value.text).startsWith('Zona aproximada: ')))return null;
-  return {text:String(value.text),lat:value.lat,lng:value.lng,placeId:value.placeId,...(area&&record(value.area)&&typeof value.area.reference==='string'?{area:{...area,reference:value.area.reference}}:{})};
+  if(source==='locality'&&area?.priceSource!=='reference'||source==='gps'&&area?.priceSource==='reference'||source==='written'&&area!==null)return null;
+  return {text:String(value.text),lat:value.lat,lng:value.lng,placeId:value.placeId,source,...(area&&record(value.area)&&typeof value.area.reference==='string'?{area:{...area,reference:value.area.reference}}:{})};
 }
 export function parseInbound(payload:unknown,now=Date.now()):TaxiInbound|null {
   if(!record(payload))return null;

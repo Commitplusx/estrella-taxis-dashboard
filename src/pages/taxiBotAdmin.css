@@ -1239,30 +1239,47 @@ html:has(.taxi-contact-dialog[open]) { overflow: hidden; }
   .taxi-admin .taxi-phone-inputs select { flex-basis: 130px; width: 42%; }
 }
 .taxi-admin .taxi-neighborhoods { padding: 28px; background: #fff; border: 1px solid var(--ta-line); border-radius: 14px; }
-.taxi-admin .taxi-neighborhoods-heading { display:flex; justify-content:space-between; align-items:flex-start; gap:20px; margin-bottom:24px; }
+.taxi-admin .taxi-neighborhoods-heading { display:flex; justify-content:space-between; align-items:flex-start; gap:20px; margin-bottom:20px; }
+.taxi-admin .taxi-neighborhood-heading-actions { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
 .taxi-admin .taxi-neighborhoods h2 { font-size:23px; margin:0 0 8px; }
 .taxi-admin .taxi-neighborhoods-heading p,.taxi-admin .taxi-neighborhood-help { color:#52617b; line-height:1.6; max-width:70ch; }
+.taxi-admin .taxi-neighborhood-separation { margin:0 0 22px; padding:14px 16px; border:1px solid #cbd8f0; border-radius:10px; background:#f3f6fc; color:#384c6b; line-height:1.55; }
 .taxi-admin .taxi-neighborhood-search { display:flex; gap:12px; }
 .taxi-admin .taxi-neighborhood-search label { flex:1; display:flex; align-items:center; gap:12px; padding:0 16px; border:1px solid #b8c7de; border-radius:8px; min-width:0; color:#52617b; }
 .taxi-admin .taxi-neighborhood-search label:focus-within { outline:2px solid #2459ee; outline-offset:2px; }
 .taxi-admin .taxi-neighborhood-search input { width:100%; min-width:0; border:0; box-shadow:none; padding:14px 0; outline:none; background:transparent; }
 .taxi-admin .taxi-neighborhood-help { font-size:14px; margin:12px 0 24px; }
 .taxi-admin .taxi-neighborhood-caption { display:flex; align-items:center; justify-content:space-between; gap:16px; padding-bottom:14px; font-size:14px; color:#52617b; }
+.taxi-admin .taxi-locality-filters { display:flex; gap:8px; overflow-x:auto; padding:2px 1px 12px; margin:0 0 16px; scrollbar-color:#8794a7 transparent; }
+.taxi-admin .taxi-locality-filters button { display:inline-flex; align-items:center; gap:8px; flex:0 0 auto; min-height:40px; padding:8px 13px; border:1px solid #cbd5e1; border-radius:999px; background:#fff; color:#34445d; font:inherit; font-size:14px; font-weight:650; cursor:pointer; transition:background-color 150ms ease,color 150ms ease,border-color 150ms ease; }
+.taxi-admin .taxi-locality-filters button:hover { border-color:#2459ee; }
+.taxi-admin .taxi-locality-filters button:focus-visible { outline:3px solid #92adff; outline-offset:2px; }
+.taxi-admin .taxi-locality-filters button.is-active { background:#202127; border-color:#202127; color:#fff; }
+.taxi-admin .taxi-locality-filters button span { display:inline-grid; min-width:22px; height:22px; place-items:center; padding:0 5px; border-radius:999px; background:#edf0f5; color:#39465a; font-size:12px; font-variant-numeric:tabular-nums; }
+.taxi-admin .taxi-locality-filters button.is-active span { background:#fff; color:#202127; }
+.taxi-admin .taxi-locality-group { margin-top:22px; }
+.taxi-admin .taxi-locality-group>header { display:flex; align-items:center; gap:10px; padding:14px 0 7px; border-bottom:1px solid var(--ta-line); }
+.taxi-admin .taxi-locality-group>header h3 { margin:0; font-size:18px; }
+.taxi-admin .taxi-locality-group>header span { color:#64748b; font-size:13px; font-variant-numeric:tabular-nums; }
 .taxi-admin .taxi-neighborhood-list { list-style:none; margin:0; padding:0; }
 .taxi-admin .taxi-neighborhood-list li { display:grid; grid-template-columns:minmax(0,1fr) auto auto; align-items:center; gap:24px; padding:22px 0; border-top:1px solid var(--ta-line); }
-.taxi-admin .taxi-neighborhood-list h3 { font-size:17px; margin:0 0 6px; }
+.taxi-admin .taxi-neighborhood-list h4 { font-size:17px; margin:0 0 6px; }
 .taxi-admin .taxi-neighborhood-list p { font-size:14px; line-height:1.5; color:#52617b; margin:4px 0; max-width:65ch; overflow-wrap:anywhere; }
 .taxi-admin .taxi-neighborhood-list small { color:#52617b; font-size:12px; }
 .taxi-admin .taxi-neighborhood-list strong { font-size:19px; font-variant-numeric:tabular-nums; white-space:nowrap; }
+.taxi-admin .taxi-neighborhood-list .taxi-locality-review { display:inline-block; margin-top:4px; color:#8c3f0d; font-weight:700; }
 .taxi-admin .taxi-neighborhood-actions { display:flex; gap:8px; }
 .taxi-admin .taxi-neighborhood-wide { grid-column:1/-1; }
 .taxi-admin .taxi-neighborhoods textarea { resize:vertical; min-height:100px; }
 @media(max-width:760px){
  .taxi-admin .taxi-neighborhoods { padding:20px; }
  .taxi-admin .taxi-neighborhoods-heading { gap:12px; flex-wrap:wrap; }
+ .taxi-admin .taxi-neighborhood-heading-actions { width:100%; }
+ .taxi-admin .taxi-neighborhood-heading-actions button { flex:1; justify-content:center; }
  .taxi-admin .taxi-neighborhood-search { flex-direction:column; }
  .taxi-admin .taxi-neighborhood-list li { grid-template-columns:minmax(0,1fr) auto; gap:12px; }
  .taxi-admin .taxi-neighborhood-actions { grid-column:1/-1; }
  .taxi-admin .taxi-neighborhood-actions button { flex:1; }
  .taxi-admin .taxi-neighborhood-caption { align-items:flex-start; }
+ .taxi-admin .taxi-locality-filters { margin-right:-20px; padding-right:20px; }
 }
