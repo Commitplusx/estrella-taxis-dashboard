@@ -17,6 +17,7 @@ import {parseInterpretation}from'../estrella-taxis-backend/supabase/functions/_s
 import {parseQualityDetail,parseQualityPage}from'../estrella-taxis-backend/supabase/functions/_shared/bot/taxis/qualityContracts.ts';
 import {createTaxiInterpreter,TAXI_INTERPRETER_CONTRACT}from'../estrella-taxis-backend/supabase/functions/_shared/bot/taxis/interpreter.ts';
 import {fingerprint}from'../estrella-taxis-backend/supabase/functions/_shared/tracking/contracts.ts';
+import {parseOutgoing,sendTaxiMessage}from'../estrella-taxis-backend/supabase/functions/_shared/bot/taxis/transport.ts';
 const denyAdminWrite = async (): Promise<never> => { throw new Error('No administration writes in this fixture.'); };
 const sql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261027220000_taxi_bot_transactions.sql',import.meta.url),'utf8');
 const h3CatalogSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20260901110001_create_h3_zonas.sql',import.meta.url),'utf8');
@@ -30,7 +31,52 @@ const baseZonesSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migr
 const baseFleetSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261030134513_taxi_base_fleet.sql',import.meta.url),'utf8');
 const baseContactsSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261030135906_taxi_base_contacts.sql',import.meta.url),'utf8');
 const personAccountsSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261030180000_taxi_person_accounts.sql',import.meta.url),'utf8');
+const locationRequestSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261030190000_taxi_native_location_request.sql',import.meta.url),'utf8');
 const tenant='11111111-1111-4111-8111-111111111111',other='22222222-2222-4222-8222-222222222222',waba='+529630000001',customer='+529630000002',driverPhone='+529630000003';
+test('native location SQL: commit stores role and revision once; provider receives the actual persisted native request',async()=>{
+ const f=await fixture();try{
+  const e=await f.enqueue('Hola'),claim=await f.begin(e.eventId),d={...f.decision(),draft:{...emptyDraft(),awaitingLocation:'origin'},messages:[{to:customer,text:'¿Dónde te recogemos?',locationRequest:'origin'}]};
+  assert.equal((await f.commit(e.eventId,claim,d)).state,'committed');assert.equal((await f.commit(e.eventId,claim,d)).state,'replay');
+  const row=(await f.db.query<Record<string,unknown>>('SELECT * FROM taxi_bot_outbox')).rows[0];assert.equal(f.obj(row.body).locationRequest,'origin');assert.equal(f.obj(row.body).locationRevision,1);
+  const sent=(await f.db.query<Record<string,unknown>>('SELECT * FROM taxi_bot_outbox_claim($1,$2)',[tenant,waba])).rows[0];
+  assert.equal(await f.scalar('SELECT taxi_bot_outbox_permitted($1,$2)',[sent.id,sent.lease]),true);let calls=0;
+  const result=await sendTaxiMessage(parseOutgoing(sent),'fixture-key',async(_url,init)=>{calls++;const body:unknown=JSON.parse(String(init?.body));assert.ok(record(body));assert.equal(f.obj(body.interactive).type,'location_request_message');assert.deepEqual(f.obj(body.interactive).action,{name:'send_location'});return Response.json({id:'provider-fixture'});});
+  assert.equal(result.state,'accepted');assert.equal(calls,1);assert.equal(await f.scalar('SELECT count(*)::int FROM viajes'),0);
+ }finally{await f.db.close();}
+});
+test('native location SQL: malformed, mixed, wrong-role or non-draft request rolls back without output',async()=>{
+ const f=await fixture();try{
+  const e=await f.enqueue('Hola'),claim=await f.begin(e.eventId),d={...f.decision(),draft:{...emptyDraft(),awaitingLocation:'origin'},messages:[{to:customer,text:'Recogida',locationRequest:'origin'}]};
+  for(const altered of [
+   {...d,action:'reply'}, {...d,messages:[{...d.messages[0],locationRequest:'destination'}]},
+   {...d,messages:[{...d.messages[0],locationRequest:null}]}, {...d,messages:[{...d.messages[0],buttons:[{id:'x',title:'Otro'}]}]},
+  ])await assert.rejects(f.commit(e.eventId,claim,altered),/invalid location request/);
+  assert.equal(await f.scalar('SELECT count(*)::int FROM taxi_bot_outbox'),0);assert.equal(await f.scalar('SELECT revision::int FROM taxi_bot_sessions'),0);
+  assert.equal(await f.scalar("SELECT has_function_privilege('authenticated','taxi_bot_location_request_current(uuid,text,text,jsonb)','EXECUTE')"),false);
+ }finally{await f.db.close();}
+});
+test('native location SQL: a replaced request is discarded before claim and a claimed stale request loses send permission',async()=>{
+ const f=await fixture();try{
+  const first=await f.enqueue('Hola'),fc=await f.begin(first.eventId),request={...f.decision(),draft:{...emptyDraft(),awaitingLocation:'origin'},messages:[{to:customer,text:'Recogida',locationRequest:'origin'}]};
+  await f.commit(first.eventId,fc,request);
+  const second=await f.enqueue('Otra pregunta'),sc=await f.begin(second.eventId);await f.commit(second.eventId,sc,request);
+  const rows=(await f.db.query<Record<string,unknown>>('SELECT * FROM taxi_bot_outbox_claim($1,$2)',[tenant,waba])).rows;assert.equal(rows.length,1);
+  assert.equal(await f.scalar("SELECT count(*)::int FROM taxi_bot_outbox WHERE state='failed'AND error_code='outdated_before_send'"),1);
+  assert.equal(await f.scalar('SELECT taxi_bot_outbox_permitted($1,$2)',[rows[0].id,rows[0].lease]),true);
+  const next=await f.enqueue('Cambió la recogida'),nc=await f.begin(next.eventId);await f.commit(next.eventId,nc,{...request,draft:{...emptyDraft(),origin:f.draft.origin,awaitingLocation:'destination'},messages:[{to:customer,text:'Destino',locationRequest:'destination'}]});
+  assert.equal(await f.scalar('SELECT taxi_bot_outbox_permitted($1,$2)',[rows[0].id,rows[0].lease]),false);
+ }finally{await f.db.close();}
+});
+test('native location SQL: session window, human ownership, tenant and authorized customer are checked before sending',async()=>{
+ const f=await fixture();try{
+  const e=await f.enqueue('Hola'),claim=await f.begin(e.eventId);await f.commit(e.eventId,claim,{...f.decision(),draft:{...emptyDraft(),awaitingLocation:'origin'},messages:[{to:customer,text:'Recogida',locationRequest:'origin'}]});
+  const row=(await f.db.query<Record<string,unknown>>('SELECT * FROM taxi_bot_outbox_claim($1,$2)',[tenant,waba])).rows[0];
+  const permitted=()=>f.scalar('SELECT taxi_bot_outbox_permitted($1,$2)',[row.id,row.lease]);assert.equal(await permitted(),true);
+  assert.equal(await f.scalar('SELECT taxi_bot_location_request_current($1,$2,$3,$4)',[other,waba,customer,row.body]),false);
+  await f.db.exec("UPDATE taxi_bot_sessions SET mode='human'");assert.equal(await permitted(),false);await f.db.exec("UPDATE taxi_bot_sessions SET mode='bot',last_source_at=now()-interval '25 hours'");assert.equal(await permitted(),false);
+  await f.db.exec('UPDATE taxi_bot_sessions SET last_source_at=now()');assert.equal(await permitted(),true);await f.db.exec('DELETE FROM taxi_bot_allowed_customers');assert.equal(await permitted(),false);
+ }finally{await f.db.close();}
+});
 test('person account SQL: changing taxi and driver role updates the existing login and dispatch WhatsApp atomically',async()=>{
  const f=await fixture();try{
   const id=crypto.randomUUID();await f.db.query("INSERT INTO taxi_base_contacts(id,tenant_id,unit_number,name,phone_input,role,device_id)VALUES($1,$2,'487','Persona','9630000094','owner',1)",[id,tenant]);
@@ -102,6 +148,7 @@ async function fixture(options:{legacy?:boolean;seedCoverageBeforeMigration?:boo
     ALTER TABLE viajes ENABLE ROW LEVEL SECURITY;CREATE POLICY legacy_open ON viajes FOR ALL USING(true)WITH CHECK(true);GRANT ALL ON viajes TO anon,authenticated,service_role;`);
   await db.exec(h3CatalogSql);await db.exec(sql);await db.query("INSERT INTO taxi_bot_channels(tenant_id,waba,enabled,name,city,center_lat,center_lng,radius_km,dispatcher)VALUES($1,$2,true,'Base de prueba','Comitán',16.25,-92.13,20,$3)",[tenant,waba,'+529630000099']);await db.exec(h3PricingSql);await db.exec(adminSql);await db.exec(traceSql);
   await db.exec(accessSql);
+  await db.exec(locationRequestSql);
   await db.exec(mapCacheSql);
   await db.exec(driverSetupSql);
   if(options.seedCoverageBeforeMigration){
@@ -759,7 +806,7 @@ test('taxi end-to-end: signed webhook → durable queue → real tool decoder �
       await f.db.exec("UPDATE taxi_bot_events SET received_at=clock_timestamp()-interval '2 seconds'WHERE state='pending'");return{raw,hash,timestamp,id};
     }
     const initial=await inbound(current);await engine.tick();assert.equal(modelCalls,1);assert.equal(await f.scalar('SELECT count(*)::int FROM viajes'),0);
-    assert.equal(await f.scalar("SELECT meta->>'engineVersion'FROM taxi_bot_turn_traces LIMIT 1"),'taxi-bot-v3-tools');
+    assert.equal(await f.scalar("SELECT meta->>'engineVersion'FROM taxi_bot_turn_traces LIMIT 1"),'taxi-bot-v4-native-location');
     assert.equal(await f.scalar("SELECT meta->>'promptHash'FROM taxi_bot_turn_traces LIMIT 1"),await fingerprint(TAXI_INTERPRETER_CONTRACT));
     const summary=f.obj(await f.scalar('SELECT draft FROM taxi_bot_sessions WHERE customer=$1',[customer]));assert.ok(summary.confirmation);
     await engine.inbound(initial.raw,`t=${initial.timestamp},s=${initial.hash}`);await engine.tick();assert.equal(modelCalls,1);

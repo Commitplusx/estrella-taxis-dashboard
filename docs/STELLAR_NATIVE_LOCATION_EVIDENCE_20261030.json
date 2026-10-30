@@ -1,0 +1,45 @@
+{
+  "project": "izrsxygazsalfhpaualj",
+  "engineVersion": "taxi-bot-v4-native-location",
+  "migration": {
+    "version": "20261030154004",
+    "name": "taxi_native_location_request"
+  },
+  "migrationSha256": "6ffff171153979c67433a6c71420645fe5440c4a078c007c00fe47c34525ab22",
+  "functions": [
+    {
+      "slug": "ycloud-webhook",
+      "version": 11,
+      "status": "ACTIVE"
+    },
+    {
+      "slug": "process-queue",
+      "version": 11,
+      "status": "ACTIVE"
+    },
+    {
+      "slug": "taxi-bot-admin",
+      "version": 19,
+      "status": "ACTIVE"
+    }
+  ],
+  "verification": {
+    "sqlBodies": 4,
+    "runtimeSources": 56,
+    "authorized": 0,
+    "channelEnabled": true,
+    "contacts": 33,
+    "contactsUnchanged": false,
+    "units": 19,
+    "zones": 2541,
+    "zonesUnchanged": true,
+    "privateGuard": true
+  },
+  "tests": {
+    "typedDeno": 4893,
+    "nodeSqlAndIntegration": 97,
+    "qualitySources": 76,
+    "logSha256": "3d7896193b4d1def59215bd6268f4a62e8e418d33d9b06851cd054717933f09d"
+  },
+  "physicalWhatsAppTest": false
+}

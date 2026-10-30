@@ -4,7 +4,8 @@ import type { TrackingStore } from '../estrella-taxis-backend/supabase/functions
 import { record } from '../estrella-taxis-backend/supabase/functions/_shared/tracking/contracts.ts';
 const tenant = '11111111-1111-4111-8111-111111111111', other = '22222222-2222-4222-8222-222222222222', waba = '+529630000001';
 const driver = { deviceId: 7, name: 'Persona sintética', phone: '+529630000002', active: true, version: 'a'.repeat(32) };
-const contact = { id: '33333333-3333-4333-8333-333333333333', unitNumber: '487', name: driver.name, phoneInput: driver.phone, phone: driver.phone, role: 'driver', deviceId: 7, receiving: true, version: 'b'.repeat(32) };
+// Imported PostgreSQL UUIDs are stable entity IDs; they need not be RFC request UUIDs.
+const contact = { id: '33333333-3333-f333-0333-333333333333', unitNumber: '487', name: driver.name, phoneInput: driver.phone, phone: driver.phone, role: 'driver', deviceId: 7, receiving: true, version: 'b'.repeat(32) };
 function assert(value: unknown, message = 'Expected assertion'): asserts value { if (!value) throw new Error(message); }
 function fixture({ role = 'admin_empresa', result = 'saved' }: { role?: string; result?: string } = {}) {
   const writes: Record<string, unknown>[] = [];
@@ -52,6 +53,7 @@ Deno.test('contacts administration: contact edits use the existing verified tena
 for (const [name, changed, expected] of [
   ['another base', { tenantId: other }, 403], ['unseen GPS', { deviceId: 99 }, 403], ['unknown role', { role: 'superadmin' }, 400],
   ['malformed phone', { phoneInput: 'not a phone' }, 400], ['missing review', { expected: '' }, 400], ['invalid contact id', { contactId: 'invalid' }, 400],
+  ['non-RFC request id', { requestId: '33333333-3333-f333-0333-333333333333' }, 400],
 ] as const) Deno.test('contacts administration: rejects ' + name + ' before writing', async () => {
   const f = fixture(); assert((await f.call({ ...f.contactCommand, ...changed })).status === expected); assert(f.writes.length === 0);
 });

@@ -13,6 +13,12 @@ export interface BaseContact {
 }
 export interface ContactSetup extends DriverSetup { contacts: BaseContact[] }
 export function isContactRole(value: unknown): value is ContactRole { return contactRoles.some(role => role.value === value); }
+/** Stable imported PostgreSQL entity ID. Request UUID validation remains separate. */
+export function parseContactId(value: unknown): string {
+  if (typeof value !== 'string' || !/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(value))
+    throw new TrackingError(400, 'invalid_contact_id', 'El contacto necesita un identificador válido.');
+  return value;
+}
 export function parseBaseContact(value: unknown): BaseContact {
   if (!record(value) || typeof value.id !== 'string' || !/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(value.id) ||
     typeof value.unitNumber !== 'string' || !value.unitNumber.trim() || value.unitNumber.length > 20 ||

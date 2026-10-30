@@ -22,13 +22,16 @@ export function parseOutgoing(raw:unknown):TaxiOutgoing {
   if(!record(raw)||!text(raw.id,40)||!text(raw.lease,40)||!text(raw.tenant_id,40)||!phone(raw.waba)||!phone(raw.destination)||!record(raw.body)||!text(raw.body.text,4096))throw new TrackingError(502,'invalid_taxi_outbox','La salida guardada no es válida.');
   let buttons:TaxiMessage['buttons'];
   if(raw.body.buttons!==null&&raw.body.buttons!==undefined){if(!Array.isArray(raw.body.buttons)||raw.body.buttons.length>3)throw new TrackingError(502,'invalid_taxi_buttons','Botones no válidos.');buttons=raw.body.buttons.map((b)=>{if(!record(b)||!text(b.id,128)||!text(b.title,20))throw new TrackingError(502,'invalid_taxi_button','Botón no válido.');return {id:String(b.id),title:String(b.title)};});}
-  return {id:String(raw.id),lease:String(raw.lease),tenantId:String(raw.tenant_id),waba:String(raw.waba),message:{to:String(raw.destination),text:String(raw.body.text),...(buttons?{buttons}:{})}};
+  const locationRequest=raw.body.locationRequest;
+  if(locationRequest!==undefined&&(locationRequest!=='origin'&&locationRequest!=='destination'||Boolean(buttons?.length)||String(raw.body.text).length>1024))throw new TrackingError(502,'invalid_taxi_location_request','Solicitud de ubicación no válida.');
+  return {id:String(raw.id),lease:String(raw.lease),tenantId:String(raw.tenant_id),waba:String(raw.waba),message:{to:String(raw.destination),text:String(raw.body.text),...(buttons?{buttons}:{}),...(locationRequest==='origin'||locationRequest==='destination'?{locationRequest}:{})}};
 }
 /** externalId reconciles callbacks; it is not assumed to make provider sends idempotent. */
 export async function sendTaxiMessage(out:TaxiOutgoing,key:string,fetcher:Fetcher=fetch):Promise<SendOutcome> {
   if(!key)return {state:'failed',code:'provider_not_configured'};
   const m=out.message;
-  const payload={from:out.waba,to:m.to,externalId:'taxi:'+out.id,...(m.buttons?.length?{type:'interactive',interactive:{type:'button',body:{text:m.text},action:{buttons:m.buttons.map((b)=>({type:'reply',reply:b}))}}}:{type:'text',text:{body:m.text}})};
+  if(m.locationRequest&&(m.buttons?.length||m.text.length>1024))return {state:'failed',code:'invalid_taxi_location_request'};
+  const payload={from:out.waba,to:m.to,externalId:'taxi:'+out.id,...(m.locationRequest?{type:'interactive',interactive:{type:'location_request_message',body:{text:m.text},action:{name:'send_location'}}}:m.buttons?.length?{type:'interactive',interactive:{type:'button',body:{text:m.text},action:{buttons:m.buttons.map((b)=>({type:'reply',reply:b}))}}}:{type:'text',text:{body:m.text}})};
   try{
     const response=await fetcher('https://api.ycloud.com/v2/whatsapp/messages',{method:'POST',headers:{'Content-Type':'application/json','X-API-Key':key},body:JSON.stringify(payload),signal:AbortSignal.timeout(10000),redirect:'error'});
     if(!response.ok){await response.body?.cancel();return {state:response.status>=400&&response.status<500?'failed':'uncertain',code:'provider_http_'+response.status};}

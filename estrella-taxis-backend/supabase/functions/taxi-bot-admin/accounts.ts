@@ -2,7 +2,7 @@ import { type FleetApi, type FleetIdentity } from '../_shared/tracking/auth.ts';
 import type { TrackingStore } from '../_shared/tracking/store.ts';
 import { positiveId, record, TrackingError, uuid } from '../_shared/tracking/contracts.ts';
 import { exact } from '../_shared/bot/taxis/adminContracts.ts';
-import { isContactRole, parseContactSetup } from '../_shared/bot/taxis/contactAdmin.ts';
+import { isContactRole, parseContactSetup, parseContactId } from '../_shared/bot/taxis/contactAdmin.ts';
 
 function rows(value: unknown): Record<string, unknown>[] {
   if (!Array.isArray(value) || value.length > 500 || !value.every(record)) throw new TrackingError(502, 'invalid_accounts', 'No pudimos comprobar las cuentas de Traccar.');
@@ -38,7 +38,7 @@ export async function accountRequest(raw: Record<string, unknown>, tenant: strin
         needsPassword: record(operation.command) && operation.command.userId === null && !users.some(user => record(user.attributes) && user.attributes.stellarAccountRequest === operation.requestId) })) };
   }
   exact(raw, ['action', 'tenantId', 'waba', 'contactId', 'expected', 'userId', 'email', 'password', 'requestId', 'role', 'deviceId', 'receiveOffers', 'driverVersion']);
-  const contactId = uuid(raw.contactId), requestId = uuid(raw.requestId);
+  const contactId = parseContactId(raw.contactId), requestId = uuid(raw.requestId);
   const person = setup.contacts.find(contact => contact.id === contactId);
   if (!person) throw new TrackingError(403, 'contact_forbidden', 'Elige una persona de esta base.');
   if (!isContactRole(raw.role) || raw.role === 'pending' || !(raw.deviceId === null || positiveId(raw.deviceId) && baseDevices.some(unit => unit.id === raw.deviceId)) ||

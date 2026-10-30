@@ -4,7 +4,7 @@ import { positiveId, record, TrackingError, uuid } from '../_shared/tracking/con
 import { exact } from '../_shared/bot/taxis/adminContracts.ts';
 import { validChannelPhone } from '../_shared/bot/taxis/channelPhone.ts';
 import { parseBotDriver, parseDriverSetup } from '../_shared/bot/taxis/driverAdmin.ts';
-import { isContactRole, parseBaseContact, parseContactSetup } from '../_shared/bot/taxis/contactAdmin.ts';
+import { isContactRole, parseBaseContact, parseContactSetup, parseContactId } from '../_shared/bot/taxis/contactAdmin.ts';
 
 export async function driverRequest(raw: Record<string, unknown>, tenant: string, waba: string, identity: FleetIdentity,
   canConfigure: boolean, fleet: FleetApi, store: TrackingStore, signal: AbortSignal): Promise<unknown> {
@@ -33,7 +33,7 @@ export async function driverRequest(raw: Record<string, unknown>, tenant: string
       typeof raw.phoneInput !== 'string' || raw.phoneInput.length > 40 || !/^[+0-9 ()-]*$/.test(raw.phoneInput) || typeof raw.receiveOffers !== 'boolean' ||
       !(raw.expected === null || typeof raw.expected === 'string' && /^[a-f0-9]{32}$/.test(raw.expected)) ||
       !(raw.driverVersion === null || typeof raw.driverVersion === 'string' && /^[a-f0-9]{32}$/.test(raw.driverVersion))) throw new TrackingError(400, 'invalid_contact', 'Revisa el nombre, el rol, la unidad y el teléfono del contacto.');
-    const contactId = uuid(raw.contactId);
+    const contactId = parseContactId(raw.contactId);
     const saved = await store.rpc('taxi_bot_contact_apply', { p_tenant: tenant, p_actor: identity.userId, p_request: uuid(raw.requestId),
       p_expected: raw.expected, p_contact: contactId, p_payload: { unitNumber: raw.unitNumber.trim(), name: raw.name.trim(), phoneInput: raw.phoneInput,
         role: raw.role, deviceId: raw.deviceId, receiveOffers: raw.receiveOffers, driverVersion: raw.driverVersion } });

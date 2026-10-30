@@ -89,7 +89,7 @@ export class TaxiEngine {
       const out=parseOutgoing(raw);if(out.tenantId!==tenant||out.waba!==waba)throw new TrackingError(502,'taxi_outbox_scope','La salida pertenece a otro canal.');
       const permitted=await this.store.rpc('taxi_bot_outbox_permitted',{p_id:out.id,p_lease:out.lease});
       if(typeof permitted!=='boolean')throw new TrackingError(502,'taxi_access_unknown','No se pudo comprobar el permiso del destinatario.');
-      const result=permitted?await sendTaxiMessage(out,this.config.ycloudKey,this.fetcher):{state:'failed' as const,code:'customer_not_authorized'};
+      const result=permitted?await sendTaxiMessage(out,this.config.ycloudKey,this.fetcher):{state:'failed' as const,code:'outbox_no_longer_permitted'};
       const saved=await this.store.rpc('taxi_bot_outbox_complete',{p_id:out.id,p_lease:out.lease,p_state:result.state,p_provider:result.state==='accepted'?result.providerId:null,p_error:result.state==='accepted'?null:result.code});
       // A verified callback can win this race. No resend is attempted on a lost write response.
       if(saved!==true)console.warn(JSON.stringify({event:'taxi_send_result_unconfirmed',outbox:out.id}));

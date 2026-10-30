@@ -62,6 +62,12 @@ export function assertTaxiTransition(
     !messages.length || d.messages.length > 3 ||
     d.messages.some((m) => m.to !== messages.at(-1)?.from)
   ) fail();
+  if (d.messages.some((m) => m.locationRequest && (
+    d.action !== 'draft' || s.mode !== 'bot' ||
+    (s.active && ['buscando_conductor', 'en_camino'].includes(s.active.state)) ||
+    d.draft.awaitingLocation !== m.locationRequest || d.draft.pendingLocation ||
+    d.draft.confirmation || Boolean(m.buttons?.length) || m.text.length > 1024
+  ))) fail();
   if (
     s.mode === "human" &&
     !["reply", "human", "driver_accept", "driver_reject", "driver_finish"]

@@ -1,7 +1,7 @@
 import { record, TrackingError, positiveId } from '../../tracking/contracts.ts';
 import { taxiH3Cell, type H3QuoteScope } from './h3.ts';
 export { record };
-export const TAXI_BOT_VERSION='taxi-bot-v3-tools';
+export const TAXI_BOT_VERSION='taxi-bot-v4-native-location';
 export interface TaxiChannel {
   tenantId:string; waba:string; enabled:boolean; name:string; city:string;
   centerLat:number; centerLng:number; radiusKm:number; dispatcher:string|null;
@@ -26,7 +26,7 @@ export interface Interpretation {
   intent:'provide'|'quote'|'confirm'|'cancel'|'status'|'human'|'smalltalk'|'ambiguous';
   fields:{name?:FieldValue;origin?:FieldValue;destination?:FieldValue};
 }
-export interface TaxiMessage {to:string;text:string;buttons?:{id:string;title:string}[]}
+export interface TaxiMessage {to:string;text:string;buttons?:{id:string;title:string}[];locationRequest?:'origin'|'destination'}
 export interface Candidate {deviceId:number;name:string}
 export interface TaxiDecision {
   action:'draft'|'reply'|'confirm'|'cancel'|'human'|'driver_accept'|'driver_reject'|'driver_finish';

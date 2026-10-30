@@ -3,7 +3,7 @@ import { createTaxiAdminHandler } from '../estrella-taxis-backend/supabase/funct
 import { FleetApi } from '../estrella-taxis-backend/supabase/functions/_shared/tracking/auth.ts';
 import { positiveId, record } from '../estrella-taxis-backend/supabase/functions/_shared/tracking/contracts.ts';
 import type { TrackingStore } from '../estrella-taxis-backend/supabase/functions/_shared/tracking/store.ts';
-const tenant='11111111-1111-4111-8111-111111111111',other='22222222-2222-4222-8222-222222222222',personId='33333333-3333-4333-8333-333333333333';
+const tenant='11111111-1111-4111-8111-111111111111',other='22222222-2222-4222-8222-222222222222',personId='33333333-3333-f333-0333-333333333333';
 const waba='+529630000001',version='a'.repeat(32),requestId='44444444-4444-4444-8444-444444444444';
 function assert(value:unknown,message='Assertion failed'):asserts value{if(!value)throw new Error(message);}
 function fixture(options:{createLost?:boolean;replay?:boolean;foreignUser?:boolean;badGrants?:boolean;failFinish?:boolean}={}){
