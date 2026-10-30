@@ -16,7 +16,7 @@ function h3Store(answer:unknown){let calls=0;const store:TrackingStore={writePac
   calls++;equal(name,'taxi_bot_h3_quote');equal(args,{p_tenant:channel.tenantId,p_waba:channel.waba,p_origin:scope.originCell,p_destination:scope.destinationCell});return answer;
 }};return{store,calls:()=>calls};}
 const priced=(cents=6500)=>({state:'priced',mode:'h3_zone_max',cents,...scope});
-function state():TaxiSession{return{revision:1,mode:'bot',history:[],active:null,draft:{...emptyDraft(),name:'Persona Prueba',origin,destination,quoteCents:6500,quoteH3:scope,confirmation:crypto.randomUUID(),expiresAt:new Date(now+600000).toISOString()}};}
+function state():TaxiSession{return{revision:1,mode:'bot',history:[],active:null,draft:{...emptyDraft(),fareMode:'quoted',name:'Persona Prueba',origin,destination,quoteCents:6500,quoteH3:scope,confirmation:crypto.randomUUID(),expiresAt:new Date(now+600000).toISOString()}};}
 const message=(text:string):TaxiInbound=>({id:crypto.randomUUID(),from:'+529630000002',to:channel.waba,at:new Date(now).toISOString(),type:'text',text,button:null,location:null});
 function coordinatorFixture(cents:number|null){let candidates=0;const services:TaxiServices={interpret:async()=>{throw new Error('Server confirmation cannot invoke the model.');},resolve:async()=>{throw new Error('Stored endpoints must not be geocoded again.');},quote:async()=>cents,candidates:async()=>{candidates++;return[{deviceId:1,name:'Unidad 1'}];}};return{services,candidates:()=>candidates};}
 Deno.test('H3 taxi: exact cells and tenant/channel are sent to one private quote RPC without Maps',async()=>{

@@ -6,7 +6,7 @@ function equal(a:unknown,b:unknown){assert(JSON.stringify(a)===JSON.stringify(b)
 const now=Date.parse('2026-10-27T18:00:00Z');
 const channel:TaxiChannel={tenantId:'11111111-1111-4111-8111-111111111111',waba:'+529630000001',enabled:true,name:'Base sintética',city:'Comitán',centerLat:16.25,centerLng:-92.13,radiusKm:20,dispatcher:'+529630000099',model:'fixture',baseCents:4000,perKmCents:1000,pricingMode:'road_distance'};
 const message=(text:string):TaxiInbound=>({id:crypto.randomUUID(),from:'+529630000002',to:channel.waba,at:new Date(now).toISOString(),type:'text',text,button:null,location:null});
-function state():TaxiSession{return{revision:1,mode:'bot',history:[],active:null,draft:{...emptyDraft(),name:'Mariana',origin:{text:'Centro',lat:16.25,lng:-92.13,placeId:null},destination:{text:'Terminal',lat:16.26,lng:-92.14,placeId:null},quoteCents:6500,confirmation:crypto.randomUUID(),expiresAt:new Date(now+600000).toISOString()}};}
+function state():TaxiSession{return{revision:1,mode:'bot',history:[],active:null,draft:{...emptyDraft(),fareMode:'quoted',name:'Mariana',origin:{text:'Centro',lat:16.25,lng:-92.13,placeId:null},destination:{text:'Terminal',lat:16.26,lng:-92.14,placeId:null},quoteCents:6500,confirmation:crypto.randomUUID(),expiresAt:new Date(now+600000).toISOString()}};}
 function fixture(proposal:unknown={intent:'smalltalk',fields:{}}){
   let calls=0,quotes=0,candidates=0;
   const services:TaxiServices={interpret:async(current)=>{calls++;return parseInterpretation(proposal,current);},resolve:async(text)=>({kind:'resolved',place:{text,lat:16.255,lng:-92.135,placeId:null}}),quote:async()=>{quotes++;return 6500;},candidates:async()=>{candidates++;return[{deviceId:1,name:'Unidad 1'}];}};

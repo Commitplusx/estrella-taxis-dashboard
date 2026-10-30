@@ -76,6 +76,7 @@ for (let fields = 0; fields < 8; fields++) {
                 },
                 draft: {
                   ...emptyDraft(),
+                  fareMode: 'quoted',
                   name: fields & 1 ? "Persona Prueba" : null,
                   origin: fields & 2 ? origin : null,
                   destination: fields & 4 ? destination : null,

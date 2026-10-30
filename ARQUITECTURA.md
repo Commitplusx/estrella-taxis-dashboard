@@ -1,5 +1,7 @@
 # Arquitectura General — Stellar Tracking / Pompeyo
 
+> **Conversación natural — 30-10-2026:** [Dirección escrita y precio opcional](docs/STELLAR_NATURAL_REQUESTS_20261030.md). Solicitud cortés de taxi reconocida como recogida, pin opcional y cotización sólo si se pide. Búsqueda de direcciones OSM/Photon con caché y presupuesto privado. SQL y webhook/consumidor v12 ACTIVE comprobados; Autorizados continúa vacío. La búsqueda semántica de colonias solicitada después está pendiente de implementación.
+
 > **Ubicación nativa y contactos — 30-10-2026:** [Flujo del cliente y corrección del guardado](docs/STELLAR_NATIVE_LOCATION_20261030.md). WhatsApp pide la recogida con su botón nativo; destino por texto o pin, tarifa y confirmación antes de buscar taxi. Salidas ligadas a revisión de sesión y autorización. Se corrige la validación de IDs de contactos importados sin duplicarlos. SQL y administrador v19/webhook-consumidor v11 ACTIVE comprobados; Autorizados continúa vacío. Sin WhatsApp físico de prueba.
 
 > **Accesos unificados — 30-10-2026:** [Personas, correos y taxis de la misma base](docs/STELLAR_PERSON_ACCOUNTS_20261030.md). Usuarios y Conductores comparten ficha; el administrador vincula el usuario existente de Traccar y el taxi real. Dueños/conductores ven sólo su unidad; el chofer recibe las ofertas en su WhatsApp. SQL y administrador v18 ACTIVE publicados; web `066fb99` verificada por hash y navegación autenticada. Sin altas reales ni correos/taxis deducidos del Excel. Autorizados sigue vacío por indicación del propietario.

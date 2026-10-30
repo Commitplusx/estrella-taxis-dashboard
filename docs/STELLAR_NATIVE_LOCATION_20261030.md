@@ -1,5 +1,7 @@
 # Pompeyo: ubicación nativa y guardado de contactos
 
+> Corrección posterior: [conversación natural, dirección escrita y cotización opcional](STELLAR_NATURAL_REQUESTS_20261030.md). El pin es opcional y el destino se pregunta por texto; las instrucciones siguientes conservan la entrega anterior como historial.
+
 Estado comprobado el 30-10-2026: SQL publicado en el proyecto independiente `izrsxygazsalfhpaualj`; `taxi-bot-admin` v19, `ycloud-webhook` v11 y `process-queue` v11 ACTIVE. Motor identificado en las trazas como `taxi-bot-v4-native-location`. [Evidencia](STELLAR_NATIVE_LOCATION_EVIDENCE_20261030.json).
 
 ## Conversación del cliente

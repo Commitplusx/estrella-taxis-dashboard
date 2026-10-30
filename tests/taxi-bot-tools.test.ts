@@ -408,6 +408,7 @@ function completeSession(): TaxiSession {
       origin,
       destination,
       quoteCents: 6500,
+      fareMode: 'quoted',
       quoteH3: taxiH3Scope(origin, destination),
       confirmation: "33333333-3333-4333-8333-333333333333",
       expiresAt: new Date(now + 600000).toISOString(),
@@ -647,7 +648,7 @@ Deno.test("taxi tools: trace hashes include tool schemas and record the validate
     );
   const trace = new TaxiTurnTrace(completeSession(), now),
     meta = await trace.metadata(channel);
-  equal(meta.engineVersion, "taxi-bot-v4-native-location");
+  equal(meta.engineVersion, "taxi-bot-v5-natural-requests");
   equal(meta.promptHash, await fingerprint(TAXI_INTERPRETER_CONTRACT));
   const decision = await coordinateTaxi(
     [inbound(current)],

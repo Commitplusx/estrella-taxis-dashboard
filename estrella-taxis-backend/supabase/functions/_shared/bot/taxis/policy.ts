@@ -3,7 +3,7 @@ import { TrackingError } from '../../tracking/contracts.ts';
 export const normalize=(s:string)=>s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/\s+/g,' ').trim();
 export function confirmsTaxi(s:string):boolean {
   if(/[?¿]|\.{2,}/.test(s))return false;
-  return /^(?:si|si confirmo|confirmo(?: el (?:viaje|taxi))?|confirmar viaje|mandalo|envialo|manda el taxi|si mandalo|adelante|dale|va|sale|de acuerdo|correcto|asi esta bien)(?:[,. ]+(?:por favor|porfa|gracias))?[.!¡]*$/.test(normalize(s));
+  return /^(?:si|si confirmo|confirmo(?: el (?:viaje|taxi))?|confirmar viaje|mandalo|envialo|manda el taxi|si[, ]+mandalo|adelante|dale|va|sale|de acuerdo|correcto|asi esta bien)(?:[,. ]+(?:por favor|porfa|gracias))?[.!¡]*$/.test(normalize(s));
 }
 export function cancelsTaxi(s:string):boolean {
   if(/[?¿]|\.{2,}/.test(s))return false;
@@ -34,6 +34,10 @@ export function needsHuman(s:string):boolean {
 export function unsupportedRide(s:string):boolean {
   return /\b(?:manana|pasado manana|programa(?:r|do)?|reserva(?:r|do)? para|a las? \d|(?:en|dentro de) (?:un|una|dos|tres|\d+) (?:horas?|minutos?)|para (?:hoy|esta noche|el lunes|el martes|el miercoles|el jueves|el viernes|el sabado|el domingo)|(?:2|3|4|dos|tres|cuatro) taxis|(?:[5-9]|cinco|seis|siete|ocho) (?:personas|pasajeros)|silla de ruedas|mascota|viaje redondo|ida y vuelta)\b/.test(normalize(s));
 }
+/** A polite service request is a question grammatically, not a hypothetical address. */
+function pickupServiceQuestion(clause:string):boolean {
+  return /^(?:[¿¡ ]*(?:hola|oye|buenas|bro|por favor|porfa)[,! . ]+)*[¿¡ ]*(?:(?:me|nos)\s+(?:(?:puedes?|podrias?)\s+)?(?:mandas?|envias?|mandar|enviar)|(?:puedes?|podrias?)\s+(?:mandar|enviar)(?:me|nos)?|(?:manda|envia)(?:me|nos))\s+(?:un\s+)?taxi\s+(?:a|al|en|hasta)\s+\S/.test(normalize(clause));
+}
 /** Each new field must cite the current message; history cannot authorize a new mutation. */
 export function parseInterpretation(raw:unknown,current:string):Interpretation {
   if(!record(raw)||Object.keys(raw).some((k)=>!['intent','fields'].includes(k))||!record(raw.fields))throw new TrackingError(502,'invalid_taxi_intent','No se pudo interpretar la solicitud con seguridad.');
@@ -53,6 +57,7 @@ export function parseInterpretation(raw:unknown,current:string):Interpretation {
     const marker=corrections[corrections.length-1];
     const correction=marker?n.slice((marker.index??0)+marker[0].length):null;
     const quoteQuestion=intent==='quote'&&/\b(?:cuanto (?:cuesta|sale|cobra|cobran)|que (?:precio|tarifa)|cual es (?:el precio|la tarifa))\b/.test(n);
+    const serviceQuestion=intent==='provide'&&pickupServiceQuestion(clause);
     const escaped=chosen.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
     const negated=new RegExp('\\bno\\s+(?:(?:en|a|al|de|desde|para|hacia|el|la|es|era|estoy|voy)\\s+)*'+escaped+'(?:\\b|$)').test(n);
     // A cropped citation from an earlier bubble cannot defeat a later correction.
@@ -63,7 +68,7 @@ export function parseInterpretation(raw:unknown,current:string):Interpretation {
       return key==='name'?/\b(?:nombre|me llamo|soy)\b/.test(m[0]):!new RegExp('\\b(?:'+other+')\\b').test(m[0]);
     });
     const alternative=key!=='name'&&/\s(?:o|u)\s/.test(n);
-    if(negated||alternative||laterCorrection||(/[?¿]/.test(clause)&&!quoteQuestion)||/\b(?:si pudiera|tal vez|quizas|a lo mejor|podria|si voy|no se si)\b/.test(n)||(/\bno\b/.test(n)&&(correction===null||!correction.includes(chosen)))||(correction!==null&&!correction.includes(chosen))||/\b(?:dijo|dice|ejemplo|supongamos)\b/.test(n))throw new TrackingError(502,'ambiguous_taxi_field','Hace falta aclarar el dato antes de cambiarlo.');
+    if(negated||alternative||laterCorrection||(/[?¿]/.test(clause)&&!quoteQuestion&&!serviceQuestion)||/\b(?:si pudiera|tal vez|quizas|a lo mejor|podria|si voy|no se si)\b/.test(n)||(/\bno\b/.test(n)&&(correction===null||!correction.includes(chosen)))||(correction!==null&&!correction.includes(chosen))||/\b(?:dijo|dice|ejemplo|supongamos)\b/.test(n))throw new TrackingError(502,'ambiguous_taxi_field','Hace falta aclarar el dato antes de cambiarlo.');
     if(key==='name'&&/\b(?:taxi|mandalo|confirmo|hola|si|no|origen|destino)\b/.test(chosen))throw new TrackingError(502,'invalid_taxi_name','Falta el nombre del pasajero.');
     fields[key]={value,evidence};
   }

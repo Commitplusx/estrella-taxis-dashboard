@@ -19,7 +19,7 @@ Deno.test('native location: greeting asks for pickup through a durable role with
 Deno.test('native location: pickup then destination pins advance different fields and require passenger name and confirmation',async()=>{
  const f=fixture(),first=await f.run(),s=session();s.draft=first.draft;
  const pickup=await f.run(s,{...message(''),type:'location',location:{lat:origin.lat,lng:origin.lng}});
- equal(pickup.draft.origin?.lat,origin.lat);equal(pickup.draft.destination,null);equal(pickup.messages[0].locationRequest,'destination');equal(pickup.draft.awaitingLocation,'destination');
+ equal(pickup.draft.origin?.lat,origin.lat);equal(pickup.draft.destination,null);equal(pickup.messages[0].locationRequest,undefined);equal(pickup.draft.awaitingLocation,'destination');
  s.draft=pickup.draft;const target=await f.run(s,{...message(''),type:'location',location:{lat:destination.lat,lng:destination.lng}});
  equal(target.draft.origin?.lat,origin.lat);equal(target.draft.destination?.lat,destination.lat);equal(target.reason,'missing_name');equal(target.draft.confirmation,null);equal(target.messages[0].locationRequest,undefined);equal(f.counts().assignments,0);
 });

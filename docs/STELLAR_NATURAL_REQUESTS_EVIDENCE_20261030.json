@@ -1,0 +1,102 @@
+{
+  "project": "izrsxygazsalfhpaualj",
+  "engineVersion": "taxi-bot-v5-natural-requests",
+  "migrations": [
+    {
+      "version": "20261030160813",
+      "name": "taxi_optional_fare"
+    },
+    {
+      "version": "20261030160814",
+      "name": "taxi_address_geocoding"
+    }
+  ],
+  "functions": [
+    {
+      "slug": "ycloud-webhook",
+      "version": 12,
+      "status": "ACTIVE"
+    },
+    {
+      "slug": "process-queue",
+      "version": 12,
+      "status": "ACTIVE"
+    }
+  ],
+  "verification": {
+    "sqlBodies": 2,
+    "runtimeSources": 38,
+    "authorized": 0,
+    "contacts": 33,
+    "units": 19,
+    "zones": 2541,
+    "zonesUnchanged": true,
+    "privateCache": true
+  },
+  "tests": {
+    "typedDeno": 4911,
+    "nodeSqlAndIntegration": 101,
+    "qualitySources": 79,
+    "finalLogSha256": "30438b54253c94b3079f028f23006354e9dd3b4f721eb403b6dcdd59de2ebcf6",
+    "realModel": {
+      "synthetic": true,
+      "training": false,
+      "blindAccuracyMeasured": false,
+      "results": [
+        {
+          "id": "polite-pickup",
+          "passed": true,
+          "intent": "provide",
+          "origin": "Calle Primera número 20",
+          "destination": null
+        },
+        {
+          "id": "colloquial-pickup",
+          "passed": true,
+          "intent": "provide",
+          "origin": "Calle Primera número 20",
+          "destination": null
+        },
+        {
+          "id": "explicit-destination",
+          "passed": true,
+          "intent": "provide",
+          "origin": null,
+          "destination": "Calle Segunda número 35"
+        },
+        {
+          "id": "quote-only",
+          "passed": true,
+          "intent": "quote",
+          "origin": "Centro",
+          "destination": "Terminal"
+        },
+        {
+          "id": "hypothetical",
+          "passed": true,
+          "intent": "ambiguous",
+          "origin": null,
+          "destination": null
+        }
+      ],
+      "passed": true
+    },
+    "providerSmoke": {
+      "syntheticPublicPlaces": true,
+      "results": [
+        {
+          "publicVenue": "Parque Central",
+          "http": 200,
+          "result": "ambiguous"
+        },
+        {
+          "publicVenue": "Hospital General de Comitán",
+          "http": 200,
+          "result": "ambiguous"
+        }
+      ]
+    }
+  },
+  "syntheticProbeRemoved": true,
+  "physicalWhatsAppTest": false
+}

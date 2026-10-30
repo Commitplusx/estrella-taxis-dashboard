@@ -8,7 +8,8 @@ import { record, text, coord, type Place, type TaxiChannel } from './contracts.t
 import type { TaxiServices, LocationResult } from './coordinator.ts';
 import { createTaxiInterpreter } from './interpreter.ts';
 import { taxiH3Scope } from './h3.ts';
-export function createTaxiServices(store:TrackingStore,fetcher:Fetcher,config:{mapsKey:string;modelKey:string;traccarUrl:string;traccarEmail:string;traccarPassword:string}):TaxiServices {
+import { resolveOsmAddress } from './addressGeocoder.ts';
+export function createTaxiServices(store:TrackingStore,fetcher:Fetcher,config:{mapsKey:string;modelKey:string;traccarUrl:string;traccarEmail:string;traccarPassword:string;geocoderUrl?:string}):TaxiServices {
   async function resolve(address:string,c:TaxiChannel,signal?:AbortSignal):Promise<LocationResult>{
     const gps=/^\s*(-?\d{1,3}(?:\.\d+)?)\s*,\s*(-?\d{1,3}(?:\.\d+)?)\s*$/.exec(address);
     if(gps&&coord(Number(gps[1]),Number(gps[2])))return {kind:'resolved',place:{text:address,lat:Number(gps[1]),lng:Number(gps[2]),placeId:null}};
@@ -20,7 +21,7 @@ export function createTaxiServices(store:TrackingStore,fetcher:Fetcher,config:{m
     const unique=known.filter((p,i,all)=>all.findIndex((q)=>q.lat===p.lat&&q.lng===p.lng)===i);
     if(unique.length>1)return {kind:'ambiguous',labels:unique.map((p)=>p.text)};
     if(unique.length===1)return {kind:'resolved',place:unique[0]};
-    if(!config.mapsKey)return {kind:'unavailable'};
+    if(!config.mapsKey)return config.geocoderUrl?resolveOsmAddress(address,c,store,fetcher,config.geocoderUrl,signal):{kind:'unavailable'};
     const query=new URLSearchParams({address:address+', '+c.city,language:'es',key:config.mapsKey});
     const data=(await requestJson(fetcher,'https://maps.googleapis.com/maps/api/geocode/json?'+query,{signal},8000,262144)).data;
     if(!record(data)||data.status!=='OK'||!Array.isArray(data.results)||data.results.length!==1)return {kind:'unavailable'};

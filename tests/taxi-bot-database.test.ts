@@ -32,7 +32,43 @@ const baseFleetSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migr
 const baseContactsSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261030135906_taxi_base_contacts.sql',import.meta.url),'utf8');
 const personAccountsSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261030180000_taxi_person_accounts.sql',import.meta.url),'utf8');
 const locationRequestSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261030190000_taxi_native_location_request.sql',import.meta.url),'utf8');
+const optionalFareSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261030200000_taxi_optional_fare.sql',import.meta.url),'utf8');
+const addressGeocodeSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261030201500_taxi_address_geocoding.sql',import.meta.url),'utf8');
 const tenant='11111111-1111-4111-8111-111111111111',other='22222222-2222-4222-8222-222222222222',waba='+529630000001',customer='+529630000002',driverPhone='+529630000003';
+test('optional fare SQL: a covered written route can dispatch without quoting, storing a fictitious zero or changing prices',async()=>{
+ const f=await fixture();try{
+  await f.seedH3();await f.prepare();await f.confirm();assert.equal(await f.scalar('SELECT count(*)::int FROM viajes'),1);
+  assert.equal(await f.scalar('SELECT bot_quote_cents FROM viajes'),null);assert.equal(await f.scalar('SELECT bot_quote_h3 FROM viajes'),null);
+ }finally{await f.db.close();}
+});
+test('optional fare SQL: unquoted mode still enforces channel, service coverage and absence of a hidden fare',async()=>{
+ const f=await fixture();try{
+  const validate=(d:unknown)=>f.scalar('SELECT taxi_bot_validate_quote($1,$2,$3)',[tenant,waba,d]);
+  await assert.rejects(validate({...f.draft,fareMode:'unquoted',quoteCents:1}),/cannot contain a fare/);
+  await assert.rejects(validate({...f.draft,fareMode:'invalid'}),/invalid taxi fare mode/);
+  await assert.rejects(validate({...f.draft,origin:{...f.draft.origin,lat:0,lng:0}}),/coverage changed/);
+  await f.db.exec('UPDATE taxi_bot_channels SET enabled=false');await assert.rejects(validate(f.draft),/channel unavailable/);
+ }finally{await f.db.close();}
+});
+test('OSM address SQL: cache claims, result reuse, tenant scope and lease ownership are durable',async()=>{
+ const f=await fixture();try{
+  const key='a'.repeat(64),lookup=(base=tenant,lease:unknown=null,result:unknown=null)=>f.scalar('SELECT taxi_bot_address_lookup($1,$2,$3,$4)',[base,key,lease,result]);
+  const first=f.obj(await lookup());assert.equal(first.state,'fetch');assert.equal(f.obj(await lookup()).state,'busy');
+  assert.equal(f.obj(await lookup(tenant,crypto.randomUUID(),{kind:'unavailable'})).state,'stale');
+  assert.equal(f.obj(await lookup(tenant,first.lease,{kind:'unavailable'})).state,'saved');assert.equal(f.obj(await lookup()).state,'cached');
+  assert.equal(f.obj(await lookup(other)).state,'fetch');assert.equal(await f.scalar("SELECT has_function_privilege('authenticated','taxi_bot_address_lookup(uuid,text,uuid,jsonb)','EXECUTE')"),false);
+ }finally{await f.db.close();}
+});
+test('OSM address SQL: concurrency, global quota and tenant cache size are explicitly bounded',async()=>{
+ const f=await fixture();try{
+  const lookup=(key:string)=>f.scalar('SELECT taxi_bot_address_lookup($1,$2,$3,$4)',[tenant,key,null,null]);
+  assert.equal(f.obj(await lookup('a'.repeat(64))).state,'fetch');assert.equal(f.obj(await lookup('b'.repeat(64))).state,'fetch');assert.equal(f.obj(await lookup('c'.repeat(64))).state,'limited');
+  await f.db.exec("UPDATE taxi_bot_address_cache SET lease_until=now()-interval '1 second'");assert.equal(f.obj(await lookup('c'.repeat(64))).state,'fetch');
+  await f.db.exec('UPDATE taxi_bot_address_budget SET requests=30');assert.equal(f.obj(await lookup('d'.repeat(64))).state,'limited');
+  await f.db.exec("UPDATE taxi_bot_address_budget SET requests=0;UPDATE taxi_bot_address_cache SET lease=NULL,lease_until=NULL;INSERT INTO taxi_bot_address_cache(tenant_id,query_hash,expires_at)SELECT '"+tenant+"',lpad(to_hex(n),64,'0'),now()+interval '1 day'FROM generate_series(1,500)n");
+  assert.equal(f.obj(await lookup('e'.repeat(64))).state,'limited');
+ }finally{await f.db.close();}
+});
 test('native location SQL: commit stores role and revision once; provider receives the actual persisted native request',async()=>{
  const f=await fixture();try{
   const e=await f.enqueue('Hola'),claim=await f.begin(e.eventId),d={...f.decision(),draft:{...emptyDraft(),awaitingLocation:'origin'},messages:[{to:customer,text:'¿Dónde te recogemos?',locationRequest:'origin'}]};
@@ -149,6 +185,8 @@ async function fixture(options:{legacy?:boolean;seedCoverageBeforeMigration?:boo
   await db.exec(h3CatalogSql);await db.exec(sql);await db.query("INSERT INTO taxi_bot_channels(tenant_id,waba,enabled,name,city,center_lat,center_lng,radius_km,dispatcher)VALUES($1,$2,true,'Base de prueba','Comitán',16.25,-92.13,20,$3)",[tenant,waba,'+529630000099']);await db.exec(h3PricingSql);await db.exec(adminSql);await db.exec(traceSql);
   await db.exec(accessSql);
   await db.exec(locationRequestSql);
+  await db.exec(addressGeocodeSql);
+  // Base-owned zone validation is installed below; optional fares extend that current validator.
   await db.exec(mapCacheSql);
   await db.exec(driverSetupSql);
   if(options.seedCoverageBeforeMigration){
@@ -159,6 +197,7 @@ async function fixture(options:{legacy?:boolean;seedCoverageBeforeMigration?:boo
   if(!options.legacy){await db.exec(baseZonesSql);await db.exec(baseFleetSql);await db.exec(baseContactsSql);
     await db.exec("CREATE TABLE perfiles(traccar_user_id integer PRIMARY KEY CHECK(traccar_user_id>0),empresa_id uuid REFERENCES empresas(id),rol text CHECK(rol IN('superadmin','admin_empresa','operador')),created_at timestamptz DEFAULT now())");
     await db.exec(personAccountsSql);
+    await db.exec(optionalFareSql);
   }
   // These legacy protocol fixtures explicitly act as customers too. Driver-only access has separate tests below.
   await db.query('INSERT INTO taxi_bot_allowed_customers(tenant_id,phone)VALUES($1,$2),($1,$3),($1,$4)',[tenant,customer,driverPhone,'+529630000004']);
@@ -611,12 +650,12 @@ test('taxi H3 SQL: quote and bindings are private and a disabled or distance-pri
 test('taxi H3 SQL: changing a shown price before commit rolls back the trip and every side effect',async()=>{
   const f=await fixture();try{
     const scope=await f.seedH3(),e=await f.enqueue('Resumen H3'),claim=await f.begin(e.eventId);
-    await f.commit(e.eventId,claim,{...f.decision(),draft:{...f.draft,quoteCents:6500,quoteH3:scope}});
+    await f.commit(e.eventId,claim,{...f.decision(),draft:{...f.draft,fareMode:'quoted',quoteCents:6500,quoteH3:scope}});
     const confirm=await f.enqueue('Sí'),cc=await f.begin(confirm.eventId);
     await f.db.query('UPDATE taxi_bot_base_zones SET price_cents=7500 WHERE h3_index=$1',[scope.destinationCell]);
     await assert.rejects(f.commit(confirm.eventId,cc,{...f.decision('confirm'),confirmation:f.draft.confirmation,candidates:[{deviceId:1,name:'Unidad 1'}]}),/tariff changed/);
     assert.equal(await f.scalar('SELECT count(*)::int FROM viajes'),0);assert.equal(await f.scalar('SELECT count(*)::int FROM taxi_bot_offers'),0);assert.equal(await f.scalar('SELECT count(*)::int FROM taxi_bot_outbox'),0);
-    await f.commit(confirm.eventId,cc,{...f.decision(),draft:{...f.draft,quoteCents:7500,quoteH3:scope,confirmation:crypto.randomUUID()}});
+    await f.commit(confirm.eventId,cc,{...f.decision(),draft:{...f.draft,fareMode:'quoted',quoteCents:7500,quoteH3:scope,confirmation:crypto.randomUUID()}});
     const next=await f.enqueue('Sí'),nc=await f.begin(next.eventId),stored=parseSession(nc.session);
     await f.commit(next.eventId,nc,{...f.decision('confirm'),confirmation:stored.draft.confirmation,candidates:[{deviceId:1,name:'Unidad 1'}]});
     assert.equal(await f.scalar('SELECT bot_quote_cents FROM viajes'),7500);assert.equal(await f.scalar('SELECT count(*)::int FROM viajes'),1);
@@ -625,20 +664,22 @@ test('taxi H3 SQL: changing a shown price before commit rolls back the trip and 
 
 test('taxi H3 SQL: complete legacy consent without H3 scope cannot bypass the new review',async()=>{
   const f=await fixture();try{
-    await f.seedH3();await f.prepare();await assert.rejects(f.confirm(),/H3 review required/);assert.equal(await f.scalar('SELECT count(*)::int FROM viajes'),0);
+    await f.seedH3();const {fareMode:legacyMode,...legacyDraft}=f.draft;assert.equal(legacyMode,'unquoted');
+    const e=await f.enqueue('Datos de una revisión anterior'),c=await f.begin(e.eventId);await f.commit(e.eventId,c,{...f.decision(),draft:legacyDraft});
+    await assert.rejects(f.confirm(),/H3 review required/);assert.equal(await f.scalar('SELECT count(*)::int FROM viajes'),0);
   }finally{await f.db.close();}
 });
 
 test('taxi H3 integration: real service quote → current summary → recheck → SQL commit keeps the exact amount',async()=>{
   const f=await fixture();try{
-    const scope=await f.seedH3(),event=await f.enqueue('Soy Persona Prueba, de Centro a Terminal'),claim=await f.begin(event.eventId);
+    const scope=await f.seedH3(),event=await f.enqueue('Soy Persona Prueba, de Centro a Terminal, cuánto cuesta'),claim=await f.begin(event.eventId);
     const channel:TaxiChannel={tenantId:tenant,waba,enabled:true,name:'Base sintética',city:'Comitán',centerLat:16.25,centerLng:-92.13,radiusKm:20,dispatcher:'+529630000099',model:'fixture',baseCents:null,perKmCents:null,pricingMode:'h3_zone_max'};
     const store:TrackingStore={writePackages:denyAdminWrite,writeCompanyPackage:denyAdminWrite,writeCompanyStatus:denyAdminWrite,read:async()=>{throw new Error('Undeclared catalog read.');},writeScores:async()=>{throw new Error('No score writes.');},rpc:async(name,args)=>{
       assert.equal(name,'taxi_bot_h3_quote');return f.scalar('SELECT taxi_bot_h3_quote($1,$2,$3,$4)',[args.p_tenant,args.p_waba,args.p_origin,args.p_destination]);
     }};
     const noProvider:Fetcher=async()=>{throw new Error('No Maps/model call is declared for this deterministic fixture.');};
     const services=createTaxiServices(store,noProvider,{mapsKey:'',modelKey:'',traccarUrl:'https://tracking.test/api',traccarEmail:'fixture@example.invalid',traccarPassword:'not-a-real-password'});
-    const current='Soy Persona Prueba, de Centro a Terminal';services.interpret=async(text)=>{assert.equal(text,current);return parseInterpretation({intent:'provide',fields:{name:{value:'Persona Prueba',evidence:current},origin:{value:'Centro',evidence:current},destination:{value:'Terminal',evidence:current}}},text);};
+    const current='Soy Persona Prueba, de Centro a Terminal, cuánto cuesta';services.interpret=async(text)=>{assert.equal(text,current);return parseInterpretation({intent:'quote',fields:{name:{value:'Persona Prueba',evidence:current},origin:{value:'Centro',evidence:current},destination:{value:'Terminal',evidence:current}}},text);};
     services.resolve=async(text)=>{assert.ok(text==='Centro'||text==='Terminal');return{kind:'resolved',place:text==='Centro'?f.draft.origin:f.draft.destination};};
     services.candidates=async()=>[{deviceId:1,name:'Unidad 1'}];
     const inbound:TaxiInbound={id:crypto.randomUUID(),from:customer,to:waba,at:new Date().toISOString(),type:'text',text:current,button:null,location:null};
@@ -806,7 +847,7 @@ test('taxi end-to-end: signed webhook → durable queue → real tool decoder �
       await f.db.exec("UPDATE taxi_bot_events SET received_at=clock_timestamp()-interval '2 seconds'WHERE state='pending'");return{raw,hash,timestamp,id};
     }
     const initial=await inbound(current);await engine.tick();assert.equal(modelCalls,1);assert.equal(await f.scalar('SELECT count(*)::int FROM viajes'),0);
-    assert.equal(await f.scalar("SELECT meta->>'engineVersion'FROM taxi_bot_turn_traces LIMIT 1"),'taxi-bot-v4-native-location');
+    assert.equal(await f.scalar("SELECT meta->>'engineVersion'FROM taxi_bot_turn_traces LIMIT 1"),'taxi-bot-v5-natural-requests');
     assert.equal(await f.scalar("SELECT meta->>'promptHash'FROM taxi_bot_turn_traces LIMIT 1"),await fingerprint(TAXI_INTERPRETER_CONTRACT));
     const summary=f.obj(await f.scalar('SELECT draft FROM taxi_bot_sessions WHERE customer=$1',[customer]));assert.ok(summary.confirmation);
     await engine.inbound(initial.raw,`t=${initial.timestamp},s=${initial.hash}`);await engine.tick();assert.equal(modelCalls,1);
@@ -854,7 +895,7 @@ test('taxi admin SQL: channel assignment is retired, shared base edits preserve 
 
 test('taxi admin SQL: a coverage change between review and commit rolls back trip, offers and notifications',async()=>{
   const f=await fixture();try{
-    const scope=await f.seedH3();Object.assign(f.draft,{quoteCents:6500,quoteH3:scope});await f.prepare();
+    const scope=await f.seedH3();Object.assign(f.draft,{fareMode:'quoted',quoteCents:6500,quoteH3:scope});await f.prepare();
     const e=await f.enqueue('Sí'),claim=await f.begin(e.eventId),before=await f.scalar('SELECT count(*)::int FROM taxi_bot_outbox');
     const payload={name:'Base de prueba',city:'Comitán',dispatcher:'+529630000099',centerLat:16.25,centerLng:-92.13,radiusKm:0.1,pricingMode:'h3_zone_max',baseCents:null,perKmCents:null,enabled:true};
     assert.equal((await f.admin('configure',payload)).state,'saved');

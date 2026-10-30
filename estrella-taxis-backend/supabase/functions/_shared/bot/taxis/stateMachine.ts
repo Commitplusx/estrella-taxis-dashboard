@@ -62,6 +62,7 @@ export function assertTaxiTransition(
     !messages.length || d.messages.length > 3 ||
     d.messages.some((m) => m.to !== messages.at(-1)?.from)
   ) fail();
+  if(d.draft.fareMode==='unquoted'&&(d.draft.quoteCents!==null||d.draft.quoteH3!==null))fail();
   if (d.messages.some((m) => m.locationRequest && (
     d.action !== 'draft' || s.mode !== 'bot' ||
     (s.active && ['buscando_conductor', 'en_camino'].includes(s.active.state)) ||
@@ -107,7 +108,7 @@ export function assertTaxiTransition(
     ) fail();
     if (Date.parse(d.draft.expiresAt ?? "") > now + 11 * 60000) fail();
     const changed =
-      (["name", "origin", "destination", "quoteCents", "quoteH3"] as const)
+      (["name", "origin", "destination", "quoteCents", "quoteH3", "fareMode"] as const)
         .some((key) =>
           JSON.stringify(s.draft[key]) !== JSON.stringify(d.draft[key])
         );

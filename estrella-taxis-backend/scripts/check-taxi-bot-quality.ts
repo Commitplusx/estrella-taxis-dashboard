@@ -9,6 +9,8 @@ files.push(...['tests/taxi-bot-trace.test.ts','tests/taxi-bot-quality.test.ts','
 files.push(...['src/lib/taxiQualityClient.ts','src/components/TaxiQualityPanel.tsx','estrella-taxis-backend/supabase/functions/_shared/bot/taxis/qualityContracts.ts'].map((file)=>resolve(root,file)));
 const failures:string[]=[];
 files.push(resolve(root,'tests/taxi-native-location.test.ts'));
+files.push(resolve(root,'tests/taxi-natural-flow.test.ts'));
+files.push(resolve(root,'tests/taxi-address-geocoder.test.ts'),resolve(taxi,'addressGeocoder.ts'));
 files.push(resolve(root,'src/pages/DriversPage.tsx'));
 files.push(...['src/pages/UsersPage.tsx','src/lib/taxiAccountClient.ts','tests/taxi-accounts.test.ts','estrella-taxis-backend/supabase/functions/taxi-bot-admin/accounts.ts'].map(file=>resolve(root,file)));
 files.push(resolve(root,'tests/taxi-customer-access.test.ts'));

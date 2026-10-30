@@ -1,7 +1,7 @@
 import { record, TrackingError, positiveId } from '../../tracking/contracts.ts';
 import { taxiH3Cell, type H3QuoteScope } from './h3.ts';
 export { record };
-export const TAXI_BOT_VERSION='taxi-bot-v4-native-location';
+export const TAXI_BOT_VERSION='taxi-bot-v5-natural-requests';
 export interface TaxiChannel {
   tenantId:string; waba:string; enabled:boolean; name:string; city:string;
   centerLat:number; centerLng:number; radiusKm:number; dispatcher:string|null;
@@ -10,6 +10,7 @@ export interface TaxiChannel {
 export interface Place {text:string;lat:number;lng:number;placeId:string|null}
 export interface PendingLocation {place:Place;expiresAt:string}
 export interface Draft {
+  fareMode:'quoted'|'unquoted';
   name:string|null;origin:Place|null;destination:Place|null;quoteCents:number|null;confirmation:string|null;expiresAt:string|null;
   awaitingLocation:'origin'|'destination'|'choice'|null;pendingLocation:PendingLocation|null;
   quoteH3:H3QuoteScope|null;
@@ -43,7 +44,7 @@ export function text(value:unknown,max=500):string|null {
 export function coord(lat:unknown,lng:unknown):lat is number {
   return typeof lat==='number' && typeof lng==='number' && Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat)<=90 && Math.abs(lng)<=180 && !(lat===0 && lng===0);
 }
-export function emptyDraft():Draft{return {name:null,origin:null,destination:null,quoteCents:null,confirmation:null,expiresAt:null,awaitingLocation:null,pendingLocation:null,quoteH3:null};}
+export function emptyDraft():Draft{return {fareMode:'unquoted',name:null,origin:null,destination:null,quoteCents:null,confirmation:null,expiresAt:null,awaitingLocation:null,pendingLocation:null,quoteH3:null};}
 export function parsePlace(value:unknown):Place|null {
   if(!record(value)||!text(value.text,400)||!coord(value.lat,value.lng)||typeof value.lng!=='number'||!(value.placeId===null||typeof value.placeId==='string'))return null;
   return {text:String(value.text),lat:value.lat,lng:value.lng,placeId:value.placeId};
@@ -72,6 +73,9 @@ export function parseStoredInbound(m:unknown,now:number):TaxiInbound {
 export function parseSession(value:unknown):TaxiSession {
   if(!record(value)||!Number.isSafeInteger(value.revision)||typeof value.revision!=='number'||value.revision<0||!['bot','human'].includes(String(value.mode))||!record(value.draft)||!Array.isArray(value.history)||value.history.length>12)throw new TrackingError(502,'invalid_taxi_session','La conversación no tiene un estado válido.');
   const d=value.draft;
+  // A previously presented summary keeps its fare agreement; empty legacy drafts start unquoted.
+  const fareMode=d.fareMode??(d.confirmation!==null||d.quoteCents!==null||d.quoteH3!=null?'quoted':'unquoted');
+  if(fareMode!=='quoted'&&fareMode!=='unquoted'||fareMode==='unquoted'&&(d.quoteCents!==null||d.quoteH3!=null))throw new TrackingError(502,'invalid_taxi_fare_mode','El modo de tarifa no corresponde al viaje guardado.');
   const history:History[]=value.history.map((h)=>{if(!record(h)||!['user','assistant'].includes(String(h.role))||!text(h.content,3000))throw new TrackingError(502,'invalid_taxi_history','Historial no válido.');return {role:h.role==='user'?'user':'assistant',content:String(h.content)};});
   if(!(d.name===null||text(d.name,80))||!(d.confirmation===null||text(d.confirmation,64))||!(d.expiresAt===null||(typeof d.expiresAt==='string'&&Number.isFinite(Date.parse(d.expiresAt))))||!(d.quoteCents===null||(Number.isSafeInteger(d.quoteCents)&&typeof d.quoteCents==='number'&&d.quoteCents>=0&&d.quoteCents<=10000000)))throw new TrackingError(502,'invalid_taxi_draft','El borrador no tiene un formato válido.');
   const origin=d.origin===null?null:parsePlace(d.origin),destination=d.destination===null?null:parsePlace(d.destination);
@@ -96,7 +100,7 @@ export function parseSession(value:unknown):TaxiSession {
   if(value.active!==null) {const a=value.active;if(!record(a)||!text(a.id,40)||!['buscando_conductor','en_camino','completado','cancelado','cancelado_timeout'].includes(String(a.state))||!(a.taxiName===null||text(a.taxiName,120)))throw new TrackingError(502,'invalid_taxi_trip','El viaje guardado no es válido.');
     const state=a.state;if(state==='buscando_conductor'||state==='en_camino'||state==='completado'||state==='cancelado'||state==='cancelado_timeout')active={id:String(a.id),state,taxiName:a.taxiName===null?null:String(a.taxiName)};
   }
-  return {revision:value.revision,mode:value.mode==='human'?'human':'bot',draft:{name:d.name===null?null:String(d.name),origin,destination,quoteCents:d.quoteCents===null?null:Number(d.quoteCents),confirmation:d.confirmation===null?null:String(d.confirmation),expiresAt:d.expiresAt===null?null:String(d.expiresAt),awaitingLocation,pendingLocation,quoteH3},active,history};
+  return {revision:value.revision,mode:value.mode==='human'?'human':'bot',draft:{fareMode,name:d.name===null?null:String(d.name),origin,destination,quoteCents:d.quoteCents===null?null:Number(d.quoteCents),confirmation:d.confirmation===null?null:String(d.confirmation),expiresAt:d.expiresAt===null?null:String(d.expiresAt),awaitingLocation,pendingLocation,quoteH3},active,history};
 }
 export function parseCandidates(raw:unknown):Candidate[] {
   if(!Array.isArray(raw)||raw.length>3)throw new TrackingError(502,'invalid_taxi_candidates','La selección de unidades no es válida.');
