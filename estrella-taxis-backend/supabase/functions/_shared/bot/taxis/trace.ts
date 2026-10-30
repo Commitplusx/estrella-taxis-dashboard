@@ -106,6 +106,7 @@ export class TaxiTurnTrace {
   }
   services(base: TaxiServices): TaxiServices {
     return {
+      ...(base.question?{question:base.question}:{}),
       interpret: async (text, session, channel, signal) => {
         let model: ModelMetadata | undefined;
         try {
@@ -134,11 +135,11 @@ export class TaxiTurnTrace {
         try{return await this.run('resolve',{text,area},()=>base.resolve(text,channel,signal,area,value=>{model=value;}),value=>({resolution:value.kind}));}
         finally{const step=this.steps.at(-1);if(step?.phase==='resolve'&&model)step.model=model;}
       },
-      quote: (origin, destination, channel, signal) =>
+      quote: (origin, destination, channel, signal, destinationArea) =>
         this.run(
           "quote",
           { origin, destination, mode: channel.pricingMode },
-          () => base.quote(origin, destination, channel, signal),
+          () => base.quote(origin, destination, channel, signal, destinationArea),
           (value) => ({ amountCents: value }),
         ),
       candidates: (origin, channel, signal) =>

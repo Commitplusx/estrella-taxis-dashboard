@@ -9,13 +9,13 @@ const equal=(a:unknown,b:unknown)=>assert(JSON.stringify(a)===JSON.stringify(b),
 const now=Date.parse('2026-10-27T18:00:00Z'),customer='+529630000002',waba='+529630000001';
 const channel:TaxiChannel={tenantId:'11111111-1111-4111-8111-111111111111',waba,enabled:true,name:'Base de prueba',city:'Comitán',centerLat:16.25,centerLng:-92.13,radiusKm:20,dispatcher:'+529630000099',model:'fixture-model',baseCents:null,perKmCents:null,pricingMode:'road_distance'};
 const message=(text:string):TaxiInbound=>({id:crypto.randomUUID(),from:customer,to:waba,at:new Date(now).toISOString(),type:'text',text,button:null,location:null});
-function session(complete=false):TaxiSession{return {revision:1,mode:'bot',active:null,history:[],draft:complete?{...emptyDraft(),name:'Persona Prueba',origin:{text:'Centro',lat:16.25,lng:-92.13,placeId:null},destination:{text:'Terminal',lat:16.26,lng:-92.14,placeId:null},quoteCents:null,confirmation:'11111111-1111-4111-8111-111111111111',expiresAt:new Date(now+600000).toISOString()}:emptyDraft()};}
+function session(complete=false):TaxiSession{return {revision:1,mode:'bot',active:null,history:[],draft:complete?{...emptyDraft(),fareMode:'quoted',pickupMessageId:'fixture-native',name:'Persona Prueba',origin:{text:'Centro',lat:16.25,lng:-92.13,placeId:null,source:'gps'},destination:{text:'Terminal',lat:16.26,lng:-92.14,placeId:null},quoteCents:6500,confirmation:'11111111-1111-4111-8111-111111111111',expiresAt:new Date(now+600000).toISOString()}:emptyDraft()};}
 function fixture(proposal:unknown={intent:'smalltalk',fields:{}}){
   let calls=0,candidateCalls=0;
   const services:TaxiServices={
     interpret:async(text)=>{calls++;return parseInterpretation(proposal,text);},
     resolve:async(text)=>text==='Centro'?{kind:'resolved',place:{text,lat:16.25,lng:-92.13,placeId:null}}:text==='Terminal'?{kind:'resolved',place:{text,lat:16.26,lng:-92.14,placeId:null}}:{kind:'ambiguous',labels:['No definido']},
-    quote:async()=>null,candidates:async()=>{candidateCalls++;return [{deviceId:1,name:'Unidad 1'}];}
+    quote:async()=>6500,candidates:async()=>{candidateCalls++;return [{deviceId:1,name:'Unidad 1'}];}
   };return {services,calls:()=>({calls,candidateCalls}),run:(text:string,s=session())=>coordinateTaxi([message(text)],s,channel,services,now)};
 }
 for(const text of ['¿Sí?','si cuesta menos de 100 mándalo','Sí, pero mejor a la terminal','no lo mandes','tal vez','dijo "sí"','si...','sí, mañana','confirma y cambia el origen'])Deno.test('taxi confirmation does not authorize: '+text,()=>equal(confirmsTaxi(text),false));
@@ -31,20 +31,20 @@ Deno.test('taxi interpretation cannot crop negation, conditional, quote or later
   }
   equal(parseInterpretation({intent:'provide',fields:{origin:{value:'Terminal',evidence:'No Centro, mejor Terminal'}}},'No Centro, mejor Terminal').fields.origin?.value,'Terminal');
 });
-Deno.test('price-only request prepares a summary and never dispatches a unit',async()=>{
+Deno.test('written price request preserves the route but still needs pickup GPS',async()=>{
   const current='Soy Persona Prueba, de Centro a Terminal, cuánto cuesta';
   const f=fixture({intent:'quote',fields:{name:{value:'Persona Prueba',evidence:current},origin:{value:'Centro',evidence:current},destination:{value:'Terminal',evidence:current}}});
-  const d=await f.run(current);equal(d.action,'draft');equal(d.draft.quoteCents,null);equal(f.calls().candidateCalls,0);assert(d.messages[0]?.text.includes('todavía no hay un precio acordado'));assert(d.draft.confirmation);
+  const d=await f.run(current);equal(d.action,'draft');equal(d.draft.quoteCents,null);equal(f.calls().candidateCalls,0);equal(d.draft.pickupText,'Centro');equal(d.draft.confirmation,null);equal(d.messages[0].locationRequest,'origin');
 });
 Deno.test('a price question with explicit locations can be quoted without a name or a booking',async()=>{
   const current='¿Cuánto cuesta ir de Centro a Terminal?';const f=fixture({intent:'quote',fields:{origin:{value:'Centro',evidence:current},destination:{value:'Terminal',evidence:current}}});
-  f.services.quote=async()=>6500;const d=await f.run(current);equal(d.action,'draft');equal(d.draft.confirmation,null);assert(d.messages[0]?.text.includes('$65.00'));equal(f.calls().candidateCalls,0);
+  f.services.quote=async()=>6500;const d=await f.run(current);equal(d.action,'draft');equal(d.draft.confirmation,null);equal(d.messages[0].locationRequest,'origin');equal(d.draft.destination?.text,'Terminal');equal(f.calls().candidateCalls,0);
 });
 Deno.test('a complete ride still needs a current passenger confirmation',async()=>{
   const current='Soy Persona Prueba, de Centro a Terminal';
   const f=fixture({intent:'provide',fields:{name:{value:'Persona Prueba',evidence:current},origin:{value:'Centro',evidence:current},destination:{value:'Terminal',evidence:current}}});
   const d=await f.run(current);equal(d.action,'draft');equal(d.candidates.length,0);equal(f.calls().candidateCalls,0);
-  const s=session(true);s.draft=d.draft;const confirmed=await f.run('Sí, por favor',s);equal(confirmed.action,'confirm');equal(confirmed.confirmation,d.draft.confirmation);equal(f.calls().candidateCalls,1);
+  const s=session(true);const button={...message(''),type:'button' as const,button:'txc_'+s.draft.confirmation};const confirmed=await coordinateTaxi([button],s,channel,f.services,now);equal(confirmed.action,'confirm');equal(confirmed.confirmation,s.draft.confirmation);equal(f.calls().candidateCalls,1);
 });
 Deno.test('a correction replaces the field and invalidates every previous summary token',async()=>{
   const f=fixture({intent:'provide',fields:{destination:{value:'Centro',evidence:'Mejor Centro'}}});const s=session(true);s.draft.origin={text:'Otra calle',lat:16.27,lng:-92.15,placeId:null};
@@ -52,7 +52,7 @@ Deno.test('a correction replaces the field and invalidates every previous summar
 });
 Deno.test('an ambiguous address clears only its target and never keeps an old confirmed location',async()=>{
   const f=fixture({intent:'provide',fields:{destination:{value:'La terminal',evidence:'Mejor La terminal'}}});const s=session(true),d=await f.run('Mejor La terminal',s);
-  equal(d.action,'draft');equal(d.draft.destination,null);equal(d.draft.origin,s.draft.origin);equal(d.draft.confirmation,null);equal(f.calls().candidateCalls,0);
+  equal(d.action,'draft');equal(d.draft.destination,null);equal(d.draft.destinationText,'La terminal');equal(d.draft.origin,s.draft.origin);assert(d.draft.confirmation!==s.draft.confirmation);equal(f.calls().candidateCalls,0);
 });
 Deno.test('stale buttons and a confirmation beside a correction never dispatch',async()=>{
   const f=fixture();const s=session(true),m=message('');m.type='button';m.button='txc_22222222-2222-4222-8222-222222222222';
@@ -69,7 +69,7 @@ Deno.test('a live ride returns persisted status without requesting a second taxi
 Deno.test('taxi messages use friendly emojis only for their conversational state',async()=>{
   const greeting=await fixture().run('Hola');assert(/😊/.test(greeting.messages[0]?.text??''));assert(/🚕/.test(greeting.messages[0]?.text??''));
   const current='Soy Persona Prueba, de Centro a Terminal';
-  const summary=await fixture({intent:'provide',fields:{name:{value:'Persona Prueba',evidence:current},origin:{value:'Centro',evidence:current},destination:{value:'Terminal',evidence:current}}}).run(current);
+  const summary=await fixture().run('Sí',session(true));
   assert(/^🚕 ¿Así queda tu viaje\?/.test(summary.messages[0]?.text??''));equal(summary.messages[0]?.buttons?.[0]?.title,'Confirmar viaje');
   const active=session(true);active.active={id:crypto.randomUUID(),state:'buscando_conductor',taxiName:null};assert(/^🚕/.test((await fixture().run('¿Cómo va?',active)).messages[0]?.text??''));
   assert(/😊/.test((await fixture().run('Gracias')).messages[0]?.text??''));
@@ -85,7 +85,7 @@ Deno.test('human ownership suppresses model and automated replies',async()=>{con
 Deno.test('model failure preserves fields and invalidates the confirmation',async()=>{
   const f=fixture();f.services.interpret=async()=>{throw new Error('fixture failure');};const s=session(true),d=await f.run('Mejor recoge en otra calle',s);equal(d.action,'draft');equal(d.draft.origin,s.draft.origin);equal(d.draft.confirmation,null);equal(f.calls().candidateCalls,0);
 });
-Deno.test('fleet failure is a human review, never a fictitious booking success',async()=>{const f=fixture();f.services.candidates=async()=>{throw new Error('fixture fleet failure');};const d=await f.run('Sí',session(true));equal(d.action,'human');assert(!d.messages[0].text.includes('registrada'));});
+Deno.test('fleet failure is a human review, never a fictitious booking success',async()=>{const f=fixture();f.services.candidates=async()=>{throw new Error('fixture fleet failure');};const s=session(true);const d=await coordinateTaxi([{...message(''),type:'button',button:'txc_'+s.draft.confirmation}],s,channel,f.services,now);equal(d.action,'human');assert(!d.messages[0].text.includes('registrada'));});
 Deno.test('native inbound requires a stable provider identity, valid sender and source timestamp',()=>{
   const raw={createTime:new Date(now).toISOString(),whatsappInboundMessage:{id:'fixture-id',from:customer,to:waba,type:'location',location:{latitude:16.25,longitude:-92.13}}};
   equal(parseInbound(raw,now)?.location,{lat:16.25,lng:-92.13});let rejected=false;try{parseInbound({...raw,whatsappInboundMessage:{...raw.whatsappInboundMessage,id:''}},now);}catch{rejected=true;}assert(rejected);

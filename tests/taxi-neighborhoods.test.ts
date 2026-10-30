@@ -79,8 +79,8 @@ Deno.test('locality fare requires a known tariff and GPS fares remain H3-only',a
 Deno.test('neighborhood coordinator asks street before quote or dispatch and lets a native pin replace the text zone',async()=>{
  const actual=createTaxiServices(store(),deny,config);let candidates=0;
  const services:TaxiServices={...actual,interpret:async current=>({intent:'provide',fields:{origin:{value:current,evidence:current}}}),candidates:async()=>{candidates++;return[];}};
- const first=await coordinateTaxi([message('El Piedrón')],session(),channel,services,now);equal(first.reason,'neighborhood_reference_required');equal(first.draft.origin,null);assert(first.draft.originArea);equal(candidates,0);equal(first.draft.confirmation,null);
- const state={...session(),draft:first.draft};services.interpret=async()=>({intent:'provide',fields:{}});
+ const first=await coordinateTaxi([message('El Piedrón')],session(),channel,services,now);equal(first.messages[0].locationRequest,'origin');equal(first.draft.origin,null);equal(first.draft.pickupText,'El Piedrón');equal(candidates,0);equal(first.draft.confirmation,null);
+ const state={...session(),draft:first.draft};services.interpret=async()=>({intent:'provide',fields:{}});services.quote=async()=>5500;
  const pin=await coordinateTaxi([{...message(''),type:'location',location:{lat:16.251,lng:-92.131}}],state,channel,services,now);assert(pin.draft.origin);equal(pin.draft.origin.source,'gps');equal(pin.draft.origin.area,undefined);equal(pin.draft.originArea,null);
 });
 Deno.test('a selected locality retains its category and tariff revision through a quote review',async()=>{
@@ -88,7 +88,7 @@ Deno.test('a selected locality retains its category and tariff revision through 
  const typed={text:'Calle Principal, El Piedrón. '+locality.reference,lat,lng,placeId:null,source:'locality' as const,area:{...locality,cell,reference:locality.reference}};
  s.draft={...emptyDraft(),name:'Mariana',origin:typed,destination:{text:'Destino',lat:16.26,lng:-92.14,placeId:null,source:'gps'},confirmation:crypto.randomUUID(),expiresAt:new Date(now+600000).toISOString()};
  let candidates=0;const actual=createTaxiServices(store(),deny,config),services:TaxiServices={...actual,resolve:async()=>({kind:'resolved',place:{...typed,area:{...typed.area,version:'b'.repeat(32)}}}),candidates:async()=>{candidates++;return[];}};
- const result=await coordinateTaxi([message('Sí, mándalo')],s,channel,services,now);equal(result.action,'draft');equal(result.reason,'neighborhood_changed');assert(result.draft.confirmation!==s.draft.confirmation);equal(candidates,0);
+ const result=await coordinateTaxi([message('Sí, mándalo')],s,channel,services,now);equal(result.action,'draft');equal(result.reason,'pickup_gps_required');equal(result.draft.confirmation,null);equal(candidates,0);
  await rejects(()=>parseSession({...s,draft:{...s.draft,originArea:representativeArea(row)}}));
 });
 Deno.test('neighborhood trace records semantic usage without customer text',async()=>{

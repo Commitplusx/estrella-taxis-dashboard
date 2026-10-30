@@ -14,19 +14,20 @@ function fixture(proposal:unknown){let quotes=0,assignments=0;
 }
 for(const current of [`¿Me mandas un taxi a ${address}?`,`Oye bro, ¿me puedes mandar un taxi a ${address}?`,`¿Puedes mandarme un taxi a ${address}?`])Deno.test('natural taxi request: accepts the written pickup in a polite service question: '+current,async()=>{
  const f=fixture({intent:'provide',fields:{origin:{value:address,evidence:current}}}),d=await f.run(current);
- equal(d.draft.origin,pickup);equal(d.draft.destination,null);equal(d.reason,'missing_destination');equal(d.messages[0].locationRequest,undefined);equal(f.counts(),{quotes:0,assignments:0});
+ equal(d.draft.origin,null);equal(d.draft.pickupText,address);equal(d.draft.destination,null);equal(d.messages[0].locationRequest,'origin');equal(f.counts(),{quotes:0,assignments:0});
 });
-Deno.test('natural taxi request: a complete written route can be requested without a fare or a location pin',async()=>{
+Deno.test('natural taxi request: complete written route is retained until the pickup GPS and a verified fare arrive',async()=>{
  const current=`Soy Mariana. Recógeme en ${address}. Voy a ${destination}.`;
  const f=fixture({intent:'provide',fields:{name:{value:'Mariana',evidence:'Soy Mariana'},origin:{value:address,evidence:`Recógeme en ${address}`},destination:{value:destination,evidence:`Voy a ${destination}`}}});
- f.services.quote=async()=>{throw new Error('An optional price must not be requested.');};
- const d=await f.run(current);equal(d.action,'draft');assert(d.draft.confirmation);equal(d.draft.quoteCents,null);assert(!d.messages[0].text.includes('Tarifa'));equal(d.messages[0].locationRequest,undefined);
- const s=session();s.draft=d.draft;const confirmed=await f.run('Sí, mándalo',s);equal(confirmed.action,'confirm');equal(f.counts().assignments,1);
+ const d=await f.run(current);equal(d.action,'draft');equal(d.draft.confirmation,null);equal(d.draft.pickupText,address);equal(d.draft.destination?.text,destination);equal(d.messages[0].locationRequest,'origin');
+ const s=session();s.draft=d.draft;const reviewed=await coordinateTaxi([{...message(''),type:'location',location:{lat:16.25,lng:-92.13}}],s,channel,f.services,now);assert(reviewed.draft.confirmation);equal(reviewed.draft.quoteCents,6500);
+ s.draft=reviewed.draft;const assent=await f.run('Sí, mándalo',s);equal(assent.action,'draft');equal(f.counts().assignments,0);
+ s.draft=assent.draft;const confirmed=await coordinateTaxi([{...message(''),type:'button',button:'txc_'+s.draft.confirmation}],s,channel,f.services,now);equal(confirmed.action,'confirm');equal(f.counts().assignments,1);
 });
 Deno.test('natural taxi request: an explicit fare question still uses server H3 pricing and never books',async()=>{
  const current=`¿Cuánto cuesta ir de ${address} a ${destination}?`;
  const f=fixture({intent:'quote',fields:{origin:{value:address,evidence:current},destination:{value:destination,evidence:current}}}),d=await f.run(current);
- equal(d.draft.quoteCents,6500);assert(d.messages[0].text.includes('$65.00'));equal(f.counts(),{quotes:1,assignments:0});
+ equal(d.draft.quoteCents,null);equal(d.messages[0].locationRequest,'origin');equal(f.counts(),{quotes:0,assignments:0});
 });
 for(const current of [`¿Hay taxis en ${address}?`,`¿Cuándo me mandas un taxi a ${address}?`,`Si pudiera, ¿me mandas un taxi a ${address}?`,`Mi amigo dijo: ¿me mandas un taxi a ${address}?`,`¿Me mandas un taxi a ${address} o al hospital?`])Deno.test('natural taxi request: doubt, hypothetical, third-party or alternative does not edit the pickup: '+current,()=>{
  let rejected=false;try{parseInterpretation({intent:'provide',fields:{origin:{value:address,evidence:current}}},current);}catch{rejected=true;}assert(rejected);

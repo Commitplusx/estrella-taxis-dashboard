@@ -2,20 +2,21 @@ import { record, TrackingError, positiveId } from '../../tracking/contracts.ts';
 import { taxiH3Cell, type H3QuoteScope } from './h3.ts';
 import { parseNeighborhoodArea, streetReference, type NeighborhoodArea } from './neighborhoodContracts.ts';
 export { record };
-export const TAXI_BOT_VERSION='taxi-bot-v6-neighborhoods';
+export const TAXI_BOT_VERSION='taxi-bot-v7-gps-button';
 export interface TaxiChannel {
   tenantId:string; waba:string; enabled:boolean; name:string; city:string;
   centerLat:number; centerLng:number; radiusKm:number; dispatcher:string|null;
   model:string; baseCents:number|null; perKmCents:number|null;pricingMode:'h3_zone_max'|'road_distance';
 }
 export interface Place {text:string;lat:number;lng:number;placeId:string|null;source?:'gps'|'written'|'locality';area?:(NeighborhoodArea & {reference:string})}
-export interface PendingLocation {place:Place;expiresAt:string}
+export interface PendingLocation {place:Place;expiresAt:string;messageId?:string}
 export interface Draft {
   fareMode:'quoted'|'unquoted';
   name:string|null;origin:Place|null;destination:Place|null;quoteCents:number|null;confirmation:string|null;expiresAt:string|null;
   awaitingLocation:'origin'|'destination'|'choice'|null;pendingLocation:PendingLocation|null;
   quoteH3:H3QuoteScope|null;
   originArea?:NeighborhoodArea|null;destinationArea?:NeighborhoodArea|null;
+  pickupText?:string|null;pickupMessageId?:string|null;destinationText?:string|null;quoteBasis?:'pickup'|'route'|null;
 }
 export interface Trip {id:string;state:'buscando_conductor'|'en_camino'|'completado'|'cancelado'|'cancelado_timeout';taxiName:string|null}
 export interface TaxiSession {revision:number;mode:'bot'|'human';draft:Draft;active:Trip|null;history:History[]}
@@ -27,7 +28,7 @@ export interface TaxiInbound {
 export interface FieldValue {value:string;evidence:string}
 export interface Interpretation {
   intent:'provide'|'quote'|'confirm'|'cancel'|'status'|'human'|'smalltalk'|'ambiguous';
-  fields:{name?:FieldValue;origin?:FieldValue;destination?:FieldValue};
+  fields:{name?:FieldValue;origin?:FieldValue;destination?:FieldValue;pickupReference?:FieldValue};
 }
 export interface TaxiMessage {to:string;text:string;buttons?:{id:string;title:string}[];locationRequest?:'origin'|'destination'}
 export interface Candidate {deviceId:number;name:string}
@@ -94,7 +95,8 @@ export function parseSession(value:unknown):TaxiSession {
   if(d.pendingLocation!==undefined&&d.pendingLocation!==null){
     const p=d.pendingLocation,place=record(p)?parsePlace(p.place):null;
     if(!record(p)||!place||typeof p.expiresAt!=='string'||!Number.isFinite(Date.parse(p.expiresAt))||awaitingLocation!=='choice')throw new TrackingError(502,'invalid_taxi_draft','El pin pendiente no tiene un formato válido.');
-    pendingLocation={place,expiresAt:p.expiresAt};
+    if(p.messageId!==undefined&&!text(p.messageId,256))throw new TrackingError(502,'invalid_taxi_draft','El pin pendiente no tiene identidad válida.');
+    pendingLocation={place,expiresAt:p.expiresAt,...(typeof p.messageId==='string'?{messageId:p.messageId}:{})};
   }
   if((pendingLocation||awaitingLocation)&&d.confirmation!==null)throw new TrackingError(502,'invalid_taxi_draft','Un viaje pendiente de aclaración no puede estar confirmado.');
   let quoteH3:H3QuoteScope|null=null;
@@ -108,8 +110,9 @@ export function parseSession(value:unknown):TaxiSession {
     const state=a.state;if(state==='buscando_conductor'||state==='en_camino'||state==='completado'||state==='cancelado'||state==='cancelado_timeout')active={id:String(a.id),state,taxiName:a.taxiName===null?null:String(a.taxiName)};
   }
   const originArea=parseNeighborhoodArea(d.originArea),destinationArea=parseNeighborhoodArea(d.destinationArea);
-  if(originArea&&origin||destinationArea&&destination||(originArea||destinationArea)&&d.confirmation!==null)throw new TrackingError(502,'invalid_taxi_area','Falta aclarar una colonia del recorrido.');
-  return {revision:value.revision,mode:value.mode==='human'?'human':'bot',draft:{fareMode,name:d.name===null?null:String(d.name),origin,destination,quoteCents:d.quoteCents===null?null:Number(d.quoteCents),confirmation:d.confirmation===null?null:String(d.confirmation),expiresAt:d.expiresAt===null?null:String(d.expiresAt),awaitingLocation,pendingLocation,quoteH3,...(d.originArea!==undefined?{originArea}:{}),...(d.destinationArea!==undefined?{destinationArea}:{})},active,history};
+  if(originArea&&origin||destinationArea&&destination||originArea&&d.confirmation!==null)throw new TrackingError(502,'invalid_taxi_area','Falta aclarar una colonia del recorrido.');
+  if(d.pickupText!==undefined&&d.pickupText!==null&&!text(d.pickupText,400)||d.pickupMessageId!==undefined&&d.pickupMessageId!==null&&!text(d.pickupMessageId,256)||d.destinationText!==undefined&&d.destinationText!==null&&!text(d.destinationText,400)||d.quoteBasis!==undefined&&d.quoteBasis!==null&&d.quoteBasis!=='pickup'&&d.quoteBasis!=='route')throw new TrackingError(502,'invalid_taxi_context','Los datos del recorrido no son válidos.');
+  return {revision:value.revision,mode:value.mode==='human'?'human':'bot',draft:{fareMode,name:d.name===null?null:String(d.name),origin,destination,quoteCents:d.quoteCents===null?null:Number(d.quoteCents),confirmation:d.confirmation===null?null:String(d.confirmation),expiresAt:d.expiresAt===null?null:String(d.expiresAt),awaitingLocation,pendingLocation,quoteH3,...(d.originArea!==undefined?{originArea}:{}),...(d.destinationArea!==undefined?{destinationArea}:{}),...(d.pickupText!==undefined?{pickupText:d.pickupText===null?null:String(d.pickupText)}:{}),...(d.pickupMessageId!==undefined?{pickupMessageId:d.pickupMessageId===null?null:String(d.pickupMessageId)}:{}),...(d.destinationText!==undefined?{destinationText:d.destinationText===null?null:String(d.destinationText)}:{}),...(d.quoteBasis!==undefined?{quoteBasis:d.quoteBasis==='pickup'?'pickup':d.quoteBasis==='route'?'route':null}:{})},active,history};
 }
 export function parseCandidates(raw:unknown):Candidate[] {
   if(!Array.isArray(raw)||raw.length>3)throw new TrackingError(502,'invalid_taxi_candidates','La selección de unidades no es válida.');

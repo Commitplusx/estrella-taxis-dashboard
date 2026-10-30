@@ -42,10 +42,11 @@ const channel: TaxiChannel = {
   perKmCents: null,
   pricingMode: "h3_zone_max",
 };
-const origin = { text: "Centro", lat: 16.25, lng: -92.13, placeId: null },
-  destination = { text: "Terminal", lat: 16.26, lng: -92.14, placeId: null };
+const origin = { text: "Centro", lat: 16.25, lng: -92.13, placeId: null, source: "gps" as const },
+  destination = { text: "Terminal", lat: 16.26, lng: -92.14, placeId: null, source: "gps" as const };
 const inputs = [
   "assent",
+  "current_button",
   "old_button",
   "question",
   "correction",
@@ -62,7 +63,7 @@ for (let fields = 0; fields < 8; fields++) {
         for (const fare of fares) {
           for (const review of reviews) {
             Deno.test(`taxi matrix fields=${fields} control=${mode} trip=${active} input=${input} fare=${fare} review=${review}`, async () => {
-              const full = fields === 7, pending = review === "pending_pin";
+              const full = (fields & 3) === 3, pending = review === "pending_pin";
               const s: TaxiSession = {
                 revision: 1,
                 mode,
@@ -77,11 +78,12 @@ for (let fields = 0; fields < 8; fields++) {
                 draft: {
                   ...emptyDraft(),
                   fareMode: 'quoted',
+                  pickupMessageId: fields & 2 ? "matrix-native-pickup" : null,
                   name: fields & 1 ? "Persona Prueba" : null,
                   origin: fields & 2 ? origin : null,
                   destination: fields & 4 ? destination : null,
                   quoteCents: 6500,
-                  quoteH3: taxiH3Scope(origin, destination),
+                  quoteH3: taxiH3Scope(origin, fields & 4 ? destination : origin),
                   confirmation: review === "absent" || pending ? null : token,
                   expiresAt: review === "absent" || pending
                     ? null
@@ -110,13 +112,13 @@ for (let fields = 0; fields < 8; fields++) {
                 from: customer,
                 to: channel.waba,
                 at: new Date(now).toISOString(),
-                type: input === "old_button"
+                type: input === "old_button" || input === "current_button"
                   ? "button"
                   : input === "unsupported"
                   ? "unsupported"
                   : "text",
                 text,
-                button: input === "old_button"
+                button: input === "current_button" ? "txc_"+token : input === "old_button"
                   ? "txc_55555555-5555-4555-8555-555555555555"
                   : null,
                 location: null,
@@ -168,7 +170,7 @@ for (let fields = 0; fields < 8; fields++) {
               };
               const d = await coordinateTaxi([m], s, channel, services, now);
               const authorized = full && mode === "bot" && active === "none" &&
-                input === "assent" && review === "current" && fare === "same";
+                input === "current_button" && review === "current" && fare === "same";
               eq(d.action === "confirm", authorized);
               eq(candidates, authorized ? 1 : 0);
               assert(model <= 1);
@@ -186,7 +188,7 @@ for (let fields = 0; fields < 8; fields++) {
               }
               if (
                 review !== "current" || !full || mode === "human" ||
-                active !== "none" || input !== "assent"
+                active !== "none" || input !== "current_button"
               ) {
                 eq(candidates, 0);
               }

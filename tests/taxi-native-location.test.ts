@@ -5,8 +5,8 @@ function assert(v:unknown):asserts v{if(!v)throw new Error('Assertion failed');}
 function equal(a:unknown,b:unknown){if(JSON.stringify(a)!==JSON.stringify(b))throw new Error('Different values: '+JSON.stringify(a)+' / '+JSON.stringify(b));}
 const now=Date.now(),waba='+529630000001',customer='+529630000002';
 const channel:TaxiChannel={tenantId:'11111111-1111-4111-8111-111111111111',waba,enabled:true,name:'Base sintética',city:'Comitán',centerLat:16.25,centerLng:-92.13,radiusKm:20,dispatcher:'+529630000099',model:'fixture',baseCents:null,perKmCents:null,pricingMode:'h3_zone_max'};
-const origin={text:'Recogida',lat:16.25,lng:-92.13,placeId:null},destination={text:'Destino',lat:16.26,lng:-92.14,placeId:null};
-function session():TaxiSession{return{revision:0,mode:'bot',active:null,history:[],draft:emptyDraft()};}
+const origin={text:'Recogida',lat:16.25,lng:-92.13,placeId:null,source:'gps' as const},destination={text:'Destino',lat:16.26,lng:-92.14,placeId:null};
+function session():TaxiSession{return{revision:0,mode:'bot',active:null,history:[],draft:{...emptyDraft(),pickupMessageId:'fixture-native'}};}
 function message(text='Hola'):TaxiInbound{return{id:crypto.randomUUID(),from:customer,to:waba,at:new Date(now).toISOString(),type:'text',text,button:null,location:null};}
 function fixture(proposal:Interpretation={intent:'smalltalk',fields:{}}){
  let assignments=0,quotes=0;
@@ -19,21 +19,21 @@ Deno.test('native location: greeting asks for pickup through a durable role with
 Deno.test('native location: pickup then destination pins advance different fields and require passenger name and confirmation',async()=>{
  const f=fixture(),first=await f.run(),s=session();s.draft=first.draft;
  const pickup=await f.run(s,{...message(''),type:'location',location:{lat:origin.lat,lng:origin.lng}});
- equal(pickup.draft.origin?.lat,origin.lat);equal(pickup.draft.destination,null);equal(pickup.messages[0].locationRequest,undefined);equal(pickup.draft.awaitingLocation,'destination');
- s.draft=pickup.draft;const target=await f.run(s,{...message(''),type:'location',location:{lat:destination.lat,lng:destination.lng}});
+ equal(pickup.draft.origin?.lat,origin.lat);equal(pickup.draft.destination,null);equal(pickup.messages[0].locationRequest,undefined);equal(pickup.draft.awaitingLocation,null);equal(pickup.reason,'missing_name');
+ s.draft=pickup.draft;const target=await f.run(s,{...message('destino'),type:'location',location:{lat:destination.lat,lng:destination.lng}});
  equal(target.draft.origin?.lat,origin.lat);equal(target.draft.destination?.lat,destination.lat);equal(target.reason,'missing_name');equal(target.draft.confirmation,null);equal(target.messages[0].locationRequest,undefined);equal(f.counts().assignments,0);
 });
 Deno.test('native location: written destinations remain valid and do not force a second pin',async()=>{
  const f=fixture({intent:'provide',fields:{destination:{value:'Terminal',evidence:'Voy a Terminal'}}});f.services.resolve=async()=>({kind:'resolved',place:destination});
- const s=session();s.draft={...emptyDraft(),origin,name:'Persona',awaitingLocation:'destination'};
+ const s=session();s.draft={...emptyDraft(),origin,pickupMessageId:'fixture-native',name:'Persona',awaitingLocation:'destination'};
  const d=await f.run(s,message('Voy a Terminal'));equal(d.draft.destination,destination);assert(d.draft.confirmation);equal(d.messages[0].locationRequest,undefined);assert(d.messages[0].buttons?.[0].id.startsWith('txc_'));equal(f.counts().assignments,0);
 });
 Deno.test('native location: ambiguous single address requests its own role and leaves other fields unchanged',async()=>{
- const f=fixture({intent:'provide',fields:{destination:{value:'Terminal',evidence:'Mejor Terminal'}}}),s=session();s.draft={...emptyDraft(),origin};
- const d=await f.run(s,message('Mejor Terminal'));equal(d.messages[0].locationRequest,'destination');equal(d.draft.origin,origin);equal(d.draft.awaitingLocation,'destination');equal(f.counts().assignments,0);
+ const f=fixture({intent:'provide',fields:{destination:{value:'Terminal',evidence:'Mejor Terminal'}}}),s=session();s.draft={...emptyDraft(),origin,pickupMessageId:'fixture-native'};
+ const d=await f.run(s,message('Mejor Terminal'));equal(d.reason,'missing_name');equal(d.draft.destinationText,'Terminal');equal(d.draft.origin,origin);equal(d.draft.awaitingLocation,null);equal(f.counts().assignments,0);
 });
 Deno.test('native location: a completed route with an unlabelled pin asks its meaning instead of requesting another pin',async()=>{
- const f=fixture(),s=session();s.draft={...emptyDraft(),origin,destination,name:'Persona'};
+ const f=fixture(),s=session();s.draft={...emptyDraft(),origin,pickupMessageId:'fixture-native',destination,name:'Persona'};
  const d=await f.run(s,{...message(''),type:'location',location:{lat:16.255,lng:-92.135}});equal(d.reason,'location_target_unclear');equal(d.messages[0].locationRequest,undefined);assert(d.draft.pendingLocation);equal(d.draft.confirmation,null);
 });
 Deno.test('native location: active rides, human ownership and cancellation do not restart pickup',async()=>{

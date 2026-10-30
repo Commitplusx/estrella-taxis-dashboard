@@ -1,6 +1,6 @@
 import type { TaxiDecision, TaxiInbound, TaxiSession } from "./contracts.ts";
 import { TrackingError } from "../../tracking/contracts.ts";
-import { cancelsTaxi, confirmsTaxi, courtesyOnly } from "./policy.ts";
+import { cancelsTaxi } from "./policy.ts";
 
 export type ConversationPhase =
   | "human"
@@ -24,10 +24,8 @@ export function conversationPhase(
   if (d.pendingLocation || d.awaitingLocation === "choice") {
     return "location_role";
   }
-  if (!d.origin || d.awaitingLocation === "origin") return "origin";
-  if (!d.destination || d.awaitingLocation === "destination") {
-    return "destination";
-  }
+  if (!d.origin || d.origin.source !== 'gps' || !d.pickupMessageId || d.awaitingLocation === "origin") return "origin";
+  if (d.awaitingLocation === "destination") return "destination";
   if (!d.name) return "name";
   if (!d.confirmation || !d.expiresAt) return "ready_for_review";
   return Date.parse(d.expiresAt) > now ? "review" : "review_expired";
@@ -36,13 +34,12 @@ export function currentConsent(
   messages: readonly TaxiInbound[],
   token: string | null,
 ): boolean {
-  if (!token || !messages.length) return false;
-  if (messages.length === 1 && messages[0].type === "button") {
-    return messages[0].button === "txc_" + token;
-  }
-  return messages.every((m) =>
-    m.type === "text" && (confirmsTaxi(m.text) || courtesyOnly(m.text))
-  ) && messages.some((m) => confirmsTaxi(m.text));
+  return token !== null && messages.length === 1 && messages[0].type === "button" && messages[0].button === "txc_" + token;
+}
+/** Facts persisted by the backend, not a step or completion invented by the model. */
+export function taxiProgress(s:TaxiSession,now:number){
+  const phase=conversationPhase(s,now),d=s.draft;
+  return {phase,hasPickupGps:Boolean(d.origin?.source==='gps'&&d.pickupMessageId),hasPassengerName:Boolean(d.name),missing:[...(!d.origin||d.origin.source!=='gps'||!d.pickupMessageId?['pickup_gps']:[]),...(!d.name?['passenger_name']:[]),...(d.fareMode!=='quoted'||d.quoteCents===null?['server_fare']:[])],destinationOptional:true,confirmation:'current_button_only',hasPickupNote:Boolean(d.pickupText),hasDestination:Boolean(d.destination||d.destinationText||d.destinationArea),canRequest:phase==='review'&&d.fareMode==='quoted'&&d.quoteCents!==null};
 }
 /** Derived state: the persisted session remains the single source of truth. */
 export function assertTaxiTransition(
@@ -78,7 +75,7 @@ export function assertTaxiTransition(
     if (
       conversationPhase(s, now) !== "review" ||
       d.confirmation !== s.draft.confirmation ||
-      !currentConsent(messages, s.draft.confirmation)
+      !currentConsent(messages, s.draft.confirmation) || s.draft.fareMode!=='quoted' || s.draft.quoteCents===null
     ) fail();
   } else if (d.action === "cancel") {
     if (
@@ -104,11 +101,11 @@ export function assertTaxiTransition(
       conversationPhase(
         { ...s, active: null, mode: "bot", draft: d.draft },
         now,
-      ) !== "review"
+      ) !== "review" || d.draft.fareMode!=='quoted' || d.draft.quoteCents===null
     ) fail();
     if (Date.parse(d.draft.expiresAt ?? "") > now + 11 * 60000) fail();
     const changed =
-      (["name", "origin", "destination", "quoteCents", "quoteH3", "fareMode"] as const)
+      (["name", "origin", "destination", "quoteCents", "quoteH3", "fareMode", "pickupText", "destinationText", "destinationArea", "quoteBasis"] as const)
         .some((key) =>
           JSON.stringify(s.draft[key]) !== JSON.stringify(d.draft[key])
         );

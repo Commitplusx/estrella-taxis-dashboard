@@ -29,7 +29,7 @@ const field = (max: number) => ({
 const fields = {
   type: "object",
   additionalProperties: false,
-  properties: { name: field(80), origin: field(400), destination: field(400) },
+  properties: { name: field(80), origin: field(400), destination: field(400), pickupReference: {...field(400),description:'Referencia visual o instrucciones para reconocer al pasajero donde ya compartió su pin GPS: «es el portón azul» o «estoy frente a la cancha». Úsalo también si la última pregunta pedía su nombre. Conserva el pin; no es un nuevo origen.'} },
 };
 const withFields = {
   type: "object",

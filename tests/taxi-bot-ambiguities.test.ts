@@ -6,7 +6,7 @@ function equal(a:unknown,b:unknown){assert(JSON.stringify(a)===JSON.stringify(b)
 const now=Date.parse('2026-10-27T18:00:00Z');
 const channel:TaxiChannel={tenantId:'11111111-1111-4111-8111-111111111111',waba:'+529630000001',enabled:true,name:'Base sintética',city:'Comitán',centerLat:16.25,centerLng:-92.13,radiusKm:20,dispatcher:'+529630000099',model:'fixture',baseCents:4000,perKmCents:1000,pricingMode:'road_distance'};
 const message=(text:string):TaxiInbound=>({id:crypto.randomUUID(),from:'+529630000002',to:channel.waba,at:new Date(now).toISOString(),type:'text',text,button:null,location:null});
-function state():TaxiSession{return{revision:1,mode:'bot',history:[],active:null,draft:{...emptyDraft(),fareMode:'quoted',name:'Mariana',origin:{text:'Centro',lat:16.25,lng:-92.13,placeId:null,source:'written'},destination:{text:'Terminal',lat:16.26,lng:-92.14,placeId:null,source:'written'},quoteCents:6500,confirmation:crypto.randomUUID(),expiresAt:new Date(now+600000).toISOString()}};}
+function state():TaxiSession{return{revision:1,mode:'bot',history:[],active:null,draft:{...emptyDraft(),fareMode:'quoted',pickupMessageId:'fixture-native',name:'Mariana',origin:{text:'Centro',lat:16.25,lng:-92.13,placeId:null,source:'gps'},destination:{text:'Terminal',lat:16.26,lng:-92.14,placeId:null,source:'written'},quoteCents:6500,confirmation:crypto.randomUUID(),expiresAt:new Date(now+600000).toISOString()}};}
 function fixture(proposal:unknown={intent:'smalltalk',fields:{}}){
   let calls=0,quotes=0,candidates=0;
   const services:TaxiServices={interpret:async(current)=>{calls++;return parseInterpretation(proposal,current);},resolve:async(text)=>({kind:'resolved',place:{text,lat:16.255,lng:-92.135,placeId:null}}),quote:async()=>{quotes++;return 6500;},candidates:async()=>{candidates++;return[{deviceId:1,name:'Unidad 1'}];}};
@@ -18,8 +18,8 @@ Deno.test('ambiguity audit: a later correction in another bubble defeats an earl
 Deno.test('ambiguity audit: an either-or location cannot be reduced to the first candidate',()=>{
   let rejected=false;try{parseInterpretation({intent:'provide',fields:{origin:{value:'Centro',evidence:'Recógeme en Centro o Terminal'}}},'Recógeme en Centro o Terminal');}catch{rejected=true;}assert(rejected,'Hace falta que el pasajero elija entre las dos ubicaciones.');
 });
-Deno.test('ambiguity audit: confirmation followed by a courtesy remains one clear consent',async()=>{
-  const f=fixture(),s=state();const d=await coordinateTaxi([message('Sí'),message('gracias')],s,channel,f.services,now);equal(d.action,'confirm');equal(f.counts().calls,0);
+Deno.test('ambiguity audit: text confirmation and courtesy cannot request a taxi',async()=>{
+  const f=fixture(),s=state();const d=await coordinateTaxi([message('Sí'),message('gracias')],s,channel,f.services,now);equal(d.action,'draft');equal(f.counts().candidates,0);equal(f.counts().calls,0);
 });
 Deno.test('ambiguity audit: expired consent refreshes the actual stored journey instead of asking pickup again',async()=>{
   const f=fixture(),s=state();s.draft.expiresAt=new Date(now-1).toISOString();const d=await f.run('Sí',s);equal(d.action,'draft');equal(d.draft.origin,s.draft.origin);assert(d.draft.confirmation&&d.draft.confirmation!==s.draft.confirmation);assert(d.messages[0]?.buttons?.length);equal(f.counts().candidates,0);
@@ -33,7 +33,7 @@ Deno.test('ambiguity audit: a status question without a requested taxi is answer
 Deno.test('ambiguity audit: a supplied pin survives the question about pickup versus destination',async()=>{
   const f=fixture({intent:'provide',fields:{}}),s=state(),pin=message('');pin.type='location';pin.location={lat:16.255,lng:-92.135};
   const first=await coordinateTaxi([pin],s,channel,f.services,now);equal(first.reason,'location_target_unclear');s.draft=first.draft;
-  const second=await f.run('Es el origen',s);equal(second.draft.origin?.lat,16.255);equal(second.draft.destination?.lat,16.26);assert(second.draft.confirmation);
+  const second=await f.run('Es el origen',s);equal(second.draft.origin?.lat,16.255);equal(second.draft.destinationText,'Terminal');assert(second.draft.confirmation);
 });
 Deno.test('ambiguity audit: an origin pin requested after a failed correction does not become the destination',async()=>{
   const f=fixture({intent:'provide',fields:{origin:{value:'Calle Dudosa',evidence:'Recógeme en Calle Dudosa'}}}),s=state();s.draft.destination=null;f.services.resolve=async()=>({kind:'unavailable'});
@@ -80,9 +80,9 @@ Deno.test('ambiguity audit: another passenger name cannot bypass an outstanding 
   s.draft.confirmation=null;s.draft.expiresAt=null;s.draft.awaitingLocation='origin';
   const d=await f.run(current,s);equal(d.draft.name,'Pedro');equal(d.draft.confirmation,null);equal(d.draft.awaitingLocation,'origin');equal(f.counts().quotes,0);
 });
-Deno.test('ambiguity audit: resolving both previously unknown endpoints by text clears the role question without a pin',async()=>{
+Deno.test('ambiguity audit: written endpoints preserve context but still require the pickup GPS',async()=>{
   const current='De Centro a Terminal',f=fixture({intent:'provide',fields:{origin:{value:'Centro',evidence:current},destination:{value:'Terminal',evidence:current}}}),s=state();
   s.draft.origin=null;s.draft.destination=null;s.draft.confirmation=null;s.draft.expiresAt=null;s.draft.awaitingLocation='choice';
   f.services.resolve=async(text)=>({kind:'resolved',place:{text,lat:text==='Centro'?16.25:16.26,lng:text==='Centro'?-92.13:-92.14,placeId:null}});
-  const d=await f.run(current,s);assert(d.draft.confirmation);equal(d.draft.awaitingLocation,null);
+  const d=await f.run(current,s);equal(d.draft.confirmation,null);equal(d.draft.awaitingLocation,'origin');equal(d.draft.pickupText,'Centro');
 });

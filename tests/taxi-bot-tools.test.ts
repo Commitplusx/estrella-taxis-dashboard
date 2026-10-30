@@ -392,7 +392,7 @@ Deno.test("taxi tools: history cannot authorize a new field and one invalid fiel
 });
 
 const now = Date.parse("2026-10-29T18:00:00Z");
-const origin = { text: "Centro", lat: 16.25, lng: -92.13, placeId: null };
+const origin = { text: "Centro", lat: 16.25, lng: -92.13, placeId: null, source: "gps" as const };
 const destination = {
   text: "Terminal",
   lat: 16.26,
@@ -405,6 +405,7 @@ function completeSession(): TaxiSession {
     draft: {
       ...emptyDraft(),
       name: "Mariana",
+      pickupMessageId: "fixture-native",
       origin,
       destination,
       quoteCents: 6500,
@@ -477,15 +478,16 @@ Deno.test("taxi tools: correction plus price question changes only pickup and in
   );
   const before = completeSession(), decision = await f.run(current, before);
   equal(decision.action, "draft");
-  equal(decision.draft.origin?.text, "Hospital");
+  equal(decision.draft.pickupText, "Hospital");
+  equal(decision.draft.origin,null);
   equal(decision.draft.destination, destination);
   equal(decision.draft.name, "Mariana");
   assert(decision.draft.confirmation !== before.draft.confirmation);
-  equal(f.resolutions, ["Hospital"]);
-  equal(f.counts(), { modelCalls: 1, fleetCalls: 0, quoteCalls: 1 });
+  equal(f.resolutions, []);
+  equal(f.counts(), { modelCalls: 1, fleetCalls: 0, quoteCalls: 0 });
   const second = await f.run("Sí", { ...before, draft: decision.draft });
-  equal(second.action, "confirm");
-  equal(f.counts(), { modelCalls: 1, fleetCalls: 1, quoteCalls: 2 });
+  equal(second.action, "reply");
+  equal(f.counts(), { modelCalls: 1, fleetCalls: 0, quoteCalls: 0 });
 });
 Deno.test("taxi tools: saved-route quote needs no repeated fields or booking", async () => {
   const f = harness(completion("cotizar_viaje", { fields: {} }));
@@ -588,7 +590,7 @@ Deno.test("taxi tools: provider request carries bounded context without private 
     assert(!("response_format" in body));
     equal(body.tools, TAXI_CONVERSATION_TOOLS);
     assert(Array.isArray(body.messages));
-    const user: unknown = body.messages[1];
+    const user: unknown = body.messages.at(-1);
     assert(record(user) && typeof user.content === "string");
     const input: unknown = JSON.parse(user.content);
     assert(record(input) && record(input.context));
@@ -640,15 +642,15 @@ Deno.test("taxi tools: missing configuration, oversize text and provider errors 
   equal(requests, 1);
 });
 Deno.test("taxi tools: trace hashes include tool schemas and record the validated interpretation, never raw reasoning", async () => {
-  const current = "Recógeme en Hospital",
+  const current = "Llévame a Hospital",
     f = harness(
       completion("actualizar_recorrido", {
-        fields: { origin: { value: "Hospital", evidence: current } },
+        fields: { destination: { value: "Hospital", evidence: current } },
       }),
     );
   const trace = new TaxiTurnTrace(completeSession(), now),
     meta = await trace.metadata(channel);
-  equal(meta.engineVersion, "taxi-bot-v6-neighborhoods");
+  equal(meta.engineVersion, "taxi-bot-v7-gps-button");
   equal(meta.promptHash, await fingerprint(TAXI_INTERPRETER_CONTRACT));
   const decision = await coordinateTaxi(
     [inbound(current)],
@@ -658,7 +660,7 @@ Deno.test("taxi tools: trace hashes include tool schemas and record the validate
     now,
   );
   const packet = trace.packet(decision);
-  equal(packet.interpretationPrivate?.fields.origin?.value, "Hospital");
+  equal(packet.interpretationPrivate?.fields.destination?.value, "Hospital");
   equal(packet.steps.map((s) => s.phase), ["interpret", "resolve", "quote"]);
   assert(!JSON.stringify(packet.steps).includes("Hospital"));
   assert(packet.steps[0].model?.responseHash);

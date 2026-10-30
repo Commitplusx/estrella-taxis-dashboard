@@ -16,8 +16,9 @@ function h3Store(answer:unknown){let calls=0;const store:TrackingStore={writePac
   calls++;equal(name,'taxi_bot_h3_quote');equal(args,{p_tenant:channel.tenantId,p_waba:channel.waba,p_origin:scope.originCell,p_destination:scope.destinationCell});return answer;
 }};return{store,calls:()=>calls};}
 const priced=(cents=6500)=>({state:'priced',mode:'h3_zone_max',cents,...scope});
-function state():TaxiSession{return{revision:1,mode:'bot',history:[],active:null,draft:{...emptyDraft(),fareMode:'quoted',name:'Persona Prueba',origin,destination,quoteCents:6500,quoteH3:scope,confirmation:crypto.randomUUID(),expiresAt:new Date(now+600000).toISOString()}};}
+function state():TaxiSession{return{revision:1,mode:'bot',history:[],active:null,draft:{...emptyDraft(),fareMode:'quoted',pickupMessageId:'fixture-native',name:'Persona Prueba',origin,destination,quoteCents:6500,quoteH3:scope,confirmation:crypto.randomUUID(),expiresAt:new Date(now+600000).toISOString()}};}
 const message=(text:string):TaxiInbound=>({id:crypto.randomUUID(),from:'+529630000002',to:channel.waba,at:new Date(now).toISOString(),type:'text',text,button:null,location:null});
+const click=(s:TaxiSession):TaxiInbound=>({...message(''),type:'button',button:'txc_'+s.draft.confirmation});
 function coordinatorFixture(cents:number|null){let candidates=0;const services:TaxiServices={interpret:async()=>{throw new Error('Server confirmation cannot invoke the model.');},resolve:async()=>{throw new Error('Stored endpoints must not be geocoded again.');},quote:async()=>cents,candidates:async()=>{candidates++;return[{deviceId:1,name:'Unidad 1'}];}};return{services,candidates:()=>candidates};}
 Deno.test('H3 taxi: exact cells and tenant/channel are sent to one private quote RPC without Maps',async()=>{
   const f=h3Store(priced());equal(await createTaxiServices(f.store,denyFetch,config).quote(origin,destination,channel),6500);equal(f.calls(),1);
@@ -40,24 +41,24 @@ Deno.test('H3 taxi: outside coverage does not query another base or a default ta
   const f=h3Store(priced());equal(await createTaxiServices(f.store,denyFetch,config).quote(origin,{...destination,lat:0,lng:0},channel),null);equal(f.calls(),0);
 });
 Deno.test('H3 taxi: changed price issues a new review and requires a separate confirmation before dispatch',async()=>{
-  const f=coordinatorFixture(7500),s=state(),first=await coordinateTaxi([message('Sí')],s,channel,f.services,now);
+  const f=coordinatorFixture(7500),s=state(),first=await coordinateTaxi([click(s)],s,channel,f.services,now);
   equal(first.action,'draft');equal(first.reason,'tariff_changed');equal(first.draft.quoteCents,7500);assert(first.draft.confirmation!==s.draft.confirmation);equal(f.candidates(),0);
-  const restored=parseSession(JSON.parse(JSON.stringify({...s,draft:first.draft}))),next=await coordinateTaxi([message('Sí')],restored,channel,f.services,now);equal(next.action,'confirm');equal(f.candidates(),1);
+  const restored=parseSession(JSON.parse(JSON.stringify({...s,draft:first.draft}))),next=await coordinateTaxi([click(restored)],restored,channel,f.services,now);equal(next.action,'confirm');equal(f.candidates(),1);
 });
 Deno.test('H3 taxi: old button also checks the current tariff and proof before asking any driver',async()=>{
   const f=coordinatorFixture(6500),s=state();s.draft.quoteH3=null;const m=message('');m.type='button';m.button='txc_'+s.draft.confirmation;
   const d=await coordinateTaxi([m],s,channel,f.services,now);equal(d.action,'draft');equal(d.reason,'tariff_changed');equal(d.draft.quoteH3,scope);equal(f.candidates(),0);
 });
 Deno.test('H3 taxi: loss of coverage replaces the priced summary with an explicit pending fare, without dispatch',async()=>{
-  const f=coordinatorFixture(null),d=await coordinateTaxi([message('Sí')],state(),channel,f.services,now);equal(d.action,'draft');equal(d.draft.quoteCents,null);assert(d.messages[0]?.text.includes('todavía no hay un precio acordado'));equal(f.candidates(),0);
+  const f=coordinatorFixture(null),s=state(),d=await coordinateTaxi([click(s)],s,channel,f.services,now);equal(d.action,'human');assert(!d.messages[0]?.buttons?.length);equal(f.candidates(),0);
 });
 Deno.test('H3 taxi: database failure hands off instead of treating a failed quote as an uncovered zone',async()=>{
   const f=coordinatorFixture(6500);f.services.quote=async()=>{throw new Error('Fixture database unavailable.');};
-  const d=await coordinateTaxi([message('Sí')],state(),channel,f.services,now);equal(d.action,'human');equal(d.reason,'h3_quote_unavailable');equal(f.candidates(),0);
+  const s=state(),d=await coordinateTaxi([click(s)],s,channel,f.services,now);equal(d.action,'human');equal(d.reason,'h3_quote_unavailable');equal(f.candidates(),0);
 });
 
 Deno.test('H3 taxi: a reduced service radius invalidates the stored confirmation before quoting or dispatch',async()=>{
   const f=coordinatorFixture(6500),s=state();let quotes=0;f.services.quote=async()=>{quotes++;return 6500;};
-  const d=await coordinateTaxi([message('Sí')],s,{...channel,radiusKm:0.1},f.services,now);
+  const d=await coordinateTaxi([click(s)],s,{...channel,radiusKm:0.1},f.services,now);
   equal(d.action,'human');equal(d.reason,'outside_service_area');equal(f.candidates(),0);equal(quotes,0);
 });

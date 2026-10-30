@@ -1,5 +1,7 @@
 # Conversación contextual del taxi
 
+**Actualización vigente:** [GPS obligatorio de recogida y confirmación sólo por botón](STELLAR_GPS_BUTTON_FLOW_20261030.md). La última indicación del usuario sustituyó la recogida sólo por dirección escrita. Los ejemplos y versiones siguientes documentan la etapa anterior.
+
 ## Incidente y causa
 
 En el canal de Pompeyo, el turno de `2026-10-30T19:32:58Z` esperaba el origen, sin viaje activo ni origen o destino resueltos. La respuesta «Pilita seca» se clasificó como `ambiguous`; el coordinador respondió con una pregunta sobre cambiar o cancelar un viaje. El contrato anterior tenía hash `da637618ef3e6372dd496efed8dc4c5579528cdc517174cf7d0da5d942bba533`.

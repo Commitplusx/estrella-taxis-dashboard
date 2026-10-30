@@ -13,6 +13,7 @@ import { cellToLatLng } from 'h3-js';
 import { parseNeighborhoods, streetReference, type NeighborhoodArea } from './neighborhoodContracts.ts';
 import { exactNeighborhoods, mentionedNeighborhoods, representativeArea, semanticNeighborhoods } from './neighborhoods.ts';
 import type { ModelMetadata } from './trace.ts';
+import{naturalTaxiQuestion}from'./conversationReply.ts';
 export function createTaxiServices(store:TrackingStore,fetcher:Fetcher,config:{mapsKey:string;modelKey:string;traccarUrl:string;traccarEmail:string;traccarPassword:string;geocoderUrl?:string}):TaxiServices {
   async function resolvePoint(address:string,c:TaxiChannel,signal?:AbortSignal):Promise<LocationResult>{
     const gps=/^\s*(-?\d{1,3}(?:\.\d+)?)\s*,\s*(-?\d{1,3}(?:\.\d+)?)\s*$/.exec(address);
@@ -61,8 +62,9 @@ export function createTaxiServices(store:TrackingStore,fetcher:Fetcher,config:{m
     return point;
   }
   return {
+    question:(kind,current,c,signal)=>naturalTaxiQuestion(fetcher,config.modelKey,c.model,kind,current,signal),
     interpret:(current,session,c,signal,observe)=>createTaxiInterpreter(fetcher,config.modelKey,c.model,observe)(current,session,c,signal),resolve,
-    quote:async(origin,destination,c,signal)=>{
+    quote:async(origin,destination,c,signal,destinationArea)=>{
       if(!coord(origin.lat,origin.lng)||!coord(destination.lat,destination.lng)||getDistanceFromLatLonInKm(origin.lat,origin.lng,c.centerLat,c.centerLng)>c.radiusKm||getDistanceFromLatLonInKm(destination.lat,destination.lng,c.centerLat,c.centerLng)>c.radiusKm)return null;
       if(c.pricingMode==='h3_zone_max'){
         const source=(place:Place):'gps'|'written'|'locality'|null=>place.source??(place.area?.priceSource==='reference'?'locality':null);
@@ -72,7 +74,9 @@ export function createTaxiServices(store:TrackingStore,fetcher:Fetcher,config:{m
         if(origin.area?.cents===null||destination.area?.cents===null)return null;
         const scope=taxiH3Scope(origin,destination);
         const originReference=origin.area?.priceSource==='reference'?origin.area:null,destinationReference=destination.area?.priceSource==='reference'?destination.area:null;
-        const quote=originReference||destinationReference
+        const quote=destinationArea
+          ?await store.rpc('taxi_bot_pickup_quote',{p_tenant:c.tenantId,p_waba:c.waba,p_origin:scope.originCell,p_destination_reference:destinationArea})
+          :originReference||destinationReference
           ?await store.rpc('taxi_bot_h3_quote_with_references',{p_tenant:c.tenantId,p_waba:c.waba,p_origin:scope.originCell,p_destination:scope.destinationCell,p_origin_reference:originReference,p_destination_reference:destinationReference})
           :await store.rpc('taxi_bot_h3_quote',{p_tenant:c.tenantId,p_waba:c.waba,p_origin:scope.originCell,p_destination:scope.destinationCell});
         if(!record(quote)||!['priced','uncovered','invalid_zone','channel_unavailable'].includes(String(quote.state))||quote.mode!=='h3_zone_max')throw new TrackingError(502,'taxi_h3_contract','No se pudo validar la tarifa H3.');
@@ -83,6 +87,7 @@ export function createTaxiServices(store:TrackingStore,fetcher:Fetcher,config:{m
       }
       if(c.pricingMode!=='road_distance')throw new TrackingError(503,'taxi_pricing_not_configured','La tarifa requiere configuración de la base.');
       if(origin.area||destination.area)return null;
+      if(origin===destination)return c.baseCents;
       if(c.baseCents===null||c.perKmCents===null||!config.mapsKey)return null;
       const params=new URLSearchParams({origin:`${origin.lat},${origin.lng}`,destination:`${destination.lat},${destination.lng}`,mode:'driving',key:config.mapsKey});
       const data=(await requestJson(fetcher,'https://maps.googleapis.com/maps/api/directions/json?'+params,{signal},8000,262144)).data;

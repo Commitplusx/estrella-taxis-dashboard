@@ -35,8 +35,11 @@ export function unsupportedRide(s:string):boolean {
   return /\b(?:manana|pasado manana|programa(?:r|do)?|reserva(?:r|do)? para|a las? \d|(?:en|dentro de) (?:un|una|dos|tres|\d+) (?:horas?|minutos?)|para (?:hoy|esta noche|el lunes|el martes|el miercoles|el jueves|el viernes|el sabado|el domingo)|(?:2|3|4|dos|tres|cuatro) taxis|(?:[5-9]|cinco|seis|siete|ocho) (?:personas|pasajeros)|silla de ruedas|mascota|viaje redondo|ida y vuelta)\b/.test(normalize(s));
 }
 /** A polite service request is a question grammatically, not a hypothetical address. */
-function pickupServiceQuestion(clause:string):boolean {
-  return /^(?:[¿¡ ]*(?:hola|oye|buenas|bro|por favor|porfa)[,! . ]+)*[¿¡ ]*(?:(?:me|nos)\s+(?:(?:puedes?|podrias?)\s+)?(?:mandas?|envias?|mandar|enviar)|(?:puedes?|podrias?)\s+(?:mandar|enviar)(?:me|nos)?|(?:manda|envia)(?:me|nos))\s+(?:un\s+)?taxi\s+(?:a|al|en|hasta)\s+\S/.test(normalize(clause));
+function serviceRequestQuestion(clause:string):boolean {
+  const request=normalize(clause).replace(/^(?:[¿¡ ]*(?:hola|oye|buenas|bro|por favor|porfa)[,! . ]+)*[¿¡ ]*/, '');
+  return /^(?:(?:me|nos)\s+(?:(?:puedes?|podrias?)\s+)?(?:mandas?|envias?|mandar|enviar)|(?:puedes?|podrias?)\s+(?:mandar|enviar)(?:me|nos)?|(?:manda|envia)(?:me|nos))\s+(?:un\s+)?taxi\s+(?:a|al|en|hasta)\s+\S/.test(request)
+    || /^(?:(?:me|nos)\s+(?:(?:puedes?|podrias?)\s+)?(?:llevas?|llevar|recoges?|recoger)|(?:puedes?|podrias?)\s+(?:llevar|recoger)(?:me|nos))\s+(?:a|al|en|hasta|de)\s+\S/.test(request)
+    || /^(?:(?:puedes?|podrias?)\s+)?(?:pasas?|pasar)\s+por\s+(?:mi|nosotros)\s+(?:a|al|en)\s+\S/.test(request);
 }
 /** Each new field must cite the current message; history cannot authorize a new mutation. */
 export function parseInterpretation(raw:unknown,current:string):Interpretation {
@@ -45,7 +48,7 @@ export function parseInterpretation(raw:unknown,current:string):Interpretation {
   if(intent!=='provide'&&intent!=='quote'&&intent!=='confirm'&&intent!=='cancel'&&intent!=='status'&&intent!=='human'&&intent!=='smalltalk'&&intent!=='ambiguous')throw new TrackingError(502,'invalid_taxi_intent','Intención no válida.');
   const fields:Interpretation['fields']={};
   for(const [key,v] of Object.entries(raw.fields)) {
-    if((key!=='name'&&key!=='origin'&&key!=='destination')||!record(v)||Object.keys(v).some((k)=>!['value','evidence'].includes(k))||typeof v.value!=='string'||typeof v.evidence!=='string')throw new TrackingError(502,'invalid_taxi_field','Campo no válido.');
+    if((key!=='name'&&key!=='origin'&&key!=='destination'&&key!=='pickupReference')||!record(v)||Object.keys(v).some((k)=>!['value','evidence'].includes(k))||typeof v.value!=='string'||typeof v.evidence!=='string')throw new TrackingError(502,'invalid_taxi_field','Campo no válido.');
     const value=v.value.trim(),evidence=v.evidence.trim();
     if(value.length<2||value.length>(key==='name'?80:400)||evidence.length<value.length||evidence.length>3000||!current.includes(evidence)||!normalize(evidence).includes(normalize(value))||/[<>]/.test(value)||[...value].some((c)=>c.charCodeAt(0)<32))throw new TrackingError(502,'unproven_taxi_field','El dato no coincide con el mensaje actual.');
     const start=current.indexOf(evidence),before=current.slice(0,start),after=current.slice(start+evidence.length);
@@ -57,7 +60,7 @@ export function parseInterpretation(raw:unknown,current:string):Interpretation {
     const marker=corrections[corrections.length-1];
     const correction=marker?n.slice((marker.index??0)+marker[0].length):null;
     const quoteQuestion=intent==='quote'&&/\b(?:cuanto (?:cuesta|sale|cobra|cobran)|que (?:precio|tarifa)|cual es (?:el precio|la tarifa))\b/.test(n);
-    const serviceQuestion=intent==='provide'&&pickupServiceQuestion(clause);
+    const serviceQuestion=intent==='provide'&&key!=='name'&&serviceRequestQuestion(clause);
     const escaped=chosen.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
     const negated=new RegExp('\\bno\\s+(?:(?:en|a|al|de|desde|para|hacia|el|la|es|era|estoy|voy)\\s+)*'+escaped+'(?:\\b|$)').test(n);
     // A cropped citation from an earlier bubble cannot defeat a later correction.

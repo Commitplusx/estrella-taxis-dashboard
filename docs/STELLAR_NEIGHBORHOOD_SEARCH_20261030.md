@@ -1,5 +1,7 @@
 # GPS H3 y tarifas para direcciones escritas
 
+**Actualización vigente:** [GPS obligatorio de recogida y confirmación sólo por botón](STELLAR_GPS_BUTTON_FLOW_20261030.md). Las fuentes de tarifas siguen separadas; la última indicación del usuario exige pin nativo para recoger y permite destino opcional. Las menciones posteriores al pin opcional de recogida y las versiones publicadas describen la etapa anterior.
+
 ## Regla del producto
 
 La base mantiene dos fuentes separadas para encontrar y cotizar una recogida:
