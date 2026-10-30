@@ -35,6 +35,7 @@ const locationRequestSql=readFileSync(new URL('../estrella-taxis-backend/supabas
 const optionalFareSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261030200000_taxi_optional_fare.sql',import.meta.url),'utf8');
 const addressGeocodeSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261030201500_taxi_address_geocoding.sql',import.meta.url),'utf8');
 const neighborhoodsSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261030210000_taxi_neighborhoods.sql',import.meta.url),'utf8');
+const dispatchSafetySql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261030223000_taxi_dispatch_safety.sql',import.meta.url),'utf8');
 const tenant='11111111-1111-4111-8111-111111111111',other='22222222-2222-4222-8222-222222222222',waba='+529630000001',customer='+529630000002',driverPhone='+529630000003';
 test('neighborhood SQL: reads only base-owned H3, keeps prices single-sourced and private',async()=>{
  const f=await fixture();try{
@@ -242,7 +243,7 @@ async function fixture(options:{legacy?:boolean;seedCoverageBeforeMigration?:boo
   if(!options.legacy){await db.exec(baseZonesSql);await db.exec(baseFleetSql);await db.exec(baseContactsSql);
     await db.exec("CREATE TABLE perfiles(traccar_user_id integer PRIMARY KEY CHECK(traccar_user_id>0),empresa_id uuid REFERENCES empresas(id),rol text CHECK(rol IN('superadmin','admin_empresa','operador')),created_at timestamptz DEFAULT now())");
     await db.exec(personAccountsSql);
-    await db.exec(optionalFareSql);await db.exec(neighborhoodsSql);
+    await db.exec(optionalFareSql);await db.exec(neighborhoodsSql);await db.exec(dispatchSafetySql);
   }
   // These legacy protocol fixtures explicitly act as customers too. Driver-only access has separate tests below.
   await db.query('INSERT INTO taxi_bot_allowed_customers(tenant_id,phone)VALUES($1,$2),($1,$3),($1,$4)',[tenant,customer,driverPhone,'+529630000004']);
@@ -271,6 +272,14 @@ async function fixture(options:{legacy?:boolean;seedCoverageBeforeMigration?:boo
   const admin=async(action:string,payload:Record<string,unknown>,expected=0,request=crypto.randomUUID(),company=tenant,number=waba)=>obj(await scalar('SELECT taxi_bot_admin_apply($1,$2,$3,$4,$5,$6,$7)',[company,number,42,request,expected,action,payload]));
   return{db,scalar,obj,enqueue,begin,decision,commit,prepare,confirm,draft,seedH3,admin};
 }
+
+test('dispatch safety: rejects an attention contact equivalent to the WhatsApp sender, including Mexico +52/+521 variants',async()=>{
+ const f=await fixture();try{
+  const migrationRule=await f.scalar("SELECT convalidated FROM pg_constraint WHERE conname='taxi_bot_dispatcher_must_be_person'");
+  assert.equal(migrationRule,false,'The legacy channel is preserved until its owner updates the dispatcher phone.');
+  await assert.rejects(f.db.query("INSERT INTO taxi_bot_channels(tenant_id,waba,enabled,name,city,center_lat,center_lng,radius_km,dispatcher)VALUES($1,'+529630000088',false,'Base','Comitán',16.25,-92.13,20,'+5219630000088')",[tenant]),/taxi_bot_dispatcher_must_be_person/);
+ }finally{await f.db.close();}
+});
 
 test('base ownership migration: Pompeyo receives all existing zones once, preserving original tariffs and earlier private edits',async()=>{
  const f=await fixture({legacy:true});try{

@@ -8,7 +8,7 @@ const c:TaxiChannel={tenantId:'11111111-1111-4111-8111-111111111111',waba:'+5296
 const origin={text:'Centro',lat:16.25,lng:-92.13,placeId:null},destination={text:'Terminal',lat:16.26,lng:-92.14,placeId:null};
 const config={mapsKey:'fixture-maps-key',modelKey:'fixture-model-key',traccarUrl:'https://tracking.test/api',traccarEmail:'fixture@example.invalid',traccarPassword:'not-a-real-password'};
 const denyAdminWrite = async (): Promise<never> => { throw new Error('No administration writes in this fixture.'); };
-function store(aliases:unknown[]=[]):TrackingStore{return{writePackages:denyAdminWrite,writeCompanyPackage:denyAdminWrite,writeCompanyStatus:denyAdminWrite,read:async(table,q)=>{equal(q.get('tenant_id'),'eq.'+c.tenantId);if(table==='lugares_frecuentes')return aliases;if(table==='conductores')return[{device_id:1},{device_id:2},{device_id:3}];throw new Error('Undeclared fixture table.');},writeScores:async()=>{throw new Error('Forbidden score write.');},rpc:async(name,args)=>{equal(name,'taxi_bot_neighborhood_read');equal(args.p_tenant,c.tenantId);return[];}};}
+function store(aliases:unknown[]=[]):TrackingStore{return{writePackages:denyAdminWrite,writeCompanyPackage:denyAdminWrite,writeCompanyStatus:denyAdminWrite,read:async(table,q)=>{equal(q.get('tenant_id'),'eq.'+c.tenantId);if(table==='lugares_frecuentes')return aliases;if(table==='conductores')return[{device_id:1},{device_id:2},{device_id:3},{device_id:5}];throw new Error('Undeclared fixture table.');},writeScores:async()=>{throw new Error('Forbidden score write.');},rpc:async(name,args)=>{equal(name,'taxi_bot_neighborhood_read');equal(args.p_tenant,c.tenantId);return[];}};}
 const denyFetch:Fetcher=async()=>{throw new Error('No undeclared provider call may be approved.');};
 Deno.test('taxi geocoding preserves exact GPS including zero longitude and never fetches a customer URL',async()=>{
   const s=createTaxiServices(store(),denyFetch,config);const gps=await s.resolve('16.25, 0',c);assert(gps.kind==='resolved');equal(gps.place.lng,0);
@@ -31,14 +31,20 @@ Deno.test('taxi quote uses the configured rate and actual road distance, never a
   equal(await s.quote(origin,destination,{...c,baseCents:null,perKmCents:null}),null);equal(calls,1);
   const broken=createTaxiServices(store(),async()=>new Response('{"status":"ZERO_RESULTS"}',{status:200}),config);equal(await broken.quote(origin,destination,c),null);
 });
-Deno.test('taxi candidates intersect active tenant drivers with authenticated online GPS scope',async()=>{
+Deno.test('taxi candidates use the configured service radius and include parked or recently disconnected taxis for driver acceptance',async()=>{
   const f:Fetcher=async(input,init)=>{
     const u=new URL(String(input));
     if(u.pathname==='/api/session')return new Response(JSON.stringify({id:1,administrator:true,disabled:false}),{status:200,headers:{'set-cookie':'JSESSIONID=fixture-cookie-123; Secure'}});
     equal(new Headers(init?.headers).get('Cookie'),'JSESSIONID=fixture-cookie-123');
-    if(u.pathname==='/api/devices')return new Response(JSON.stringify([{id:1,name:'Valid',status:'online'},{id:2,name:'Offline',status:'offline'},{id:3,name:'Invalid fix',status:'online'},{id:4,name:'Foreign',status:'online'}]),{status:200});
-    if(u.pathname==='/api/positions')return new Response(JSON.stringify([1,2,3,4].map((id)=>({id,deviceId:id,latitude:16.251,longitude:-92.131,fixTime:new Date().toISOString(),speed:0,valid:id!==3,attributes:{ignition:true,occupied:false}}))),{status:200});
+    if(u.pathname==='/api/devices')return new Response(JSON.stringify([{id:1,name:'Valid',status:'online'},{id:2,name:'Offline stale',status:'offline'},{id:3,name:'Invalid fix',status:'online'},{id:4,name:'Foreign',status:'online'},{id:5,name:'Fresh parked taxi',status:'offline'}]),{status:200});
+    if(u.pathname==='/api/positions')return new Response(JSON.stringify([
+      {id:1,deviceId:1,latitude:16.251,longitude:-92.131,fixTime:new Date().toISOString(),speed:0,valid:true,attributes:{ignition:true,occupied:false}},
+      {id:2,deviceId:2,latitude:16.251,longitude:-92.131,fixTime:new Date(Date.now()-3*60*1000).toISOString(),speed:0,valid:true,attributes:{ignition:true,occupied:false}},
+      {id:3,deviceId:3,latitude:16.251,longitude:-92.131,fixTime:new Date().toISOString(),speed:0,valid:false,attributes:{ignition:true,occupied:false}},
+      {id:4,deviceId:4,latitude:16.251,longitude:-92.131,fixTime:new Date().toISOString(),speed:0,valid:true,attributes:{ignition:true,occupied:false}},
+      {id:5,deviceId:5,latitude:16.251,longitude:-91.99,fixTime:new Date().toISOString(),speed:0,valid:true,outdated:true,attributes:{ignition:false,occupied:false}},
+    ]),{status:200});
     throw new Error('Unexpected GPS fixture endpoint '+u.pathname);
   };
-  equal(await createTaxiServices(store(),f,config).candidates(origin,c),[{deviceId:1,name:'Valid'}]);
+  equal(await createTaxiServices(store(),f,config).candidates(origin,c),[{deviceId:1,name:'Valid'},{deviceId:5,name:'Fresh parked taxi'}]);
 });

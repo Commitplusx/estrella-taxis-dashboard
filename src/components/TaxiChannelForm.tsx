@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Power, Save } from "lucide-react";
 import type { AdminChannel } from "../../estrella-taxis-backend/supabase/functions/_shared/bot/taxis/adminContracts.ts";
 import { channelPhone, splitChannelPhone } from '../../estrella-taxis-backend/supabase/functions/_shared/bot/taxis/channelPhone.ts';
+import { customerPhone } from '../../estrella-taxis-backend/supabase/functions/_shared/bot/taxis/customerAccess.ts';
 import TaxiPhoneField, { type TaxiPhoneValue } from './TaxiPhoneField';
 interface Props {
   channel: AdminChannel | null;
@@ -21,6 +22,8 @@ export default function TaxiChannelForm(
   const [number, setNumber] = useState<TaxiPhoneValue>(() => splitChannelPhone(channel?.waba ?? ''));
   const [dispatcher, setDispatcher] = useState<TaxiPhoneValue>(() => splitChannelPhone(channel?.dispatcher ?? ''));
   const targetNumber = channelPhone(number.country, number.national);
+  const dispatcherNumber = dispatcher.national.trim() ? channelPhone(dispatcher.country, dispatcher.national) : null;
+  const dispatcherMatchesBot = Boolean(dispatcherNumber && targetNumber && customerPhone(dispatcherNumber) === customerPhone(targetNumber));
   const renaming = Boolean(channel && targetNumber && targetNumber !== channel.waba);
   const [form, setForm] = useState({
     name: channel?.name ?? "",
@@ -62,8 +65,8 @@ export default function TaxiChannelForm(
       setError("Completa el número, nombre, ciudad y cobertura de la base.");
       return;
     }
-    const dispatcherNumber = dispatcher.national.trim() ? channelPhone(dispatcher.country, dispatcher.national) : null;
     if (dispatcher.national.trim() && !dispatcherNumber) { setError('Revisa el país y el teléfono de atención de la base.'); return; }
+    if (dispatcherMatchesBot) { setError('El teléfono de atención debe ser distinto al WhatsApp del bot para que una persona reciba las alertas.'); return; }
     if (form.mode === 'road_distance' && (money(form.base) === null || !Number.isFinite(money(form.base)) || Number(money(form.base)) < 0 ||
       money(form.km) === null || !Number.isFinite(money(form.km)) || Number(money(form.km)) <= 0)) {
       setError('Para cobrar por carretera escribe la tarifa base y un precio por kilómetro mayor que cero. Si cobras por zonas, elige Por zonas H3.'); return;
@@ -109,7 +112,7 @@ export default function TaxiChannelForm(
           />
         </label>
         <TaxiPhoneField label="Teléfono de atención de la base" value={dispatcher} onChange={setDispatcher}
-          help="Aquí llegan las solicitudes que requieren ayuda de una persona." />
+          help={dispatcherMatchesBot ? 'Este es el mismo número que envía los mensajes del bot y no puede recibir sus propias alertas. Pon el WhatsApp de una persona de la base.' : 'Aquí llegan las solicitudes que requieren ayuda de una persona.'} />
         <label>
           Latitud del centro<input
             type="number"

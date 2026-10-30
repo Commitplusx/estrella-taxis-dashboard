@@ -70,6 +70,16 @@ Deno.test('dispatch filters offline, occupied, stopped, invalid and stale units'
   assert(!findOptimalTaxi([devices[0]],[{...points[0],valid:false}],16.251,-92.13,10,now).success);
   assert(!findOptimalTaxi([devices[0]],[{...points[0],fixTime:new Date(now-601000).toISOString()}],16.251,-92.13,10,now).success);
 });
+Deno.test('taxi offers can reach a parked taxi but never trust a stale offline fix or a known occupied unit',()=>{
+  const now=Date.parse('2026-10-27T12:00:00Z'),pickup={lat:16.251,lng:-92.13},options={allowIgnitionOff:true,allowOfflineFixAgeMs:120000};
+  const parked={...devices[0],status:'online'},parkedPoint={...positions(1,10,false)[0],fixTime:new Date(now).toISOString()};
+  equal(findOptimalTaxi([parked],[parkedPoint],pickup.lat,pickup.lng,20,now,options).success,true);
+  const recentlyOffline={...devices[1],status:'offline'},freshFix={...parkedPoint,deviceId:recentlyOffline.id,id:recentlyOffline.id};
+  equal(findOptimalTaxi([recentlyOffline],[freshFix],pickup.lat,pickup.lng,20,now,options).success,true);
+  const staleFix={...freshFix,fixTime:new Date(now-120001).toISOString()};
+  equal(findOptimalTaxi([recentlyOffline],[staleFix],pickup.lat,pickup.lng,20,now,options).success,false);
+  equal(findOptimalTaxi([parked],[{...parkedPoint,attributes:{occupied:true}}],pickup.lat,pickup.lng,20,now,options).success,false);
+});
 Deno.test('clustering is reproducible and survives identical points and invalid limits',()=>{
   const points=[{lat:16,lng:-92},{lat:16.01,lng:-92},{lat:17,lng:-93},{lat:17.01,lng:-93}];
   equal(calculateKMeans(points,2),calculateKMeans([...points].reverse(),2));

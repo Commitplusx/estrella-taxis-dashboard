@@ -86,16 +86,18 @@ export function createTaxiServices(store:TrackingStore,fetcher:Fetcher,config:{m
       const allowed=new Set<number>();for(const r of rows){if(!record(r)||!positiveId(r.device_id))throw new TrackingError(502,'taxi_bad_driver','La base tiene una unidad no válida.');allowed.add(r.device_id);}
       if(!allowed.size)return [];
       const fleet=new FleetApi(config.traccarUrl,fetcher),session=await fleet.jobSession(config.traccarEmail,config.traccarPassword,signal);
-      const devices:TraccarDevice[]=session.devices.filter((d)=>allowed.has(d.id)&&d.status==='online').map((d)=>({...d,uniqueId:String(d.id)}));
+      // A fresh GPS fix can still be usable when Traccar labels the device offline;
+      // the driver must accept the WhatsApp offer before any trip is assigned.
+      const devices:TraccarDevice[]=session.devices.filter((d)=>allowed.has(d.id)&&(d.status==='online'||d.status==='offline')).map((d)=>({...d,uniqueId:String(d.id)}));
       const raw=await fleet.get('/positions',session.cookie,signal);
       if(!Array.isArray(raw)||raw.length>10000)throw new TrackingError(502,'taxi_bad_positions','No se pudo validar la flota.');
       const positions:TraccarPosition[]=[];
       for(const p of raw){if(!record(p)||!positiveId(p.id)||!positiveId(p.deviceId)||!allowed.has(p.deviceId)||!coord(p.latitude,p.longitude)||typeof p.longitude!=='number'||typeof p.fixTime!=='string')continue;
-        if(p.valid!==true||p.outdated===true)continue;
+        if(p.valid!==true)continue;
         const ignition=record(p.attributes)?flag(p.attributes.ignition):null,occupied=record(p.attributes)?flag(p.attributes.occupied):null;
-        positions.push({id:p.id,deviceId:p.deviceId,latitude:p.latitude,longitude:p.longitude,fixTime:p.fixTime,valid:true,speed:typeof p.speed==='number'&&Number.isFinite(p.speed)?p.speed:undefined,course:typeof p.course==='number'&&Number.isFinite(p.course)?p.course:undefined,attributes:{ignition,occupied}});
+        positions.push({id:p.id,deviceId:p.deviceId,latitude:p.latitude,longitude:p.longitude,fixTime:p.fixTime,valid:true,outdated:p.outdated===true,speed:typeof p.speed==='number'&&Number.isFinite(p.speed)?p.speed:undefined,course:typeof p.course==='number'&&Number.isFinite(p.course)?p.course:undefined,attributes:{ignition,occupied}});
       }
-      const ranked=findOptimalTaxi(devices,positions,origin.lat,origin.lng,Math.min(10,c.radiusKm));
+      const ranked=findOptimalTaxi(devices,positions,origin.lat,origin.lng,c.radiusKm,Date.now(),{allowIgnitionOff:true,allowOfflineFixAgeMs:2*60*1000});
       return ranked.success?ranked.data.map((d)=>({deviceId:d.deviceId,name:d.name})):[];
     }
   };

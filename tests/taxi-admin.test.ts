@@ -293,6 +293,24 @@ Deno.test("taxi admin: validation boundary rejects excess selection and an extra
       requestId,
       revision: 0,
       payload: { serviceRole: "not-accepted" },
+    }, {
+      action: "configure",
+      tenantId: tenant,
+      waba,
+      requestId,
+      revision: 0,
+      payload: {
+        name: "Base sintética",
+        city: "Comitán",
+        dispatcher: "+5219630000001",
+        centerLat: 16.25,
+        centerLng: -92.13,
+        radiusKm: 20,
+        pricingMode: "h3_zone_max",
+        baseCents: null,
+        perKmCents: null,
+        enabled: false,
+      },
     }]
   ) {
     let rejected = false;

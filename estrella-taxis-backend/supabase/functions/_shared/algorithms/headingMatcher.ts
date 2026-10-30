@@ -67,13 +67,21 @@ export interface OptimalTaxiResult {
   effectiveDistanceKm: number;
 }
 
+export interface TaxiSelectionOptions {
+  /** A parked taxi can still receive an offer; the driver decides whether to take it. */
+  allowIgnitionOff?: boolean;
+  /** Permit an offline Traccar device only when its last valid fix is this recent. */
+  allowOfflineFixAgeMs?: number;
+}
+
 export function findOptimalTaxi(
   devices: TraccarDevice[], 
   positions: TraccarPosition[], 
   clientLat: number, 
   clientLng: number,
   maxRadiusKm: number = 10,
-  nowMs: number = Date.now()
+  nowMs: number = Date.now(),
+  options: TaxiSelectionOptions = {},
 ): Result<OptimalTaxiResult[]> {
   const startMs = performance.now();
   
@@ -82,6 +90,10 @@ export function findOptimalTaxi(
   if (!isValidCoord(clientLat, clientLng)) return { success: false, error: "Invalid client coordinates" };
   if (!Number.isFinite(nowMs) || !Number.isFinite(maxRadiusKm) || maxRadiusKm <= 0 || maxRadiusKm > 100 || devices.length > 50000 || positions.length > 100000) {
     return { success: false, error: "Invalid dispatch limits" };
+  }
+  const allowOfflineFixAgeMs = options.allowOfflineFixAgeMs ?? 0;
+  if (!Number.isSafeInteger(allowOfflineFixAgeMs) || allowOfflineFixAgeMs < 0 || allowOfflineFixAgeMs > 10 * 60 * 1000) {
+    return { success: false, error: "Invalid dispatch availability policy" };
   }
 
   const scoredTaxis: { device: TraccarDevice; effectiveDist: number; rawDist: number }[] = [];
@@ -95,7 +107,7 @@ export function findOptimalTaxi(
 
   for (const pos of latest.values()) {
     if (!pos || !pos.deviceId || !isValidCoord(pos.latitude, pos.longitude)) continue;
-    if (pos.valid === false || pos.outdated === true) continue;
+    if (pos.valid === false) continue;
 
     // Fast-path: Bounding box culling (O(1) simple math)
     if (!isWithinBoundingBox(clientLat, clientLng, pos.latitude, pos.longitude, maxRadiusKm * 1.5)) {
@@ -105,12 +117,15 @@ export function findOptimalTaxi(
     // Filtrar taxis apagados o sin señal (GPS > 10 mins de antigüedad)
     const MAX_AGE_MS = 10 * 60 * 1000;
     const fixTime = Date.parse(pos.fixTime ?? '');
-    if (!Number.isFinite(fixTime) || nowMs - fixTime > MAX_AGE_MS || fixTime > nowMs + 30000) {
+    const fixAgeMs = nowMs - fixTime;
+    if (!Number.isFinite(fixTime) || fixAgeMs > MAX_AGE_MS || fixAgeMs < -30000) {
       continue;
     }
 
+    if (pos.outdated === true && !(allowOfflineFixAgeMs > 0 && fixAgeMs <= allowOfflineFixAgeMs)) continue;
+
     // Filtrar taxis con motor apagado (si el GPS lo reporta)
-    if (pos.attributes && flag(pos.attributes.ignition) === false) {
+    if (!options.allowIgnitionOff && pos.attributes && flag(pos.attributes.ignition) === false) {
       continue;
     }
 
@@ -120,7 +135,8 @@ export function findOptimalTaxi(
     }
 
     const device = byId.get(pos.deviceId);
-    if (!device || device.status === 'offline') continue;
+    if (!device) continue;
+    if (device.status === 'offline' && !(allowOfflineFixAgeMs > 0 && fixAgeMs <= allowOfflineFixAgeMs)) continue;
 
     // Slow-path: Haversine
     const rawDistance = getDistanceFromLatLonInKm(pos.latitude, pos.longitude, clientLat, clientLng);

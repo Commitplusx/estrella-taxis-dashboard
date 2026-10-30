@@ -2,6 +2,7 @@ import { coord, phone, record, text } from "./contracts.ts";
 import { taxiH3Cell } from "./h3.ts";
 import { TrackingError, uuid } from "../../tracking/contracts.ts";
 import { validChannelPhone } from './channelPhone.ts';
+import { customerPhone } from './customerAccess.ts';
 export interface AdminTenant {
   id: string;
   name: string;
@@ -233,6 +234,9 @@ export function parseCommand(raw: unknown): AdminCommand {
       !(p.dispatcher === null || dispatcher) ||
       (p.pricingMode !== "h3_zone_max" && p.pricingMode !== "road_distance")
     ) return fail("Revisa el nombre, ciudad, cobertura y teléfono de la base.");
+    const target = action === 'rename_channel' ? p.newWaba : waba;
+    if (typeof target !== 'string' || !validChannelPhone(target)) return fail('Revisa el código de país y el número de WhatsApp. Para México usa +52 y el número local.');
+    if (dispatcher && customerPhone(dispatcher) === customerPhone(target)) return fail('El teléfono de atención debe ser distinto al WhatsApp del bot para que una persona reciba las alertas.');
     if (p.enabled && !dispatcher) {
       return fail(
         "Agrega el teléfono de atención de la base antes de activar.",
@@ -250,8 +254,6 @@ export function parseCommand(raw: unknown): AdminCommand {
       perKmCents: cents(p.perKmCents, true),
       enabled: p.enabled,
     };
-    const target = action === 'rename_channel' ? p.newWaba : waba;
-    if (typeof target !== 'string' || !validChannelPhone(target)) return fail('Revisa el código de país y el número de WhatsApp. Para México usa +52 y el número local.');
     if (action === 'rename_channel') {
       if (target === waba || p.enabled) return fail('Guarda primero el canal apagado para cambiar su número.');
       payload.newWaba = target;
