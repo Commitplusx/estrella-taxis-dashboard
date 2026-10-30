@@ -4,6 +4,7 @@ import type { TrackingStore } from '../estrella-taxis-backend/supabase/functions
 import { record } from '../estrella-taxis-backend/supabase/functions/_shared/tracking/contracts.ts';
 const tenant = '11111111-1111-4111-8111-111111111111', other = '22222222-2222-4222-8222-222222222222', waba = '+529630000001';
 const driver = { deviceId: 7, name: 'Persona sintética', phone: '+529630000002', active: true, version: 'a'.repeat(32) };
+const contact = { id: '33333333-3333-4333-8333-333333333333', unitNumber: '487', name: driver.name, phoneInput: driver.phone, phone: driver.phone, role: 'driver', deviceId: 7, receiving: true, version: 'b'.repeat(32) };
 function assert(value: unknown, message = 'Expected assertion'): asserts value { if (!value) throw new Error(message); }
 function fixture({ role = 'admin_empresa', result = 'saved' }: { role?: string; result?: string } = {}) {
   const writes: Record<string, unknown>[] = [];
@@ -19,6 +20,12 @@ function fixture({ role = 'admin_empresa', result = 'saved' }: { role?: string; 
     rpc: async (name, args) => {
       assert(args.p_tenant === tenant);
       if (name === 'taxi_bot_driver_read') { assert(args.p_waba === waba); return { drivers: [driver], activeCount: 1, zoneCount: 2541 }; }
+      if (name === 'taxi_bot_contacts_read') return { drivers: [driver], activeCount: 1, zoneCount: 2541, linkedUnitIds: [7, 99], contacts: [contact] };
+      if (name === 'taxi_bot_contact_apply') {
+        assert(args.p_actor === 42 && args.p_contact === contact.id && record(args.p_payload));
+        assert(args.p_payload.name === contact.name && args.p_payload.deviceId === 7 && args.p_payload.receiveOffers === true);
+        writes.push(args); return result === 'saved' ? { state: 'saved', contact } : { state: result };
+      }
       assert(name === 'taxi_bot_driver_apply'); assert(args.p_actor === 42); assert(args.p_device === 7); writes.push(args);
       return result === 'saved' ? { state: result, driver } : { state: result };
     },
@@ -31,8 +38,30 @@ function fixture({ role = 'admin_empresa', result = 'saved' }: { role?: string; 
   const handler = createTaxiAdminHandler({ fleet, store, runtimeReady: true });
   const call = (body: Record<string, unknown>) => handler(new Request('https://edge.test', { method: 'POST', headers: { 'content-type': 'application/json', 'x-traccar-token': 'fixture-token-123' }, body: JSON.stringify(body) }));
   const command = { action: 'driver_save', tenantId: tenant, waba, requestId: crypto.randomUUID(), deviceId: 7, name: driver.name, phone: driver.phone, active: true, expected: null };
-  return { call, command, writes };
+  const contactCommand = { action: 'contact_save', tenantId: tenant, waba, requestId: crypto.randomUUID(), contactId: contact.id,
+    unitNumber: contact.unitNumber, name: contact.name, phoneInput: contact.phoneInput, role: contact.role, deviceId: 7, receiveOffers: true, expected: null, driverVersion: driver.version };
+  return { call, command, contactCommand, writes };
 }
+Deno.test('contacts administration: lists only real visible GPS units owned by the selected base', async () => {
+  const f = fixture(), response = await f.call({ action: 'contacts', tenantId: tenant, waba }); assert(response.status === 200);
+  const body: unknown = await response.json(); assert(record(body) && Array.isArray(body.units) && body.units.length === 1 && Array.isArray(body.contacts) && body.contacts.length === 1); assert(f.writes.length === 0);
+});
+Deno.test('contacts administration: contact edits use the existing verified tenant and durable RPC', async () => {
+  const f = fixture(); assert((await f.call(f.contactCommand)).status === 200); assert(f.writes.length === 1);
+});
+for (const [name, changed, expected] of [
+  ['another base', { tenantId: other }, 403], ['unseen GPS', { deviceId: 99 }, 403], ['unknown role', { role: 'superadmin' }, 400],
+  ['malformed phone', { phoneInput: 'not a phone' }, 400], ['missing review', { expected: '' }, 400], ['invalid contact id', { contactId: 'invalid' }, 400],
+] as const) Deno.test('contacts administration: rejects ' + name + ' before writing', async () => {
+  const f = fixture(); assert((await f.call({ ...f.contactCommand, ...changed })).status === expected); assert(f.writes.length === 0);
+});
+Deno.test('contacts administration: an operator can read and cannot change owner/driver assignments', async () => {
+  const f = fixture({ role: 'operador' }); assert((await f.call({ action: 'contacts', tenantId: tenant, waba })).status === 200);
+  assert((await f.call(f.contactCommand)).status === 403); assert(f.writes.length === 0);
+});
+for (const result of ['role_not_driving', 'driver_busy', 'driver_changed', 'phone_conflict', 'revision_conflict']) Deno.test('contacts administration: returns explicit ' + result + ' without claiming a successful edit', async () => {
+  const f = fixture({ result }); assert((await f.call(f.contactCommand)).status === 409);
+});
 Deno.test('driver administration: actual Traccar units and saved base mappings load together, without mutations', async () => {
   const f = fixture(), response = await f.call({ action: 'drivers', tenantId: tenant, waba }); assert(response.status === 200);
   const body: unknown = await response.json(); assert(record(body) && body.activeCount === 1 && body.zoneCount === 2541 && Array.isArray(body.units)); assert(f.writes.length === 0);

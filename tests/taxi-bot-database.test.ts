@@ -27,6 +27,8 @@ const accessSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrati
 const mapCacheSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261029194000_taxi_channel_edit_map_cache.sql',import.meta.url),'utf8');
 const driverSetupSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261029193220_taxi_bot_driver_setup.sql',import.meta.url),'utf8');
 const baseZonesSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261029195350_taxi_base_owned_zones.sql',import.meta.url),'utf8');
+const baseFleetSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261030134513_taxi_base_fleet.sql',import.meta.url),'utf8');
+const baseContactsSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261030135906_taxi_base_contacts.sql',import.meta.url),'utf8');
 const tenant='11111111-1111-4111-8111-111111111111',other='22222222-2222-4222-8222-222222222222',waba='+529630000001',customer='+529630000002',driverPhone='+529630000003';
 async function fixture(options:{legacy?:boolean;seedCoverageBeforeMigration?:boolean}={}){
   const db=new PGlite();await db.exec(`CREATE ROLE anon;CREATE ROLE authenticated;CREATE ROLE service_role BYPASSRLS;
@@ -44,7 +46,7 @@ async function fixture(options:{legacy?:boolean;seedCoverageBeforeMigration?:boo
     await db.exec('ALTER TABLE h3_zonas ADD COLUMN tenant_id uuid');
     await db.query('UPDATE h3_zonas SET tenant_id=$1',[tenant]);
   }
-  if(!options.legacy)await db.exec(baseZonesSql);
+  if(!options.legacy){await db.exec(baseZonesSql);await db.exec(baseFleetSql);await db.exec(baseContactsSql);}
   // These legacy protocol fixtures explicitly act as customers too. Driver-only access has separate tests below.
   await db.query('INSERT INTO taxi_bot_allowed_customers(tenant_id,phone)VALUES($1,$2),($1,$3),($1,$4)',[tenant,customer,driverPhone,'+529630000004']);
   await db.query("INSERT INTO conductores(tenant_id,device_id,telefono_whatsapp,nombre)VALUES($1,1,$2,'Unidad 1'),($1,2,'+529630000004','Unidad 2'),($3,3,'+529630000005','Ajena')",[tenant,driverPhone,other]);
@@ -111,6 +113,84 @@ test('base zones: an edit applies to all channels of that base and invalidates t
   const setup=f.obj(await f.scalar('SELECT taxi_bot_driver_read($1,$2)',[tenant,second]));assert.equal(setup.zoneCount,2);
   await f.admin('remove_zones',{cells:[scope.originCell]},1);
   assert.equal(f.obj(await f.scalar('SELECT taxi_bot_h3_quote($1,$2,$3,$4)',[tenant,second,scope.originCell,scope.destinationCell])).state,'uncovered');
+ }finally{await f.db.close();}
+});
+
+test('contacts: incomplete source phone is preserved for editing, owner and unclassified contacts cannot receive offers',async()=>{
+ const f=await fixture();try{
+  const id=crypto.randomUUID(),payload={unitNumber:'487',name:'Contacto de prueba',phoneInput:'963000077',role:'pending',deviceId:null,receiveOffers:false,driverVersion:null};
+  const save=(body:Record<string,unknown>,expected:string|null=null,base=tenant)=>f.scalar('SELECT taxi_bot_contact_apply($1,$2,$3,$4,$5,$6)',[base,42,crypto.randomUUID(),expected,id,body]);
+  const saved=f.obj(await save(payload)),contact=f.obj(saved.contact);assert.equal(saved.state,'saved');assert.equal(contact.phoneInput,'963000077');assert.equal(contact.phone,null);assert.equal(contact.receiving,false);
+  assert.equal(f.obj(await save({...payload,role:'owner',receiveOffers:true},String(contact.version))).state,'role_not_driving');
+  assert.equal(f.obj(await save({...payload,role:'driver',receiveOffers:true,deviceId:1},String(contact.version))).state,'phone_invalid');
+  assert.equal(f.obj(await save(payload,String(contact.version),other)).state,'contact_forbidden');
+  assert.equal(await f.scalar('SELECT count(*)::int FROM conductores'),3);
+  for(const actor of ['anon','authenticated']){
+   assert.equal(await f.scalar('SELECT has_table_privilege($1,$2,$3)',[actor,'taxi_base_contacts','SELECT']),false);
+   assert.equal(await f.scalar('SELECT has_function_privilege($1,$2,$3)',[actor,'taxi_bot_contact_apply(uuid,bigint,uuid,text,uuid,jsonb)','EXECUTE']),false);
+  }
+ }finally{await f.db.close();}
+});
+test('contacts: role, phone and GPS explicitly activate one driver, replay is durable and changing to owner pauses offers',async()=>{
+ const f=await fixture();try{
+  await f.scalar('SELECT taxi_bot_link_units($1,$2,$3,$4)',[tenant,42,crypto.randomUUID(),[{id:4,name:'Taxi 4'}]]);
+  const id=crypto.randomUUID(),request=crypto.randomUUID(),payload={unitNumber:'487',name:'Persona de prueba',phoneInput:'9630000077',role:'driver',deviceId:4,receiveOffers:true,driverVersion:null};
+  const save=(body:Record<string,unknown>,expected:string|null=null,req=crypto.randomUUID())=>f.scalar('SELECT taxi_bot_contact_apply($1,$2,$3,$4,$5,$6)',[tenant,42,req,expected,id,body]);
+  const saved=f.obj(await save(payload,null,request)),contact=f.obj(saved.contact);assert.equal(saved.state,'saved');assert.equal(contact.receiving,true);
+  assert.deepEqual(await save(payload,null,request),saved);
+  assert.equal(f.obj(await save({...payload,name:'Cambio viejo'})).state,'revision_conflict');
+  const paused=f.obj(await save({...payload,role:'owner',receiveOffers:false},String(contact.version)));assert.equal(paused.state,'saved');assert.equal(f.obj(paused.contact).receiving,false);
+  assert.equal(await f.scalar('SELECT activo FROM conductores WHERE device_id=4'),false);
+  await assert.rejects(f.db.query("INSERT INTO conductores(tenant_id,device_id,nombre,telefono_whatsapp,activo)VALUES($1,5,'No conduce','+529630000077',true)",[tenant]),/Confirm driving role/);
+  assert.equal(await f.scalar('SELECT count(*)::int FROM conductores WHERE device_id=5'),0);
+  assert.equal(f.obj(await save({...payload,phoneInput:'9630000002',receiveOffers:false},String(f.obj(paused.contact).version))).state,'saved');
+ }finally{await f.db.close();}
+});
+test('contacts: pending offers roll back both a contact edit and its attempted driver change; metadata-only edits preserve dispatch',async()=>{
+ const f=await fixture();try{
+  const driver=f.obj(await f.scalar('SELECT taxi_bot_driver_record(d)FROM conductores d WHERE device_id=1'));
+  const id=crypto.randomUUID(),payload={unitNumber:'487',name:'Unidad 1',phoneInput:driverPhone,role:'driver',deviceId:1,receiveOffers:true,driverVersion:driver.version};
+  const save=(body:Record<string,unknown>,expected:string|null=null)=>f.scalar('SELECT taxi_bot_contact_apply($1,$2,$3,$4,$5,$6)',[tenant,42,crypto.randomUUID(),expected,id,body]);
+  const saved=f.obj(await save(payload)),contact=f.obj(saved.contact);assert.equal(saved.state,'saved');
+  await f.prepare();await f.confirm();
+  const denied=f.obj(await save({...payload,role:'owner',receiveOffers:false},String(contact.version)));assert.equal(denied.state,'driver_busy');
+  assert.deepEqual(await f.scalar('SELECT taxi_bot_contact_record(c)FROM taxi_base_contacts c WHERE id=$1',[id]),contact);
+  assert.equal(await f.scalar('SELECT activo FROM conductores WHERE device_id=1'),true);
+  const label=f.obj(await save({...payload,unitNumber:'488'},String(contact.version)));assert.equal(label.state,'saved');assert.equal(f.obj(label.contact).receiving,true);
+ }finally{await f.db.close();}
+});
+
+test('base fleet: linking actual units preserves driver contacts and makes unconfigured units pending',async()=>{
+ const f=await fixture();try{
+  const id=crypto.randomUUID(),units=[{id:4,name:'Taxi 4'},{id:5,name:'Taxi 5'}];
+  const link=(body=units,request=id,base=tenant)=>f.scalar('SELECT taxi_bot_link_units($1,$2,$3,$4)',[base,42,request,body]);
+  const before=await f.scalar('SELECT jsonb_agg(to_jsonb(d)ORDER BY device_id)FROM conductores d');
+  const saved=f.obj(await link());assert.equal(saved.state,'saved');assert.equal(saved.linkedCount,4);assert.equal(saved.readyCount,2);assert.equal(saved.pendingCount,2);
+  assert.deepEqual(await f.scalar('SELECT jsonb_agg(to_jsonb(d)ORDER BY device_id)FROM conductores d'),before);
+  assert.deepEqual(await link([...units].reverse()),saved);
+  assert.equal(f.obj(await link([{id:4,name:'Otro nombre'}])).state,'request_conflict');
+  assert.equal(f.obj(await link([{id:3,name:'Ajena'},{id:6,name:'No insertar'}],crypto.randomUUID())).state,'device_conflict');
+  assert.equal(await f.scalar('SELECT count(*)::int FROM taxi_base_units WHERE device_id=6'),0);
+  const denied=f.obj(await f.scalar('SELECT taxi_bot_driver_apply($1,$2,$3,$4,$5,$6,$7,$8)',[other,42,crypto.randomUUID(),4,'Ajeno','+529630000066',true,null]));assert.equal(denied.state,'device_conflict');
+ }finally{await f.db.close();}
+});
+test('base fleet: existing drivers are backfilled; direct cross-base reassignment cannot escape ownership',async()=>{
+ const f=await fixture({legacy:true});try{
+  await f.db.exec(baseFleetSql);assert.equal(await f.scalar('SELECT count(*)::int FROM taxi_base_units'),3);
+  await assert.rejects(f.db.query('UPDATE conductores SET tenant_id=$1 WHERE device_id=1',[other]),/another base/);
+  assert.equal(await f.scalar('SELECT tenant_id FROM conductores WHERE device_id=1'),tenant);
+ }finally{await f.db.close();}
+});
+test('base fleet: malformed batches, duplicate IDs and extra phone fields never create fake drivers or partial units',async()=>{
+ const f=await fixture();try{
+  for(const body of [[],[{id:4,name:'Taxi'},{id:4,name:'Repetido'}],[{id:4,name:'Taxi',phone:'+529630000066'}],[{id:0,name:'Taxi'}],[{id:4,name:' '}],Array.from({length:501},(_,i)=>({id:100+i,name:'Taxi'}))]){
+   await assert.rejects(f.scalar('SELECT taxi_bot_link_units($1,$2,$3,$4)',[tenant,42,crypto.randomUUID(),body]));
+  }
+  assert.equal(await f.scalar('SELECT count(*)::int FROM taxi_base_units'),3);assert.equal(await f.scalar('SELECT count(*)::int FROM conductores'),3);
+  for(const role of ['anon','authenticated']){
+   assert.equal(await f.scalar('SELECT has_table_privilege($1,$2,$3)',[role,'taxi_base_units','SELECT']),false);
+   assert.equal(await f.scalar('SELECT has_function_privilege($1,$2,$3)',[role,'taxi_bot_link_units(uuid,bigint,uuid,jsonb)','EXECUTE']),false);
+  }
  }finally{await f.db.close();}
 });
 

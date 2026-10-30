@@ -373,7 +373,7 @@ export function createTaxiAdminHandler(
         }),
       );
       const channel = rows.length ? channelFromRow(rows[0]) : null;
-      if (raw.action === 'drivers' || raw.action === 'driver_save') {
+      if (['drivers', 'driver_save', 'contacts', 'contact_save'].includes(raw.action)) {
         if (!channel) throw new TrackingError(404, 'channel_not_found', 'Primero guarda el WhatsApp de la base en pausa.');
         return json(await driverRequest(raw, tenant, waba, identity, scope.configure, deps.fleet, deps.store, req.signal));
       }
