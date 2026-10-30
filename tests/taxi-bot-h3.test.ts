@@ -8,7 +8,7 @@ function assert(value:unknown,message='Assertion failed'):asserts value{if(!valu
 function equal(a:unknown,b:unknown){assert(JSON.stringify(a)===JSON.stringify(b),`Expected ${JSON.stringify(b)}, got ${JSON.stringify(a)}`);}
 const now=Date.parse('2026-10-28T18:00:00Z');
 const channel:TaxiChannel={tenantId:'11111111-1111-4111-8111-111111111111',waba:'+529630000001',enabled:true,name:'Base sintética',city:'Comitán',centerLat:16.25,centerLng:-92.13,radiusKm:20,dispatcher:'+529630000099',model:'fixture',baseCents:4000,perKmCents:1000,pricingMode:'h3_zone_max'};
-const origin={text:'Centro',lat:16.25,lng:-92.13,placeId:null},destination={text:'Terminal',lat:16.26,lng:-92.14,placeId:null},scope=taxiH3Scope(origin,destination);
+const origin={text:'Centro',lat:16.25,lng:-92.13,placeId:null,source:'gps' as const},destination={text:'Terminal',lat:16.26,lng:-92.14,placeId:null,source:'gps' as const},scope=taxiH3Scope(origin,destination);
 const config={mapsKey:'',modelKey:'',traccarUrl:'https://tracking.test/api',traccarEmail:'fixture@example.invalid',traccarPassword:'not-a-real-password'};
 const denyFetch:Fetcher=async()=>{throw new Error('No Google/model/provider call is authorized in this H3 fixture.');};
 const denyAdminWrite = async (): Promise<never> => { throw new Error('No administration writes in this fixture.'); };

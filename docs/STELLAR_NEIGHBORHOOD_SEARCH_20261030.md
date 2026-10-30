@@ -19,11 +19,13 @@ El panel `/bot` muestra **Colonias y lugares escritos**, con filtros por categor
 
 La migración `20261031160000_taxi_written_localities_h3_separation.sql` crea la tabla de localidades por escrito, traslada las antiguas tarifas de referencia y carga las categorías del PDF. También revierte la importación anterior que había aplicado tarifas del PDF a 293 hexágonos, pero sólo si encuentra exactamente los mismos índices, nombres y precios capturados en la revisión; si esas celdas cambiaron, cancela la migración para no sobrescribir ajustes posteriores.
 
-**Estado de datos en producción:** las migraciones de cobertura y localidades ya están aplicadas en el proyecto independiente de Stellar Tracking. La verificación remota encontró 2,541 hexágonos H3 y 191 localidades escritas; conteos, nombres y precios H3 coinciden celda por celda, y las localidades no contienen hexágonos. Las tarifas impresas que se contradicen permanecen sin precio automático.
+**Estado de datos en producción:** la migración está aplicada y registrada en `izrsxygazsalfhpaualj`, destino fijado por `deployment/stellar/project.json`. La verificación remota encontró 2,541 hexágonos H3 y 191 localidades escritas en 11 categorías. Conservó todos los índices y nombres H3; restauró exactamente las 293 tarifas afectadas por la importación anterior y dejó iguales las otras 2,248. El Piedrón y Pilita Seca tienen tarifa escrita de $55; las tarifas impresas que se contradicen permanecen sin precio automático.
 
-**Estado de funciones en producción:** `taxi-bot-admin`, `process-queue` y `ycloud-webhook` están activas en versión 2; las tres respondieron 200 a OPTIONS. Las versiones anteriores quedaron respaldadas en `C:/Users/Kaleb/Desktop/pollo-robins-panel/.codex-tmp/stellar-edge-backup-20261030.json`. No se envió WhatsApp real ni se creó un viaje de prueba.
+**Estado de funciones en producción:** `taxi-bot-admin` v24, `process-queue` v17 y `ycloud-webhook` v17 están activas. Los archivos ejecutables descargados después de publicar coinciden con los revisados; las tres respondieron 200 a OPTIONS y el administrador sin credenciales respondió 401. Sus versiones previas y las tarifas están respaldadas en `.codex-tmp/taxi-context-20261030/`. No se envió WhatsApp real ni se creó un viaje de prueba.
 
-**Estado del panel:** el build local está validado. El proyecto de Vercel no aparece enlazado ni disponible en la sesión; por eso no afirmo que la interfaz ya esté publicada en el dominio.
+**Corrección de destino:** una publicación anterior alcanzó el proyecto antiguo e inactivo `ynqphaxvoauzmqsempis`; las afirmaciones previas de producción se referían por error a ese destino. El dominio y los eventos de Pompeyo usan `izrsxygazsalfhpaualj`. La publicación descrita aquí se comprobó en ese proyecto correcto. El antiguo no tenía canales ni eventos activos y está bloqueado como destino en la configuración del repositorio.
+
+**Estado del panel:** el build local está validado. La separación de localidades está en `main` y se observó en el bundle del dominio público. Se corrigió además el botón Actualizar, que usaba un setter inexistente; el token de recarga existente ya vuelve a consultar la lista.
 
 ## Verificación local
 

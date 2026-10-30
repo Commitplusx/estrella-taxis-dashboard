@@ -1,4 +1,4 @@
-import {assertTaxiTransition}from'./stateMachine.ts';
+import {assertTaxiTransition,conversationPhase}from'./stateMachine.ts';
 import type{ModelMetadata}from'./trace.ts';
 import { emptyDraft, type Candidate, type Draft, type Interpretation, type Place, type TaxiChannel, type TaxiDecision, type TaxiInbound, type TaxiSession } from './contracts.ts';
 import { activeRideChange, cancellationQuestion, cancelsTaxi, confirmsTaxi, courtesyOnly, declinesTaxi, locationRole, needsHuman, normalize, unsupportedRide } from './policy.ts';
@@ -35,6 +35,19 @@ async function decideTaxi(messages:TaxiInbound[],session:TaxiSession,channel:Tax
     messages:[{to:latest.from,locationRequest:role,text:`${body??(role==='origin'?'¿Dónde te recogemos? Escríbeme la dirección o, si te queda más fácil, compártela con el botón.':'¿A dónde vas? Escríbeme la dirección o, si prefieres, elige el destino con el botón.')} 🚕`}],
   });
   const askDestination=(d:Draft,reason:string):TaxiDecision=>({...reply('Va, ¿a dónde vas? 🚕',reason),action:'draft',draft:{...d,awaitingLocation:'destination',confirmation:null,expiresAt:null,quoteCents:null,quoteH3:null}});
+  const clarifyPending=(reason:string):TaxiDecision=>{
+    const d:Draft={...session.draft,confirmation:null,expiresAt:null};
+    const phase=conversationPhase(session,now);
+    if(phase==='origin'||phase==='destination'){
+      const area=phase==='origin'?d.originArea:d.destinationArea;
+      const body=area
+        ?`Ubico ${localityDisplayName(area)}. ¿Qué calle o referencia ${phase==='origin'?'usamos para recogerte':'tiene el destino'}? También puedes compartir el pin.`
+        :phase==='origin'?'Para la recogida, dime la colonia y una calle o referencia. También puedes compartir el pin si te queda más fácil.':'¿A qué colonia o dirección vas? Dime también una calle o referencia; el pin es opcional.';
+      return requestLocation(d,phase,reason,body);
+    }
+    const body=phase==='name'?'¿A nombre de quién queda el viaje? 😊':phase==='location_role'?'¿El pin es donde te recogemos o a dónde vas? 🚕':'¿Qué dato del recorrido quieres corregir: la recogida, el destino o el nombre? 😊';
+    return {...reply(body,reason),action:'draft',draft:d};
+  };
   const prepareSummary=async(draft:Draft,reason:string,verifiedQuote?:{cents:number|null}):Promise<TaxiDecision>=>{
     const d:Draft={...draft,fareMode:reason==='quote_only'?'quoted':draft.fareMode,confirmation:null,expiresAt:null,quoteCents:null,quoteH3:null};
     if(d.pendingLocation||d.awaitingLocation==='choice')return {...reply('¿El pin es el punto de recogida o el destino?','location_target_unclear'),action:'draft',draft:d};
@@ -122,15 +135,15 @@ async function decideTaxi(messages:TaxiInbound[],session:TaxiSession,channel:Tax
   }
   let interpretation:Interpretation;
   try{interpretation=current&&!(selectedRole&&messages.some((m)=>m.location!==null))?await services.interpret(current,session,channel,signal):{intent:'provide',fields:{}};}
-  catch{return {...reply('No alcancé a entender el cambio. ¿Me dices de nuevo dónde te recogemos y a dónde vas?','interpretation_failed'),action:'draft',draft:{...session.draft,confirmation:null,expiresAt:null}};}
+  catch{return clarifyPending('interpretation_failed');}
   if(interpretation.intent==='human')return human('model_handoff');
-  if(interpretation.intent==='ambiguous'||interpretation.intent==='cancel'||interpretation.intent==='confirm')return {...reply('Para no mover el viaje por error, dime exactamente qué quieres cambiar o cancelar.','ambiguous_intent'),action:'draft',draft:{...session.draft,confirmation:null,expiresAt:null}};
+  if(interpretation.intent==='ambiguous'||interpretation.intent==='cancel'||interpretation.intent==='confirm')return clarifyPending('ambiguous_intent');
   if(interpretation.intent==='status')return reply('Todavía no has solicitado el taxi. Primero hay que revisar el recorrido y confirmar el resumen.','no_active_status');
   if(interpretation.fields.name){
     const chosen=normalize(interpretation.fields.name.value).replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
     const explicit=new RegExp('\\b(?:me llamo|soy|a nombre de|mi nombre es)\\s+'+chosen+'(?:\\b|$)').test(normalize(interpretation.fields.name.evidence));
-    const bareAnswer=!d.name&&d.origin&&d.destination&&normalize(current).replace(/[.!¡]+$/,'')===normalize(interpretation.fields.name.value);
-    if(!explicit&&!bareAnswer)return {...reply('¿Ese es el nombre del pasajero? Escríbeme «A nombre de…» para confirmarlo.','unclear_name'),action:'draft',draft:{...d,confirmation:null,expiresAt:null}};
+    const contextualAnswer=conversationPhase(session,now)==='name'&&!d.name;
+    if(!explicit&&!contextualAnswer)return {...reply('¿Ese es el nombre del pasajero? ¿A nombre de quién queda el viaje?','unclear_name'),action:'draft',draft:{...d,confirmation:null,expiresAt:null}};
     d.name=interpretation.fields.name.value;changed=true;
   }
   const native=messages.filter((m)=>m.location!==null);

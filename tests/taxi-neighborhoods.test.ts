@@ -1,5 +1,5 @@
 import { coordinateTaxi, type TaxiServices } from '../estrella-taxis-backend/supabase/functions/_shared/bot/taxis/coordinator.ts';
-import { emptyDraft, parseSession, type TaxiChannel, type TaxiInbound, type TaxiSession } from '../estrella-taxis-backend/supabase/functions/_shared/bot/taxis/contracts.ts';
+import { emptyDraft, parseSession, record, type TaxiChannel, type TaxiInbound, type TaxiSession } from '../estrella-taxis-backend/supabase/functions/_shared/bot/taxis/contracts.ts';
 import { createTaxiServices } from '../estrella-taxis-backend/supabase/functions/_shared/bot/taxis/services.ts';
 import { neighborhoodKey, parseNeighborhoods, streetReference, type Neighborhood } from '../estrella-taxis-backend/supabase/functions/_shared/bot/taxis/neighborhoodContracts.ts';
 import { exactNeighborhoods, representativeArea, semanticNeighborhoods } from '../estrella-taxis-backend/supabase/functions/_shared/bot/taxis/neighborhoods.ts';
@@ -35,7 +35,12 @@ Deno.test('same written name in different PDF categories stays disambiguated',()
 });
 Deno.test('neighborhood semantic search uses only category and label pairs from the selected base',async()=>{
  const other={...row,label:'Las Brisas',category:'colonia' as const},metadata:unknown[]=[];let count=0;
- const fetcher:Fetcher=async(_url,init)=>{count++;assert(!String(init?.body).includes(cell));return Response.json(completion([{label:row.label,category:row.category},{label:other.label,category:other.category}]));};
+ const fetcher:Fetcher=async(_url,init)=>{count++;assert(!String(init?.body).includes(cell));
+  const request:unknown=JSON.parse(String(init?.body));assert(record(request)&&Array.isArray(request.messages));
+  const message:unknown=request.messages.at(-1);assert(record(message)&&typeof message.content==='string');
+  const input:unknown=JSON.parse(message.content);assert(record(input)&&Array.isArray(input.catalog));
+  equal(input.catalog.map(value=>{assert(record(value));return{label:value.label,category:value.category};}),[{label:row.label,category:row.category},{label:other.label,category:other.category}]);
+  return Response.json(completion([{label:row.label,category:row.category},{label:other.label,category:other.category}]));};
  equal(await semanticNeighborhoods('por la cancha',[row,other],fetcher,'fixture-key','fixture',undefined,value=>metadata.push(value)),[row,other]);equal(count,1);equal(metadata.length,1);
 });
 for(const proposal of [[{label:'Colonia ajena',category:'barrio'}],[{label:row.label,category:'colonia'}],[{label:row.label,category:'barrio'},{label:row.label,category:'barrio'}],[{label:'A',category:'barrio'},{label:'B',category:'barrio'},{label:'C',category:'barrio'},{label:'D',category:'barrio'}],null])Deno.test('locality semantic search rejects malformed or invented category/label pairs: '+JSON.stringify(proposal),async()=>{

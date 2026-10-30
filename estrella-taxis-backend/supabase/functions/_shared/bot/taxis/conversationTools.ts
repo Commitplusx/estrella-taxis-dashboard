@@ -49,7 +49,7 @@ export const TAXI_CONVERSATION_TOOLS: readonly TaxiToolDefinition[] = [
     function: {
       name: "actualizar_recorrido",
       description:
-        "Propone los datos nuevos o correcciones expresas de recogida, destino y pasajero. Incluye todos los cambios actuales en una sola llamada y cita su cláusula literal completa. No reserva. fields debe contener al menos un dato.",
+        "Propone datos de recogida, destino y pasajero, incluidas respuestas breves al expectedField pendiente (colonia, calle, referencia o nombre, aunque no tengan verbo). Incluye todos los cambios actuales en una sola llamada y cita su cláusula literal completa. No reserva. fields debe contener al menos un dato.",
       parameters: {
         ...withFields,
         properties: { fields: { ...fields, minProperties: 1 } },
@@ -97,7 +97,7 @@ export const TAXI_CONVERSATION_TOOLS: readonly TaxiToolDefinition[] = [
     function: {
       name: "aclarar_solicitud",
       description:
-        "Petición ambigua, contradictoria, condicional, ejemplo, instrucciones ajenas al servicio o confirmación/cancelación que el servidor todavía deba comprobar. No modifica datos.",
+        "Petición ambigua después de consultar el dato pendiente, contradictoria, condicional, ejemplo, instrucciones ajenas al servicio o confirmación/cancelación que el servidor deba comprobar. Una colonia o referencia breve que responde al expectedField usa actualizar_recorrido. No modifica datos.",
       parameters: noArguments,
     },
   },

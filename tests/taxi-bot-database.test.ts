@@ -260,7 +260,7 @@ test('person account SQL: durable lease prevents duplicate provisioning and free
 });
 async function fixture(options:{legacy?:boolean;seedCoverageBeforeMigration?:boolean;seedPdfLocalFares?:boolean}={}){
   const db=new PGlite();await db.exec(`CREATE ROLE anon;CREATE ROLE authenticated;CREATE ROLE service_role BYPASSRLS;
-    CREATE TABLE empresas(id uuid PRIMARY KEY,tipo_negocio text DEFAULT 'taxi',telefono_whatsapp text,nombre_empresa text);INSERT INTO empresas(id,nombre_empresa)VALUES('${tenant}','Base de prueba'),('${other}','Otra base de prueba'),('${pompeyo}','Servicio de Taxis Pompeyo Express');
+    CREATE TABLE empresas(id uuid PRIMARY KEY,tipo_negocio text DEFAULT 'taxi',telefono_whatsapp text,nombre_empresa text);INSERT INTO empresas(id,nombre_empresa)VALUES('${tenant}','Base de prueba'),('${other}','Otra base de prueba')${options.legacy||options.seedPdfLocalFares?`,('${pompeyo}','Servicio de Taxis Pompeyo Express')`:''};
     CREATE TABLE webhook_queue(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),payload jsonb,status text,processed_at timestamptz);
     CREATE TABLE conductores(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),tenant_id uuid,device_id integer UNIQUE,telefono_whatsapp text,nombre text,activo boolean DEFAULT true);
     CREATE TABLE viajes(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),token text UNIQUE NOT NULL,tenant_id uuid,device_id integer,taxi_name text,cliente_tel text NOT NULL,cliente_nombre text,origen text NOT NULL,destino text NOT NULL,origen_lat double precision,origen_lng double precision,estado text NOT NULL,conductores_contactados integer[]DEFAULT '{}',created_at timestamptz DEFAULT now());
@@ -288,6 +288,9 @@ async function fixture(options:{legacy?:boolean;seedCoverageBeforeMigration?:boo
       await db.exec('INSERT INTO taxi_bot_base_zones(tenant_id,h3_index,label,price_cents)VALUES'+values.join(','));
     }
     await db.exec(pdfLocalFaresSql);
+    // Ordinary fixtures install the historical schema before creating this base. The
+    // dedicated import fixture supplies the exact reviewed map required by that import.
+    if(!options.seedPdfLocalFares)await db.query('INSERT INTO empresas(id,nombre_empresa)VALUES($1,$2)',[pompeyo,'Servicio de Taxis Pompeyo Express']);
     await db.exec(localitySeparationSql);
   }
   // These legacy protocol fixtures explicitly act as customers too. Driver-only access has separate tests below.
