@@ -129,13 +129,11 @@ export class TaxiTurnTrace {
           if (step?.phase === "interpret" && model) step.model = model;
         }
       },
-      resolve: (text, channel, signal) =>
-        this.run(
-          "resolve",
-          { text },
-          () => base.resolve(text, channel, signal),
-          (value) => ({ resolution: value.kind }),
-        ),
+      resolve: async (text, channel, signal, area) => {
+        let model:ModelMetadata|undefined;
+        try{return await this.run('resolve',{text,area},()=>base.resolve(text,channel,signal,area,value=>{model=value;}),value=>({resolution:value.kind}));}
+        finally{const step=this.steps.at(-1);if(step?.phase==='resolve'&&model)step.model=model;}
+      },
       quote: (origin, destination, channel, signal) =>
         this.run(
           "quote",

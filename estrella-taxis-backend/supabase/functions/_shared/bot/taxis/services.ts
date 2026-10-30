@@ -9,8 +9,12 @@ import type { TaxiServices, LocationResult } from './coordinator.ts';
 import { createTaxiInterpreter } from './interpreter.ts';
 import { taxiH3Scope } from './h3.ts';
 import { resolveOsmAddress } from './addressGeocoder.ts';
+import { cellToLatLng } from 'h3-js';
+import { parseNeighborhoods, streetReference, type NeighborhoodArea } from './neighborhoodContracts.ts';
+import { exactNeighborhoods, mentionedNeighborhoods, representativeArea, semanticNeighborhoods } from './neighborhoods.ts';
+import type { ModelMetadata } from './trace.ts';
 export function createTaxiServices(store:TrackingStore,fetcher:Fetcher,config:{mapsKey:string;modelKey:string;traccarUrl:string;traccarEmail:string;traccarPassword:string;geocoderUrl?:string}):TaxiServices {
-  async function resolve(address:string,c:TaxiChannel,signal?:AbortSignal):Promise<LocationResult>{
+  async function resolvePoint(address:string,c:TaxiChannel,signal?:AbortSignal):Promise<LocationResult>{
     const gps=/^\s*(-?\d{1,3}(?:\.\d+)?)\s*,\s*(-?\d{1,3}(?:\.\d+)?)\s*$/.exec(address);
     if(gps&&coord(Number(gps[1]),Number(gps[2])))return {kind:'resolved',place:{text:address,lat:Number(gps[1]),lng:Number(gps[2]),placeId:null}};
     // No redirects or user-supplied URLs are fetched. Native location is the fallback for short links.
@@ -30,11 +34,35 @@ export function createTaxiServices(store:TrackingStore,fetcher:Fetcher,config:{m
     const p:Place={text:String(r.formatted_address),lat:r.geometry.location.lat,lng:r.geometry.location.lng,placeId:String(r.place_id)};
     return getDistanceFromLatLonInKm(p.lat,p.lng,c.centerLat,c.centerLng)<=c.radiusKm?{kind:'resolved',place:p}:{kind:'unavailable'};
   }
+  async function resolve(address:string,c:TaxiChannel,signal?:AbortSignal,area?:NeighborhoodArea|null,observe?:(metadata:ModelMetadata)=>void):Promise<LocationResult>{
+    if(/https?:\/\//i.test(address)||/[%*_]/.test(address))return {kind:'unavailable'};
+    // Exact coordinates cannot become an approximate neighborhood reference.
+    if(/^\s*-?\d+(?:\.\d+)?\s*,\s*-?\d+(?:\.\d+)?\s*$/.test(address))return resolvePoint(address,c,signal);
+    const rows=parseNeighborhoods(await store.rpc('taxi_bot_neighborhood_read',{p_tenant:c.tenantId}));
+    const exact=exactNeighborhoods(address,rows);
+    if(exact.length)return {kind:'ambiguous',labels:exact.map(r=>r.label),neighborhoods:exact.map(representativeArea)};
+    const mentioned=mentionedNeighborhoods(address,rows);
+    const selected=mentioned.length===1?mentioned[0]:mentioned.length?null:area?rows.find(r=>r.label===area.label):null;
+    let point:LocationResult;
+    try{point=await resolvePoint(selected?`${address}, ${selected.label}`:address,c,signal);}catch(error:unknown){if(signal?.aborted||!(selected&&streetReference(address,selected.label,selected.aliases)))throw error;point={kind:'unavailable'};}
+    if(point.kind==='resolved'){
+      if(!selected||selected.cells.includes(taxiH3Scope(point.place,point.place).originCell))return point;
+      return {kind:'reference_conflict',label:selected.label};
+    }
+    const matches=mentioned.length?mentioned:selected?[selected]:await semanticNeighborhoods(address,rows,fetcher,config.modelKey,c.model,signal,observe);
+    if(matches.length===1&&streetReference(address,matches[0].label,matches[0].aliases)){
+      const a=representativeArea(matches[0]),[lat,lng]=cellToLatLng(a.cell);
+      return {kind:'resolved',place:{text:`Zona aproximada: ${a.label}. ${address}`,lat,lng,placeId:null,area:{...a,reference:address}}};
+    }
+    if(matches.length)return {kind:'ambiguous',labels:matches.map(r=>r.label),neighborhoods:matches.map(representativeArea)};
+    return point;
+  }
   return {
     interpret:(current,session,c,signal,observe)=>createTaxiInterpreter(fetcher,config.modelKey,c.model,observe)(current,session,c,signal),resolve,
     quote:async(origin,destination,c,signal)=>{
       if(!coord(origin.lat,origin.lng)||!coord(destination.lat,destination.lng)||getDistanceFromLatLonInKm(origin.lat,origin.lng,c.centerLat,c.centerLng)>c.radiusKm||getDistanceFromLatLonInKm(destination.lat,destination.lng,c.centerLat,c.centerLng)>c.radiusKm)return null;
       if(c.pricingMode==='h3_zone_max'){
+        if(origin.area?.cents===null||destination.area?.cents===null)return null;
         const scope=taxiH3Scope(origin,destination);
         const quote=await store.rpc('taxi_bot_h3_quote',{p_tenant:c.tenantId,p_waba:c.waba,p_origin:scope.originCell,p_destination:scope.destinationCell});
         if(!record(quote)||!['priced','uncovered','invalid_zone','channel_unavailable'].includes(String(quote.state))||quote.mode!=='h3_zone_max')throw new TrackingError(502,'taxi_h3_contract','No se pudo validar la tarifa H3.');
@@ -44,6 +72,7 @@ export function createTaxiServices(store:TrackingStore,fetcher:Fetcher,config:{m
         return quote.cents;
       }
       if(c.pricingMode!=='road_distance')throw new TrackingError(503,'taxi_pricing_not_configured','La tarifa requiere configuración de la base.');
+      if(origin.area||destination.area)return null;
       if(c.baseCents===null||c.perKmCents===null||!config.mapsKey)return null;
       const params=new URLSearchParams({origin:`${origin.lat},${origin.lng}`,destination:`${destination.lat},${destination.lng}`,mode:'driving',key:config.mapsKey});
       const data=(await requestJson(fetcher,'https://maps.googleapis.com/maps/api/directions/json?'+params,{signal},8000,262144)).data;

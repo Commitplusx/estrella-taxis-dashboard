@@ -26,6 +26,7 @@ import { loadTaxiCoverage } from "../lib/taxiCoverage";
 import { loadCachedTaxiCoverage } from '../lib/taxiCoverageCache';
 import publicConfig from '../../deployment/stellar/web-public.json';
 import TaxiDriversPanel from '../components/TaxiDriversPanel';
+import TaxiNeighborhoodsPanel from '../components/TaxiNeighborhoodsPanel';
 import { buildZoneColors, zoneColor } from "../lib/taxiZoneColors";
 import { TrackingClientError } from "../lib/trackingClient";
 import TaxiCustomerAccessPanel from '../components/TaxiCustomerAccessPanel';
@@ -79,8 +80,8 @@ export default function TaxiBotAdminPage(
   const [context, setContext] = useState<AdminContext | null>(null),
     [tenantId, setTenant] = useState(""),
     [waba, setWaba] = useState(""),
-    [tab, setTab] = useState<"zones" | "operations" | "quality" | "config" | "access">(
-      window.location.hash === '#autorizados' ? 'access' : window.location.hash === '#configuracion' ? 'config' : "zones",
+    [tab, setTab] = useState<"zones" | "neighborhoods" | "operations" | "quality" | "config" | "access">(
+      window.location.hash === '#colonias' ? 'neighborhoods' : window.location.hash === '#autorizados' ? 'access' : window.location.hash === '#configuracion' ? 'config' : "zones",
     );
   const [qualityLocked, setQualityLocked] = useState(false);
   const [zoneReload, setZoneReload] = useState(0);
@@ -568,6 +569,7 @@ export default function TaxiBotAdminPage(
       <nav className="taxi-tabs" aria-label={zoneEditor ? "Administración de zonas" : "Administración del bot"}>
         {([
           { id: "zones", label: "Zonas y tarifas", icon: Hexagon },
+          { id:'neighborhoods',label:'Colonias',icon:MapPin },
           {
             id: "operations",
             label: "Conversaciones",
@@ -576,7 +578,7 @@ export default function TaxiBotAdminPage(
           { id: "quality", label: "Calidad", icon: ClipboardCheck },
           { id: "access", label: "Autorizados", icon: LockKeyhole },
           { id: "config", label: "Configuración", icon: Settings2 },
-        ] as const).filter(({ id }) => !zoneEditor || id === "zones" || id === "config" || id === "access")
+        ] as const).filter(({ id }) => !zoneEditor || id === "zones" || id === 'neighborhoods' || id === "config" || id === "access")
           .map(({ id, label: tabLabel, icon: Icon }) => (
             <button
               key={id}
@@ -675,6 +677,9 @@ export default function TaxiBotAdminPage(
           )}
         </div>
       )}
+      {channel && tab === 'neighborhoods' && <TaxiNeighborhoodsPanel key={tenantId+'|'+waba} tenantId={tenantId} waba={waba} canEdit={canConfigure} preview={preview} disabled={busy||Boolean(pending)} onLockChange={setQualityLocked}
+        onSaved={()=>{setZoneReload(v=>v+1);void refreshContext().catch((cause:unknown)=>setError(cause instanceof Error?cause.message:'La colonia se guardó. Actualiza el mapa para ver los cambios.'));}}
+        onMap={row=>{setTab('zones');setSelected(row&&row.cells.length<=400?row.cells:[]);setFocusCell(row?.cells[0]??null);setLabel(row&&row.cells.length<=400?row.label:'');setPrice(row&&row.cells.length<=400&&row.cents!==null?String(row.cents/100):'');}}/>}
       {channel && tab === "zones" && (
         <>
           <div className="taxi-section-heading">

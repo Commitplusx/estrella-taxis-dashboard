@@ -74,6 +74,8 @@ export function createTaxiInterpreter(
         name: session.draft.name,
         origin: session.draft.origin?.text,
         destination: session.draft.destination?.text,
+        originArea:session.draft.originArea?.label,
+        destinationArea:session.draft.destinationArea?.label,
       },
       awaitingLocation: session.draft.awaitingLocation,
       activeState: session.active?.state ?? null,

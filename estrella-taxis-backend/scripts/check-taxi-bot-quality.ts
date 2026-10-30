@@ -7,6 +7,7 @@ const files=[...names.map((n)=>resolve(taxi,n)),resolve(root,'tests/taxi-bot-cor
 files.push(...['tests/taxi-admin.test.ts','src/lib/taxiAdminClient.ts','src/lib/taxiAdminPreview.ts','src/pages/TaxiBotAdminPage.tsx','src/components/TaxiChannelForm.tsx','src/components/TaxiZoneMap.tsx','estrella-taxis-backend/supabase/functions/taxi-bot-admin/handler.ts','estrella-taxis-backend/supabase/functions/taxi-bot-admin/index.ts'].map((file)=>resolve(root,file)));
 files.push(...['tests/taxi-bot-trace.test.ts','tests/taxi-bot-quality.test.ts','tests/taxi-bot-state-matrix.test.ts','estrella-taxis-backend/supabase/functions/taxi-bot-admin/quality.ts'].map((file)=>resolve(root,file)));
 files.push(...['src/lib/taxiQualityClient.ts','src/components/TaxiQualityPanel.tsx','estrella-taxis-backend/supabase/functions/_shared/bot/taxis/qualityContracts.ts'].map((file)=>resolve(root,file)));
+files.push(...['src/components/TaxiNeighborhoodsPanel.tsx','tests/taxi-neighborhoods.test.ts','estrella-taxis-backend/supabase/functions/taxi-bot-admin/neighborhoods.ts','estrella-taxis-backend/supabase/functions/_shared/bot/taxis/neighborhoods.ts','estrella-taxis-backend/supabase/functions/_shared/bot/taxis/neighborhoodContracts.ts'].map(f=>resolve(root,f)));
 const failures:string[]=[];
 files.push(resolve(root,'tests/taxi-native-location.test.ts'));
 files.push(resolve(root,'tests/taxi-natural-flow.test.ts'));

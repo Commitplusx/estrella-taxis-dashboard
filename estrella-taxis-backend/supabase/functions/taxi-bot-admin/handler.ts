@@ -1,6 +1,8 @@
 import {taxiQualityRequest}from"./quality.ts";
 import { driverRequest } from './drivers.ts';
 import { accountRequest } from './accounts.ts';
+import { neighborhoodRequest } from './neighborhoods.ts';
+import type { Fetcher } from '../_shared/tracking/http.ts';
 import { customerPhones, parseCustomerAccess } from '../_shared/bot/taxis/customerAccess.ts';
 import { FleetApi, type FleetIdentity } from "../_shared/tracking/auth.ts";
 import { record, TrackingError, uuid } from "../_shared/tracking/contracts.ts";
@@ -34,6 +36,7 @@ export interface AdminDependencies {
   fleet: FleetApi;
   store: TrackingStore;
   runtimeReady: boolean;
+  neighborhoodModelKey?:string;neighborhoodFetcher?:Fetcher;
 }
 export function createTaxiAdminHandler(
   deps: AdminDependencies,
@@ -385,6 +388,10 @@ export function createTaxiAdminHandler(
         }),
       );
       const channel = rows.length ? channelFromRow(rows[0]) : null;
+      if(['neighborhoods','neighborhood_search','neighborhood_save'].includes(raw.action)){
+        if(!channel)throw new TrackingError(404,'channel_not_found','Primero guarda el WhatsApp de la base.');
+        return json(await neighborhoodRequest(raw,tenant,identity.userId,scope.configure,deps.store,record(rows[0])&&typeof rows[0].model==='string'?rows[0].model:'deepseek-chat',deps.neighborhoodModelKey??'',deps.neighborhoodFetcher??fetch,AbortSignal.any([req.signal,AbortSignal.timeout(15000)])));
+      }
       if (raw.action === 'accounts' || raw.action === 'account_save') {
         if (!channel) throw new TrackingError(404, 'channel_not_found', 'Primero guarda el WhatsApp de la base.');
         return json(await accountRequest(raw, tenant, waba, identity, deps.fleet, deps.store, AbortSignal.any([req.signal, AbortSignal.timeout(60000)])));

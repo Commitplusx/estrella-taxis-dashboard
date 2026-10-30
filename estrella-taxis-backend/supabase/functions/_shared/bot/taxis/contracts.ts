@@ -1,19 +1,21 @@
 import { record, TrackingError, positiveId } from '../../tracking/contracts.ts';
 import { taxiH3Cell, type H3QuoteScope } from './h3.ts';
+import { parseNeighborhoodArea, streetReference, type NeighborhoodArea } from './neighborhoodContracts.ts';
 export { record };
-export const TAXI_BOT_VERSION='taxi-bot-v5-natural-requests';
+export const TAXI_BOT_VERSION='taxi-bot-v6-neighborhoods';
 export interface TaxiChannel {
   tenantId:string; waba:string; enabled:boolean; name:string; city:string;
   centerLat:number; centerLng:number; radiusKm:number; dispatcher:string|null;
   model:string; baseCents:number|null; perKmCents:number|null;pricingMode:'h3_zone_max'|'road_distance';
 }
-export interface Place {text:string;lat:number;lng:number;placeId:string|null}
+export interface Place {text:string;lat:number;lng:number;placeId:string|null;area?:(NeighborhoodArea & {reference:string})}
 export interface PendingLocation {place:Place;expiresAt:string}
 export interface Draft {
   fareMode:'quoted'|'unquoted';
   name:string|null;origin:Place|null;destination:Place|null;quoteCents:number|null;confirmation:string|null;expiresAt:string|null;
   awaitingLocation:'origin'|'destination'|'choice'|null;pendingLocation:PendingLocation|null;
   quoteH3:H3QuoteScope|null;
+  originArea?:NeighborhoodArea|null;destinationArea?:NeighborhoodArea|null;
 }
 export interface Trip {id:string;state:'buscando_conductor'|'en_camino'|'completado'|'cancelado'|'cancelado_timeout';taxiName:string|null}
 export interface TaxiSession {revision:number;mode:'bot'|'human';draft:Draft;active:Trip|null;history:History[]}
@@ -47,7 +49,9 @@ export function coord(lat:unknown,lng:unknown):lat is number {
 export function emptyDraft():Draft{return {fareMode:'unquoted',name:null,origin:null,destination:null,quoteCents:null,confirmation:null,expiresAt:null,awaitingLocation:null,pendingLocation:null,quoteH3:null};}
 export function parsePlace(value:unknown):Place|null {
   if(!record(value)||!text(value.text,400)||!coord(value.lat,value.lng)||typeof value.lng!=='number'||!(value.placeId===null||typeof value.placeId==='string'))return null;
-  return {text:String(value.text),lat:value.lat,lng:value.lng,placeId:value.placeId};
+  const area=value.area===undefined?null:parseNeighborhoodArea(value.area);
+  if(value.area!==undefined&&(!area||!record(value.area)||typeof value.area.reference!=='string'||!streetReference(value.area.reference,area.label)||!String(value.text).startsWith('Zona aproximada: ')||!String(value.text).includes(value.area.reference)))return null;
+  return {text:String(value.text),lat:value.lat,lng:value.lng,placeId:value.placeId,...(area&&record(value.area)&&typeof value.area.reference==='string'?{area:{...area,reference:value.area.reference}}:{})};
 }
 export function parseInbound(payload:unknown,now=Date.now()):TaxiInbound|null {
   if(!record(payload))return null;
@@ -100,7 +104,9 @@ export function parseSession(value:unknown):TaxiSession {
   if(value.active!==null) {const a=value.active;if(!record(a)||!text(a.id,40)||!['buscando_conductor','en_camino','completado','cancelado','cancelado_timeout'].includes(String(a.state))||!(a.taxiName===null||text(a.taxiName,120)))throw new TrackingError(502,'invalid_taxi_trip','El viaje guardado no es válido.');
     const state=a.state;if(state==='buscando_conductor'||state==='en_camino'||state==='completado'||state==='cancelado'||state==='cancelado_timeout')active={id:String(a.id),state,taxiName:a.taxiName===null?null:String(a.taxiName)};
   }
-  return {revision:value.revision,mode:value.mode==='human'?'human':'bot',draft:{fareMode,name:d.name===null?null:String(d.name),origin,destination,quoteCents:d.quoteCents===null?null:Number(d.quoteCents),confirmation:d.confirmation===null?null:String(d.confirmation),expiresAt:d.expiresAt===null?null:String(d.expiresAt),awaitingLocation,pendingLocation,quoteH3},active,history};
+  const originArea=parseNeighborhoodArea(d.originArea),destinationArea=parseNeighborhoodArea(d.destinationArea);
+  if(originArea&&origin||destinationArea&&destination||(originArea||destinationArea)&&d.confirmation!==null)throw new TrackingError(502,'invalid_taxi_area','Falta aclarar una colonia del recorrido.');
+  return {revision:value.revision,mode:value.mode==='human'?'human':'bot',draft:{fareMode,name:d.name===null?null:String(d.name),origin,destination,quoteCents:d.quoteCents===null?null:Number(d.quoteCents),confirmation:d.confirmation===null?null:String(d.confirmation),expiresAt:d.expiresAt===null?null:String(d.expiresAt),awaitingLocation,pendingLocation,quoteH3,...(d.originArea!==undefined?{originArea}:{}),...(d.destinationArea!==undefined?{destinationArea}:{})},active,history};
 }
 export function parseCandidates(raw:unknown):Candidate[] {
   if(!Array.isArray(raw)||raw.length>3)throw new TrackingError(502,'invalid_taxi_candidates','La selección de unidades no es válida.');

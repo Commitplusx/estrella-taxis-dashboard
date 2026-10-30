@@ -4,10 +4,11 @@ import { emptyDraft, type Candidate, type Draft, type Interpretation, type Place
 import { activeRideChange, cancellationQuestion, cancelsTaxi, confirmsTaxi, courtesyOnly, declinesTaxi, locationRole, needsHuman, normalize, unsupportedRide } from './policy.ts';
 import { getDistanceFromLatLonInKm } from '../../algorithms/headingMatcher.ts';
 import { taxiH3Scope } from './h3.ts';
-export type LocationResult={kind:'resolved';place:Place}|{kind:'ambiguous';labels:string[]}|{kind:'unavailable'};
+import type { NeighborhoodArea } from './neighborhoodContracts.ts';
+export type LocationResult={kind:'resolved';place:Place}|{kind:'ambiguous';labels:string[];neighborhoods?:NeighborhoodArea[]}|{kind:'reference_conflict';label:string}|{kind:'unavailable'};
 export interface TaxiServices {
   interpret:(text:string,session:TaxiSession,channel:TaxiChannel,signal?:AbortSignal,observe?:(metadata:ModelMetadata)=>void)=>Promise<Interpretation>;
-  resolve:(text:string,channel:TaxiChannel,signal?:AbortSignal)=>Promise<LocationResult>;
+  resolve:(text:string,channel:TaxiChannel,signal?:AbortSignal,area?:NeighborhoodArea|null,observe?:(metadata:ModelMetadata)=>void)=>Promise<LocationResult>;
   quote:(origin:Place,destination:Place,channel:TaxiChannel,signal?:AbortSignal)=>Promise<number|null>;
   candidates:(origin:Place,channel:TaxiChannel,signal?:AbortSignal)=>Promise<Candidate[]>;
 }
@@ -40,7 +41,8 @@ async function decideTaxi(messages:TaxiInbound[],session:TaxiSession,channel:Tax
     if(!d.origin)return requestLocation(d,'origin','missing_origin');
     if(!d.destination)return askDestination(d,'missing_destination');
     if(!within(d.origin,channel)||!within(d.destination,channel))return human('outside_service_area','El recorrido queda fuera de la cobertura actual. Paso la solicitud a la base para revisarla contigo.');
-    if(getDistanceFromLatLonInKm(d.origin.lat,d.origin.lng,d.destination.lat,d.destination.lng)<0.03)return requestLocation({...d,destination:null},'destination','same_place','El origen y el destino parecen el mismo punto. Escribe a dónde vas o elige el destino en el mapa.');
+    const sameReference=normalize(d.origin.text)===normalize(d.destination.text);
+    if(getDistanceFromLatLonInKm(d.origin.lat,d.origin.lng,d.destination.lat,d.destination.lng)<0.03&&(!(d.origin.area||d.destination.area)||sameReference))return requestLocation({...d,destination:null},'destination','same_place','El origen y el destino parecen el mismo punto. Escribe a dónde vas o elige el destino en el mapa.');
     let quoteCents:number|null=null;
     try{if(d.fareMode==='quoted')quoteCents=verifiedQuote?verifiedQuote.cents:await services.quote(d.origin,d.destination,channel,signal);}catch{
       if(channel.pricingMode==='h3_zone_max')return human('h3_quote_unavailable','No pude consultar la tarifa de esas zonas. Paso el recorrido a la base para que lo revisen contigo.');
@@ -56,6 +58,12 @@ async function decideTaxi(messages:TaxiInbound[],session:TaxiSession,channel:Tax
   };
   const tariffReview=async(d:Draft):Promise<TaxiDecision|null>=>{
     if(!d.origin||!d.destination)return null;
+    for(const field of ['origin','destination'] as const){
+      const place=d[field];if(!place?.area)continue;
+      let current:LocationResult;try{current=await services.resolve(place.area.reference,channel,signal,place.area);}catch{return human('neighborhood_review_failed','No pude comprobar la colonia del recorrido. Paso la solicitud a la base antes de buscar una unidad.');}
+      if(current.kind!=='resolved')return requestLocation({...d,[field]:null,[field+'Area']:null},field,'neighborhood_changed','Cambió la zona del recorrido. ¿Me confirmas la colonia, calle o referencia? El pin sigue siendo opcional.');
+      if(JSON.stringify(current.place)!==JSON.stringify(place))return prepareSummary({...d,[field]:current.place},'neighborhood_changed');
+    }
     if(!within(d.origin,channel)||!within(d.destination,channel))return human('outside_service_area','La cobertura de la base cambió y el recorrido queda fuera. Les paso tu solicitud antes de buscar una unidad.');
     if(d.fareMode==='unquoted')return null;
     if(channel.pricingMode==='road_distance')return d.quoteH3?prepareSummary(d,'tariff_changed'):null;
@@ -108,7 +116,7 @@ async function decideTaxi(messages:TaxiInbound[],session:TaxiSession,channel:Tax
   const selectedRole=locationRole(current);
   if(selectedRole&&d.pendingLocation&&messages.every((m)=>m.type==='text')){
     if(Date.parse(d.pendingLocation.expiresAt)<=now)return requestLocation(d,selectedRole,'pending_location_expired','Ese pin ya venció. Compártelo otra vez para usarlo en este viaje.');
-    d[selectedRole]=d.pendingLocation.place;d.pendingLocation=null;d.awaitingLocation=null;
+    d[selectedRole]=d.pendingLocation.place;d[selectedRole==='origin'?'originArea':'destinationArea']=null;d.pendingLocation=null;d.awaitingLocation=null;
     return prepareSummary(d,'summary');
   }
   let interpretation:Interpretation;
@@ -127,12 +135,16 @@ async function decideTaxi(messages:TaxiInbound[],session:TaxiSession,channel:Tax
   const native=messages.filter((m)=>m.location!==null);
   if(native.length>1)return {...reply('Recibí más de una ubicación. ¿Cuál es el punto donde te recogemos?','multiple_locations'),action:'draft',draft:{...d,confirmation:null,expiresAt:null}};
   const unresolved:('origin'|'destination')[]=[];
+  const recognized:Partial<Record<'origin'|'destination',NeighborhoodArea[]>>={};
+  const referenceConflicts:Partial<Record<'origin'|'destination',string>>={};
   for(const field of ['origin','destination'] as const) {
     const requested=interpretation.fields[field];if(!requested)continue;
     changed=true;d.confirmation=null;d.expiresAt=null;d.quoteCents=null;d.quoteH3=null;
-    let resolved:LocationResult;try{resolved=await services.resolve(requested.value,channel,signal);}catch{resolved={kind:'unavailable'};}
+    const areaKey=field==='origin'?'originArea':'destinationArea';
+    let resolved:LocationResult;try{resolved=await services.resolve(requested.value,channel,signal,d[areaKey]);}catch{resolved={kind:'unavailable'};}
+    d[areaKey]=null;
     if(resolved.kind==='resolved'&&within(resolved.place,channel)){d[field]=resolved.place;if(d.awaitingLocation===field)d.awaitingLocation=null;}
-    else {d[field]=null;unresolved.push(field);}
+    else {d[field]=null;unresolved.push(field);if(resolved.kind==='reference_conflict')referenceConflicts[field]=resolved.label;if(resolved.kind==='ambiguous'&&resolved.neighborhoods?.length){recognized[field]=resolved.neighborhoods;if(resolved.neighborhoods.length===1)d[areaKey]=resolved.neighborhoods[0];}}
   }
   if(d.awaitingLocation==='choice'&&!d.pendingLocation&&!unresolved.length&&(interpretation.fields.origin||interpretation.fields.destination))d.awaitingLocation=!d.origin?'origin':!d.destination?'destination':null;
   if(native[0]?.location) {
@@ -140,11 +152,18 @@ async function decideTaxi(messages:TaxiInbound[],session:TaxiSession,channel:Tax
     if(!within(place,channel))return human('outside_service_area','La ubicación queda fuera de la zona configurada. La base debe confirmar ese servicio.');
     const target=selectedRole??(unresolved.length===1?unresolved[0]:d.awaitingLocation==='origin'||d.awaitingLocation==='destination'?d.awaitingLocation:null)??(!current&&d.awaitingLocation!=='choice'&&!(d.origin&&d.destination)?(!d.origin?'origin':'destination'):null);
     if(!target)return {...reply('¿Ese pin cambia el punto de recogida o el destino?','location_target_unclear'),action:'draft',draft:{...d,confirmation:null,expiresAt:null,quoteCents:null,quoteH3:null,awaitingLocation:'choice',pendingLocation:{place,expiresAt:new Date(now+10*60000).toISOString()}}};
-    d[target]=place;d.awaitingLocation=null;d.pendingLocation=null;changed=true;
+    d[target]=place;d[target==='origin'?'originArea':'destinationArea']=null;d.awaitingLocation=null;d.pendingLocation=null;changed=true;
     const resolvedIndex=unresolved.indexOf(target);if(resolvedIndex>=0)unresolved.splice(resolvedIndex,1);
   }
   if(changed){d.confirmation=null;d.expiresAt=null;d.quoteCents=null;d.quoteH3=null;}
-  if(unresolved.length===1)return requestLocation(d,unresolved[0],'unresolved_location',`Para ubicar bien ${unresolved[0]==='origin'?'la recogida':'el destino'}, ¿me pasas calle, número y colonia? Si te queda más fácil, también puedes compartir el punto con el botón.`);
+  if(unresolved.length===1){
+    const field=unresolved[0],areas=recognized[field];
+    const conflict=referenceConflicts[field];if(conflict)return requestLocation(d,field,'neighborhood_reference_conflict',`La ubicación que encontré no cae en ${conflict}. ¿Me confirmas la colonia o me das otra calle o referencia? Si prefieres, comparte el pin.`);
+    if(areas?.length===1)return requestLocation(d,field,'neighborhood_reference_required',`Ubico ${areas[0].label}. ¿En qué calle o con qué referencia ${field==='origin'?'te recogemos':'queda el destino'}? También puedes compartir el pin, si prefieres.`);
+    if(areas?.length)return requestLocation(d,field,'neighborhood_ambiguous',`Encontré estas zonas: ${areas.map(a=>a.label).join(', ')}. ¿Cuál es? Después dime la calle o una referencia.`);
+    return requestLocation(d,field,'unresolved_location',`Para ubicar bien ${field==='origin'?'la recogida':'el destino'}, ¿me pasas calle, número y colonia? Si te queda más fácil, también puedes compartir el punto con el botón.`);
+  }
+  if(unresolved.length>1){const field=unresolved.find(value=>referenceConflicts[value]);if(field)return requestLocation(d,field,'neighborhood_reference_conflict',`La ubicación que encontré no cae en ${referenceConflicts[field]}. ¿Me confirmas la colonia o me das otra calle o referencia? Si prefieres, comparte el pin.`);}
   if(unresolved.length)return {...reply('No pude ubicar con certeza la recogida y el destino. ¿Cuál es la dirección donde te recogemos?','unresolved_location'),action:'draft',draft:{...d,awaitingLocation:'choice',pendingLocation:null}};
   if(interpretation.intent==='smalltalk'&&!changed&&!d.origin&&!d.pendingLocation&&d.awaitingLocation!=='choice')return requestLocation(d,'origin','greeting',`Hola, somos ${channel.name}. ¿Dónde te recogemos? Escríbeme la dirección o, si prefieres, compártela con el botón.`);
   if(!changed&&interpretation.intent==='smalltalk')return reply('Aquí sigo. Si quieres cambiar algo del viaje, dime qué dato revisamos.','smalltalk');

@@ -22,5 +22,6 @@ if (import.meta.main) {
     runtimeReady: Deno.env.get("TAXI_BOT_ENABLED") === "true" &&
       (Deno.env.get("TAXI_WORKER_SECRET") ?? "").length >= 32 &&
       required.every((key) => (Deno.env.get(key) ?? "").length > 0),
+    neighborhoodModelKey:Deno.env.get('DEEPSEEK_API_KEY')??'',
   }));
 }
