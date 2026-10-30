@@ -1,6 +1,12 @@
 import { record, type Interpretation } from './contracts.ts';
 import { TrackingError } from '../../tracking/contracts.ts';
 export const normalize=(s:string)=>s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/\s+/g,' ').trim();
+export const resetCommand=(s:string):boolean=>/^\s*\/reset\s*$/i.test(s);
+export function draftLocationRequest(s:string):'origin'|'destination'|null {
+  const match=/^(?:(?:cambiar|cambia|corregir|corrige) (?:el |la )?)?(destino|origen|recogida)[.!¡]*$/.exec(normalize(s));
+  return match?match[1]==='destino'?'destination':'origin':null;
+}
+export const cancelDraftCommand=(s:string):boolean=>/^(?:cancelar|cancela)[.!¡]*$/.test(normalize(s));
 export function confirmsTaxi(s:string):boolean {
   if(/[?¿]|\.{2,}/.test(s))return false;
   return /^(?:si|si confirmo|confirmo(?: el (?:viaje|taxi))?|confirmar viaje|mandalo|envialo|manda el taxi|si[, ]+mandalo|adelante|dale|va|sale|de acuerdo|correcto|asi esta bien)(?:[,. ]+(?:por favor|porfa|gracias))?[.!¡]*$/.test(normalize(s));

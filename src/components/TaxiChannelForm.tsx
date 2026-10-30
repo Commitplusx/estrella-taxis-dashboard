@@ -111,8 +111,8 @@ export default function TaxiChannelForm(
             required
           />
         </label>
-        <TaxiPhoneField label="Teléfono de atención de la base" value={dispatcher} onChange={setDispatcher}
-          help={dispatcherMatchesBot ? 'Este es el mismo número que envía los mensajes del bot y no puede recibir sus propias alertas. Pon el WhatsApp de una persona de la base.' : 'Aquí llegan las solicitudes que requieren ayuda de una persona.'} />
+        <TaxiPhoneField label="WhatsApp para avisos de atención humana (opcional)" value={dispatcher} onChange={setDispatcher}
+          help={dispatcherMatchesBot ? 'Usa el WhatsApp de una persona o déjalo vacío para atender desde Conversaciones.' : 'Las solicitudes quedan en Conversaciones. Agrega este número si también quieres alertas por WhatsApp. Las ofertas de viaje llegan al chofer vinculado a la unidad.'} />
         <label>
           Latitud del centro<input
             type="number"

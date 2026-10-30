@@ -269,6 +269,15 @@ Deno.test("taxi admin: a transport that is not ready cannot be activated from th
   );
   equal(f.counts().writes, 0);
 });
+Deno.test('taxi admin: an alert phone is optional when the base handles human attention from its panel',async()=>{
+ const payload={name:'Base sintética',city:'Comitán',dispatcher:null,centerLat:16.25,centerLng:-92.13,radiusKm:20,pricingMode:'h3_zone_max',baseCents:5500,perKmCents:null,enabled:true};
+ const ready=fixture({ready:true,whatsapp:true});ready.plan('configure',payload);
+ equal((await ready.handler(ready.request({...ready.writeBody,action:'configure',payload}))).status,200);
+ equal(ready.counts().writes,1);
+ const offline=fixture({ready:false});
+ equal((await offline.handler(offline.request({...offline.writeBody,action:'configure',payload}))).status,409);
+ equal(offline.counts().writes,0);
+});
 Deno.test("taxi admin: unknown persistence response remains uncertain instead of claiming a saved price", async () => {
   const f = fixture({ result: {} });
   f.plan("upsert_zones", zonePayload);

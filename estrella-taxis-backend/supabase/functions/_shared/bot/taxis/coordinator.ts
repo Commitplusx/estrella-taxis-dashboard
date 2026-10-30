@@ -1,7 +1,7 @@
 import {assertTaxiTransition,conversationPhase}from'./stateMachine.ts';
 import type{ModelMetadata}from'./trace.ts';
 import { emptyDraft, type Candidate, type Draft, type Interpretation, type Place, type TaxiChannel, type TaxiDecision, type TaxiInbound, type TaxiSession } from './contracts.ts';
-import { activeRideChange, cancellationQuestion, cancelsTaxi, confirmsTaxi, courtesyOnly, declinesTaxi, locationRole, needsHuman, normalize, unsupportedRide } from './policy.ts';
+import { activeRideChange, cancellationQuestion, cancelsTaxi, confirmsTaxi, courtesyOnly, declinesTaxi, locationRole, needsHuman, normalize, unsupportedRide,resetCommand,cancelDraftCommand,draftLocationRequest } from './policy.ts';
 import { getDistanceFromLatLonInKm } from '../../algorithms/headingMatcher.ts';
 import { taxiH3Scope } from './h3.ts';
 import type { NeighborhoodArea } from './neighborhoodContracts.ts';
@@ -64,7 +64,7 @@ async function decideTaxi(messages:TaxiInbound[],session:TaxiSession,channel:Tax
     if(!within(d.origin,channel)||d.destination&&!within(d.destination,channel))return human('outside_service_area','El recorrido queda fuera de la cobertura actual. Paso la solicitud a la base para revisarla contigo.');
     let quoteCents:number|null=null;
     try{quoteCents=verifiedQuote?verifiedQuote.cents:await services.quote(d.origin,d.destination??d.origin,channel,signal,d.destination?null:d.destinationArea);}catch{return human('h3_quote_unavailable','No pude consultar la tarifa. Paso el recorrido a la base para que lo revisen contigo antes de solicitar una unidad.',d);}
-    if(quoteCents===null||!Number.isSafeInteger(quoteCents)||quoteCents<=0||quoteCents>10000000)return human('h3_quote_unavailable','No encontré una tarifa verificada para este punto. La base debe revisarla antes de solicitar el taxi.',d);
+    if(quoteCents===null||!Number.isSafeInteger(quoteCents)||quoteCents<Math.max(1,channel.baseCents??0)||quoteCents>10000000)return human('h3_quote_unavailable','No encontré una tarifa verificada para este punto. La base debe revisarla antes de solicitar el taxi.',d);
     const quoteBasis=d.destination||d.destinationArea?'route':'pickup';
     if(!d.name){
       const price=reason==='quote_only'?(quoteCents===null?'La base necesita confirmar la tarifa de ese recorrido. ':`Ese recorrido tiene una tarifa estimada de $${(quoteCents/100).toFixed(2)} MXN. `):'';
@@ -89,6 +89,11 @@ async function decideTaxi(messages:TaxiInbound[],session:TaxiSession,channel:Tax
     return null;
   };
   if(Date.parse(latest.at)<now-10*60000)return human('stale_turn','Tu mensaje quedó pendiente demasiado tiempo. La base debe confirmar si todavía necesitas el viaje.');
+  if(messages.some(m=>m.type==='text'&&resetCommand(m.text))){
+    const needsPin=session.mode==='bot'&&!live(session.active);
+    const text=live(session.active)?'Reinicié la conversación. Tu viaje actual sigue activo; para cancelarlo escribe «Cancela mi taxi». 🚕':session.mode==='human'?'Reinicié los datos de la conversación. La base continúa atendiéndote. 🙂':'Conversación reiniciada. Compárteme el pin GPS donde te recogemos para empezar de nuevo. 🚕';
+    return {...base,action:'reset',reason:'conversation_reset',draft:{...emptyDraft(),awaitingLocation:needsPin?'origin':null},messages:[{to:latest.from,text,...(needsPin?{locationRequest:'origin' as const}:{})}]};
+  }
   if(current.length>6000)return human('turn_too_large','Recibí muchos datos juntos. Paso la conversación a la base para revisar el viaje contigo.');
   if(session.mode==='human'&&!messages.some((m)=>m.type==='button'&&/^tx[arf]_/.test(m.button??'')))return {...base,reason:'human_owned'};
   if(needsHuman(current))return human('human_requested');
@@ -110,11 +115,14 @@ async function decideTaxi(messages:TaxiInbound[],session:TaxiSession,channel:Tax
   if(messages.some((m)=>m.type==='unsupported'))return reply('Por ahora mándame la dirección por texto o comparte tu ubicación desde WhatsApp.','unsupported_media');
   if(unsupportedRide(current))return human('special_ride','Ese servicio necesita revisión de la base. Les paso tu mensaje para que te confirmen si pueden atenderlo.');
   if(cancelsTaxi(current))return live(session.active)?{...base,action:'cancel',tripId:session.active?.id??null,reason:'explicit_cancellation'}:{...reply('No tienes un viaje activo para cancelar.','no_active_trip'),action:'draft',draft:emptyDraft()};
+  if(messages.every(m=>m.type==='text')&&cancelDraftCommand(current))return live(session.active)?reply('Para cancelar tu viaje actual, escribe «Cancela mi taxi».','cancellation_question'):{...reply('Descarté el borrador. No se solicitó ningún taxi. Cuando quieras empezar de nuevo, aquí estoy. 🙂','draft_cancelled'),action:'draft',draft:emptyDraft()};
   if(cancellationQuestion(current))return reply(live(session.active)?'¿Quieres cancelar tu solicitud actual? Si es así, escribe «Cancela mi taxi».':'Todavía no tienes un taxi solicitado para cancelar.','cancellation_question');
   if(live(session.active)) {
     if(activeRideChange(current)||messages.some((m)=>m.location!==null))return human('active_trip_change','Tu viaje ya está solicitado. Paso el cambio a la base para que lo revisen antes de mover la unidad.');
     return reply(session.active?.state==='en_camino'?`🚕 La unidad ${session.active.taxiName??'asignada'} ya aceptó tu viaje. Aún no tengo una llegada confirmada.`:'🚕 Tu solicitud sigue en búsqueda. Todavía no hay una unidad confirmada.','active_status');
   }
+  const requestedLocation=messages.every(m=>m.type==='text')&&!session.draft.pendingLocation?draftLocationRequest(current):null;
+  if(requestedLocation)return requestLocation(session.draft,requestedLocation,'edit_location_requested',requestedLocation==='destination'?'¿A dónde vas? Escríbeme el destino o comparte su pin; es opcional.':'Compárteme el nuevo pin GPS donde te recogemos.');
   if(messages.every((m)=>m.type==='text'&&(confirmsTaxi(m.text)||courtesyOnly(m.text)))&&messages.some((m)=>confirmsTaxi(m.text))) {
     const d=session.draft;
     if(!d.name||!d.origin||d.pendingLocation||d.awaitingLocation)return reply('Todavía faltan datos por aclarar. Necesito el pin de recogida y el nombre; después toca «Confirmar viaje».','no_current_confirmation');

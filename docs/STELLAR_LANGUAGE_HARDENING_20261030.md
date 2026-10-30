@@ -1,5 +1,7 @@
 # Comprensión natural y conservación de datos — 30 de octubre de 2026
 
+Estado posterior: [v9, reinicio y mínimo de Pompeyo](STELLAR_RESET_MINIMUM_20261030.md). Las versiones y resultados de esta página corresponden a la publicación histórica v8.
+
 ## Cambios publicados
 
 Motor `taxi-bot-v8-context`, exclusivo del canal de Pompeyo terminado en 2491. Se mantienen el GPS nativo obligatorio de recogida, destino opcional, tarifa del servidor y confirmación exclusivamente con el botón vigente. No cambian las RPC ni la asignación o cierre de viajes.

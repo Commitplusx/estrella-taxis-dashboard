@@ -237,11 +237,7 @@ export function parseCommand(raw: unknown): AdminCommand {
     const target = action === 'rename_channel' ? p.newWaba : waba;
     if (typeof target !== 'string' || !validChannelPhone(target)) return fail('Revisa el código de país y el número de WhatsApp. Para México usa +52 y el número local.');
     if (dispatcher && customerPhone(dispatcher) === customerPhone(target)) return fail('El teléfono de atención debe ser distinto al WhatsApp del bot para que una persona reciba las alertas.');
-    if (p.enabled && !dispatcher) {
-      return fail(
-        "Agrega el teléfono de atención de la base antes de activar.",
-      );
-    }
+    // Human attention remains in the panel. This optional phone only receives extra alerts, never driver offers.
     payload = {
       name: String(p.name).trim(),
       city: String(p.city).trim(),

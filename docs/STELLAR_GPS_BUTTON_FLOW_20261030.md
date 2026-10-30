@@ -1,5 +1,7 @@
 # Conversación natural, GPS de recogida y confirmación explícita
 
+Estado posterior: [v9, reinicio y mínimo de Pompeyo](STELLAR_RESET_MINIMUM_20261030.md). Las versiones y resultados de esta página corresponden a la publicación histórica v7.
+
 **Actualización posterior:** [Comprensión natural y conservación de datos](STELLAR_LANGUAGE_HARDENING_20261030.md), motor v8, modelo evaluado con 58 casos y funciones v20/v20/v26. Las reglas de GPS y confirmación descritas aquí se mantienen; los hashes y versiones siguientes registran la publicación anterior.
 
 ## Regla vigente

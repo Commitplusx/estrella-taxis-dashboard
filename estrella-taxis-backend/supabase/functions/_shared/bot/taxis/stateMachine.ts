@@ -1,6 +1,6 @@
-import type { TaxiDecision, TaxiInbound, TaxiSession } from "./contracts.ts";
+import {emptyDraft,type TaxiDecision,type TaxiInbound,type TaxiSession}from'./contracts.ts';
 import { TrackingError } from "../../tracking/contracts.ts";
-import { cancelsTaxi } from "./policy.ts";
+import { cancelsTaxi,resetCommand } from "./policy.ts";
 
 export type ConversationPhase =
   | "human"
@@ -24,8 +24,8 @@ export function conversationPhase(
   if (d.pendingLocation || d.awaitingLocation === "choice") {
     return "location_role";
   }
-  if (!d.origin || d.origin.source !== 'gps' || !d.pickupMessageId || d.awaitingLocation === "origin") return "origin";
   if (d.awaitingLocation === "destination") return "destination";
+  if (!d.origin || d.origin.source !== 'gps' || !d.pickupMessageId || d.awaitingLocation === "origin") return "origin";
   if (!d.name) return "name";
   if (!d.confirmation || !d.expiresAt) return "ready_for_review";
   return Date.parse(d.expiresAt) > now ? "review" : "review_expired";
@@ -61,17 +61,22 @@ export function assertTaxiTransition(
   ) fail();
   if(d.draft.fareMode==='unquoted'&&(d.draft.quoteCents!==null||d.draft.quoteH3!==null))fail();
   if (d.messages.some((m) => m.locationRequest && (
-    d.action !== 'draft' || s.mode !== 'bot' ||
+    !['draft','reset'].includes(d.action) || s.mode !== 'bot' ||
     (s.active && ['buscando_conductor', 'en_camino'].includes(s.active.state)) ||
     d.draft.awaitingLocation !== m.locationRequest || d.draft.pendingLocation ||
     d.draft.confirmation || Boolean(m.buttons?.length) || m.text.length > 1024
   ))) fail();
   if (
     s.mode === "human" &&
-    !["reply", "human", "driver_accept", "driver_reject", "driver_finish"]
+    !["reply", "reset", "human", "driver_accept", "driver_reject", "driver_finish"]
       .includes(d.action)
   ) fail();
-  if (d.action === "confirm") {
+  if(d.action==='reset'){
+    const needsPin=s.mode==='bot'&&!(s.active&&['buscando_conductor','en_camino'].includes(s.active.state));
+    const expected={...emptyDraft(),awaitingLocation:needsPin?'origin':null};
+    if(!messages.some(m=>m.type==='text'&&resetCommand(m.text))||d.confirmation!==null||d.tripId!==null||d.offerId!==null||d.candidates.length||
+      Object.keys(d.draft).length!==Object.keys(expected).length||Object.entries(expected).some(([key,value])=>JSON.stringify(d.draft[key as keyof typeof expected])!==JSON.stringify(value)))fail();
+  }else if (d.action === "confirm") {
     if (
       conversationPhase(s, now) !== "review" ||
       d.confirmation !== s.draft.confirmation ||

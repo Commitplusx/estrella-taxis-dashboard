@@ -650,7 +650,7 @@ Deno.test("taxi tools: trace hashes include tool schemas and record the validate
     );
   const trace = new TaxiTurnTrace(completeSession(), now),
     meta = await trace.metadata(channel);
-  equal(meta.engineVersion, "taxi-bot-v8-context");
+  equal(meta.engineVersion, "taxi-bot-v9-reset-minimum");
   equal(meta.promptHash, await fingerprint(TAXI_INTERPRETER_CONTRACT));
   const decision = await coordinateTaxi(
     [inbound(current)],

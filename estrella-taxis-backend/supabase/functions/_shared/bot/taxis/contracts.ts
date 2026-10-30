@@ -2,7 +2,7 @@ import { record, TrackingError, positiveId } from '../../tracking/contracts.ts';
 import { taxiH3Cell, type H3QuoteScope } from './h3.ts';
 import { parseNeighborhoodArea, streetReference, type NeighborhoodArea } from './neighborhoodContracts.ts';
 export { record };
-export const TAXI_BOT_VERSION='taxi-bot-v8-context';
+export const TAXI_BOT_VERSION='taxi-bot-v9-reset-minimum';
 export interface TaxiChannel {
   tenantId:string; waba:string; enabled:boolean; name:string; city:string;
   centerLat:number; centerLng:number; radiusKm:number; dispatcher:string|null;
@@ -33,7 +33,7 @@ export interface Interpretation {
 export interface TaxiMessage {to:string;text:string;buttons?:{id:string;title:string}[];locationRequest?:'origin'|'destination'}
 export interface Candidate {deviceId:number;name:string}
 export interface TaxiDecision {
-  action:'draft'|'reply'|'confirm'|'cancel'|'human'|'driver_accept'|'driver_reject'|'driver_finish';
+  action:'draft'|'reply'|'reset'|'confirm'|'cancel'|'human'|'driver_accept'|'driver_reject'|'driver_finish';
   draft:Draft;confirmation:string|null;tripId:string|null;offerId:string|null;
   candidates:Candidate[];messages:TaxiMessage[];reason:string;
 }
