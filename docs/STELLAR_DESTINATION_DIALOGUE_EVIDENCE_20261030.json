@@ -1,0 +1,39 @@
+{
+  "observedAt": "2026-10-30T23:33:35.083Z",
+  "project": "Stellar Tracking",
+  "projectRef": "izrsxygazsalfhpaualj",
+  "contractVersion": "taxi-bot-v10-destination-dialogue",
+  "migration": {
+    "version": "20261031190000",
+    "recorded": true,
+    "updatedSqlFunctions": [
+      "taxi_bot_commit",
+      "taxi_bot_phase",
+      "taxi_bot_validate_quote",
+      "taxi_bot_trace_packet_valid"
+    ]
+  },
+  "channel": {
+    "name": "Servicio de Taxis Pompeyo Express",
+    "enabled": true,
+    "minimumFareCents": 5500,
+    "revision": 6
+  },
+  "edgeFunctions": [
+    { "name": "ycloud-webhook", "version": 23, "runtimeFiles": 25, "sourceMatchesReviewedPackage": true, "optionsStatus": 200 },
+    { "name": "process-queue", "version": 23, "runtimeFiles": 25, "sourceMatchesReviewedPackage": true, "optionsStatus": 200 },
+    { "name": "taxi-bot-admin", "version": 29, "runtimeFiles": 24, "sourceMatchesReviewedPackage": true, "optionsStatus": 200 }
+  ],
+  "unauthenticatedAdminStatus": 401,
+  "workerStatus": "online",
+  "localVerification": {
+    "staticFiles": 93,
+    "denoTestsPassed": 5852,
+    "nodeTestsPassed": 123,
+    "failed": 0,
+    "strictTypeChecksPassed": true,
+    "modelEvaluation": "Not run; no local model key was configured. No production evaluation or accuracy claim is implied."
+  },
+  "realWhatsAppMessagesSent": 0,
+  "realTripsCreated": 0
+}

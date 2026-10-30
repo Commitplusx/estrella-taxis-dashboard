@@ -14,20 +14,21 @@ Deno.test('GPS booking: written pickup is remembered but never replaces a native
  const f=fixture({intent:'provide',fields:{origin:{value:'Pilita Seca',evidence:'estoy en Pilita Seca'}}}),s=state();
  const d=await f.run(message('estoy en Pilita Seca'),s);assertEquals(d.draft.pickupText,'Pilita Seca');assertEquals(d.draft.origin,null);assertEquals(d.messages[0].locationRequest,'origin');assertEquals(d.draft.confirmation,null);assertEquals(f.counts(),{quotes:0,fleet:0});
 });
-Deno.test('GPS booking: pin and name are enough; server quotes before review and only its current button dispatches',async()=>{
+Deno.test('GPS booking: pin and name prompt optional destination; after explicit deferral only the current confirmation dispatches',async()=>{
  const f=fixture(),s=state();s.draft.name='Mariana';
  const pin={...message(''),type:'location' as const,location:{lat:16.25,lng:-92.13}};
- const review=await f.run(pin,s);assertEquals(review.draft.pickupMessageId,pin.id);assertEquals(review.draft.destination,null);assertEquals(review.draft.quoteCents,5500);assertEquals(review.draft.quoteBasis,'pickup');assert(review.draft.confirmation);assertEquals(f.counts(),{quotes:1,fleet:0});
+ const pending=await f.run(pin,s);assertEquals(pending.draft.confirmation,null);assertEquals(pending.draft.awaitingLocation,'destination');assertEquals(f.counts(),{quotes:0,fleet:0});s.draft=pending.draft;
+ const review=await f.run({...message(''),type:'button',button:'txd_'+pending.draft.destinationPrompt},s);assertEquals(review.draft.pickupMessageId,pin.id);assertEquals(review.draft.destination,null);assertEquals(review.draft.quoteCents,5500);assertEquals(review.draft.quoteBasis,'pickup');assert(review.draft.confirmation);assertEquals(f.counts(),{quotes:1,fleet:0});
  s.draft=review.draft;const assent=await f.run(message('sí, mándalo'),s);assertEquals(assent.action,'draft');assertEquals(f.counts().fleet,0);assert(assent.messages[0].buttons?.[0]);
  const stale=await f.run({...message(''),type:'button',button:'txc_'+crypto.randomUUID()},s);assertEquals(stale.reason,'stale_confirmation');assertEquals(f.counts().fleet,0);
  s.draft=assent.draft;const clicked=await f.run({...message(''),type:'button',button:'txc_'+s.draft.confirmation},s);assertEquals(clicked.action,'confirm');assertEquals(f.counts().fleet,1);
 });
 Deno.test('GPS booking: missing or failed server price cannot expose a confirmation or reach dispatch',async()=>{
- for(const fail of [false,true]){const f=fixture(),s=state();s.draft.name='Mariana';f.services.quote=async()=>{if(fail)throw Error('Declared price outage');return null;};
+ for(const fail of [false,true]){const f=fixture(),s=state();s.draft.name='Mariana';s.draft.destinationDeferred=true;f.services.quote=async()=>{if(fail)throw Error('Declared price outage');return null;};
   const result=await f.run({...message(''),type:'location',location:{lat:16.25,lng:-92.13}},s);assertEquals(result.action,'human');assertEquals(result.draft.confirmation,null);assertEquals(f.counts().fleet,0);assert(!result.messages.some(m=>m.buttons?.length));}
 });
 Deno.test('GPS booking: progress lists backend requirements; no text, courtesy or mixed batch is consent',()=>{
- const s=state();assertEquals(taxiProgress(s,now).missing,['pickup_gps','passenger_name','server_fare']);assertEquals(conversationPhase(s,now),'origin');
+ const s=state();assertEquals(taxiProgress(s,now).missing,['pickup_gps','destination_choice','passenger_name','server_fare']);assertEquals(conversationPhase(s,now),'origin');
  for(const text of ['sí','dale','mándalo','Confirmar viaje','gracias'])assertEquals(currentConsent([message(text)],'token'),false);
  const click={...message(''),type:'button' as const,button:'txc_token'};assert(currentConsent([click],'token'));assert(!currentConsent([click,message('mejor otro lugar')],'token'));
 });
@@ -47,5 +48,5 @@ Deno.test('natural questions: the model phrases only the requested missing field
 });
 Deno.test('natural questions: provider failure has one bounded attempt and preserves the server question and draft',async()=>{
  let calls=0;const result=await naturalTaxiQuestion(async()=>{calls++;throw Error('Declared provider outage');},'fixture-key','fixture','pickup_gps','Hola');assertEquals(result,null);assertEquals(calls,1);
- const f=fixture(),s=state();f.services.question=async()=>null;const decision=await f.run(message('Hola'),s);assertEquals(decision.messages[0].locationRequest,'origin');assertEquals(decision.draft.confirmation,null);assertEquals(f.counts().fleet,0);assert(decision.messages[0].text.includes('pin GPS'));assert(!decision.messages[0].text.includes('si prefieres'));
+ const f=fixture(),s=state();f.services.question=async()=>null;const decision=await f.run(message('Hola'),s);assertEquals(decision.messages[0].locationRequest,'origin');assertEquals(decision.draft.confirmation,null);assertEquals(f.counts().fleet,0);assert(decision.messages[0].text.includes('ubicación'));assert(!decision.messages[0].text.includes('si prefieres'));
 });

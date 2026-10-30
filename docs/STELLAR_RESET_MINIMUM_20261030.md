@@ -1,6 +1,6 @@
 # Reinicio de conversación y mínimo de Pompeyo — 30 de octubre de 2026
 
-Estado actual comprobado: motor `taxi-bot-v9.1-panel-attention` publicado en Stellar Tracking, proyecto `izrsxygazsalfhpaualj`. Sustituye v9 y la versión v8 descrita en `STELLAR_LANGUAGE_HARDENING_20261030.md`; conserva su interpretación natural y todas las condiciones de GPS y botón vigente.
+Esta nota es el historial de `taxi-bot-v9.1-panel-attention`. El contrato actual es [v10: destino, resumen con Maps y respuestas naturales](STELLAR_DESTINATION_DIALOGUE_20261030.md), publicado en el mismo proyecto. La sección de abajo conserva las reglas y evidencia de la versión v9.1.
 
 ## Corrección de recepción v9.1
 

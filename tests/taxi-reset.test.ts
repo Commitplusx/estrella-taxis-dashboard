@@ -23,7 +23,7 @@ Deno.test('bare Cancelar discards an unconfirmed draft without entering a correc
  const decision=await coordinateTaxi([message('Cancelar')],state(),channel,controlServices,now);assertEquals(decision.action,'draft');assertEquals(decision.reason,'draft_cancelled');assertEquals(decision.draft,emptyDraft());assert(!decision.messages[0].buttons?.length);
 });
 Deno.test('Destino requests a concrete optional destination and invalidates the previous summary',async()=>{
- const decision=await coordinateTaxi([message('Destino')],state(),channel,controlServices,now);assertEquals(decision.action,'draft');assertEquals(decision.draft.awaitingLocation,'destination');assertEquals(decision.messages[0].locationRequest,'destination');assertEquals(decision.draft.confirmation,null);assert(decision.messages[0].text.includes('destino'));
+ const decision=await coordinateTaxi([message('Destino')],state(),channel,controlServices,now);assertEquals(decision.action,'draft');assertEquals(decision.draft.awaitingLocation,'destination');assert(decision.messages[0].buttons?.[0].id.startsWith('txd_'));assertEquals(decision.draft.confirmation,null);assert(decision.messages[0].text.includes('destino'));
 });
 Deno.test('an explicitly requested destination is understood before pickup and the native GPS is still required afterwards',async()=>{
  const s:TaxiSession={revision:0,mode:'bot',history:[],active:null,draft:emptyDraft()};

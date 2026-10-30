@@ -9,6 +9,7 @@ import type { TaxiServices } from "./coordinator.ts";
 import { fingerprint, TrackingError } from "../../tracking/contracts.ts";
 import { conversationPhase } from "./stateMachine.ts";
 import { TAXI_INTERPRETER_CONTRACT } from "./interpreter.ts";
+import{TAXI_QUESTION_PROMPT}from'./conversationReply.ts';
 export const TAXI_TRACE_VERSION = "taxi-trace-v1";
 export interface ModelMetadata {
   inputTokens: number | null;
@@ -16,7 +17,7 @@ export interface ModelMetadata {
   responseHash: string | null;
 }
 export interface TraceStep {
-  phase: "interpret" | "resolve" | "quote" | "candidates";
+  phase: "interpret" | "resolve" | "quote" | "candidates" | 'compose';
   outcome: "ok" | "error";
   durationMs: number;
   inputHash: string;
@@ -91,9 +92,10 @@ export class TaxiTurnTrace {
     const started = performance.now();
     try {
       const value = await execute();
-      Object.assign(step, summarize(value), {
+      const summary=summarize(value);
+      Object.assign(step, summary, {
         outcome: "ok",
-        code: "ok",
+        code: summary.code??"ok",
         outputHash: await fingerprint(value),
       });
       return value;
@@ -105,8 +107,9 @@ export class TaxiTurnTrace {
     }
   }
   services(base: TaxiServices): TaxiServices {
+    const compose=base.question;
     return {
-      ...(base.question?{question:base.question}:{}),
+      ...(compose?{question:(kind,current,channel,signal,context)=>this.run('compose',{kind,current,context,contract:TAXI_QUESTION_PROMPT},()=>compose(kind,current,channel,signal,context),value=>({code:value?'generated':'canonical'}))}:{}),
       interpret: async (text, session, channel, signal) => {
         let model: ModelMetadata | undefined;
         try {

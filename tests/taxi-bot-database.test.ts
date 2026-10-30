@@ -43,6 +43,7 @@ const localitySeparationSql=readFileSync(new URL('../estrella-taxis-backend/supa
 const gpsBookingSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261031170000_taxi_gps_pickup_button_booking.sql',import.meta.url),'utf8');
 const privateReferenceQuoteSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261031173000_taxi_reference_quote_private_reads.sql',import.meta.url),'utf8');
 const resetMinimumSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261031180000_taxi_conversation_reset_minimum.sql',import.meta.url),'utf8');
+const destinationDialogueSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261031190000_taxi_destination_dialogue.sql',import.meta.url),'utf8');
 const tenant='11111111-1111-4111-8111-111111111111',other='22222222-2222-4222-8222-222222222222',waba='+529630000001',customer='+529630000002',driverPhone='+529630000003';
 const pompeyo='4cf9acf1-f07e-4a01-9396-eb5bde3e7411';
 
@@ -57,7 +58,7 @@ test('minimum fare SQL: pickup, GPS route and written locality respect the confi
   const localities=parseNeighborhoods(await f.scalar('SELECT taxi_bot_neighborhood_read($1)',[tenant])),r=localities[0],area={label:r.label,category:r.category,version:r.version,cents:r.cents,cell:null,priceSource:'reference'};
   assert.equal(await amount('taxi_bot_pickup_quote',[tenant,waba,scope.originCell,area]),5500);
   assert.equal(await amount('taxi_bot_h3_quote_with_references',[tenant,waba,scope.originCell,scope.originCell,null,{...area,cell:scope.originCell,reference:'Calle Primera 20, portón azul'}]),5500);
-  const draft={...f.draft,destination:null,quoteBasis:'pickup',quoteH3:taxiH3Scope(f.draft.origin,f.draft.origin),quoteCents:4500};
+  const draft={...f.draft,destination:null,destinationDeferred:true,quoteBasis:'pickup',quoteH3:taxiH3Scope(f.draft.origin,f.draft.origin),quoteCents:4500};
   await assert.rejects(f.scalar('SELECT taxi_bot_validate_quote($1,$2,$3)',[tenant,waba,draft]),/below minimum fare/);
   await f.scalar('SELECT taxi_bot_validate_quote($1,$2,$3)',[tenant,waba,{...draft,quoteCents:5500}]);
   assert.equal(await f.scalar('SELECT price_cents FROM taxi_bot_base_zones WHERE tenant_id=$1 AND h3_index=$2',[tenant,scope.originCell]),4500);
@@ -118,7 +119,7 @@ test('conversation reset SQL: clears context, rejects old GPS and button, supers
   await f.db.query('UPDATE taxi_bot_events SET received_at=clock_timestamp()WHERE id=$1',[fresh.eventId]);
   await new Promise<void>(resolve=>setTimeout(resolve,1700));
   const freshClaim=await f.begin(fresh.eventId);
-  const freshDraft={...f.draft,pickupMessageId:freshId,destination:null,quoteBasis:'pickup',quoteCents:4500,quoteH3:taxiH3Scope(f.draft.origin,f.draft.origin),confirmation:crypto.randomUUID()};
+  const freshDraft={...f.draft,pickupMessageId:freshId,confirmation:crypto.randomUUID()};
   await f.commit(fresh.eventId,freshClaim,{...f.decision('draft'),draft:freshDraft});assert.equal(await f.scalar("SELECT draft->>'pickupMessageId'FROM taxi_bot_sessions WHERE customer=$1",[customer]),freshId);
  }finally{await f.db.close();}
 });
@@ -148,16 +149,20 @@ test('native pin persistence: a failed model turn survives SQL commit, role clar
   const first=await turn(pin);assert.equal(first.draft.pendingLocation?.messageId,pinId);assert.equal(first.draft.confirmation,null);
   assert.equal(await f.scalar("SELECT draft->'pendingLocation'->>'messageId' FROM taxi_bot_sessions WHERE customer=$1",[customer]),pinId);
   const selected=await turn(await f.enqueue('ahí me recoges'));assert.equal(selected.draft.pickupMessageId,pinId);assert.equal(selected.draft.origin?.source,'gps');assert.equal(selected.draft.confirmation,null);
+  assert.equal(selected.draft.awaitingLocation,'destination');
+  await turn(await f.enqueue('',customer,crypto.randomUUID(),'txd_'+selected.draft.destinationPrompt));
   const reviewed=await turn(await f.enqueue('Soy Mariana'));assert.equal(reviewed.draft.name,'Mariana');assert.equal(reviewed.draft.pickupMessageId,pinId);assert.equal(reviewed.draft.quoteCents,4500);assert.ok(reviewed.draft.confirmation);assert.equal(modelCalls,2);
   assert.equal(await f.scalar('SELECT count(*)::int FROM viajes'),0);assert.equal(await f.scalar('SELECT count(*)::int FROM taxi_bot_offers'),0);
-  assert.equal(await f.scalar("SELECT count(*)::int FROM taxi_bot_events WHERE state='completed'"),4);
+  assert.equal(await f.scalar("SELECT count(*)::int FROM taxi_bot_events WHERE state='completed'"),5);
  }finally{await f.db.close();}
 });
 
 test('GPS button consent SQL: typed assent cannot create trips, offers or notifications; the current click works once without a destination',async()=>{
  const f=await fixture();try{
-  await f.prepare();const scope=taxiH3Scope(f.draft.origin,f.draft.origin),draft={...f.draft,destination:null,destinationText:null,quoteBasis:'pickup',quoteCents:4500,quoteH3:scope,confirmation:crypto.randomUUID()};
-  const edit=await f.enqueue('Sin destino por ahora'),ec=await f.begin(edit.eventId);await f.commit(edit.eventId,ec,{...f.decision(),draft});
+  await f.prepare();const scope=taxiH3Scope(f.draft.origin,f.draft.origin),token=crypto.randomUUID(),pending={...f.draft,destination:null,destinationText:null,fareMode:'unquoted',quoteBasis:null,quoteCents:null,quoteH3:null,confirmation:null,awaitingLocation:'destination',destinationPrompt:token,destinationDeferred:false};
+  const prompt=await f.enqueue('Revisar destino'),pc=await f.begin(prompt.eventId);await f.commit(prompt.eventId,pc,{...f.decision(),draft:pending});
+  const draft={...pending,fareMode:'quoted',quoteBasis:'pickup',quoteCents:4500,quoteH3:scope,confirmation:crypto.randomUUID(),awaitingLocation:null,destinationPrompt:null,destinationDeferred:true};
+  const edit=await f.enqueue('',customer,crypto.randomUUID(),'txd_'+token),ec=await f.begin(edit.eventId);await f.commit(edit.eventId,ec,{...f.decision(),draft});
   const assent=await f.enqueue('sí, mándalo'),sc=await f.begin(assent.eventId);
   await assert.rejects(f.commit(assent.eventId,sc,{...f.decision('confirm'),confirmation:draft.confirmation,candidates:[{deviceId:1,name:'Unidad 1'}]}),/current confirmation button required/);
   assert.equal(await f.scalar('SELECT count(*)::int FROM viajes'),0);assert.equal(await f.scalar('SELECT count(*)::int FROM taxi_bot_offers'),0);assert.equal(await f.scalar('SELECT count(*)::int FROM taxi_bot_outbox'),0);
@@ -167,6 +172,33 @@ test('GPS button consent SQL: typed assent cannot create trips, offers or notifi
   assert.equal(await f.scalar('SELECT count(*)::int FROM viajes'),1);assert.equal(await f.scalar('SELECT bot_quote_cents FROM viajes'),4500);assert.equal(await f.scalar('SELECT destino FROM viajes'),'Destino por indicar al conductor');
  }finally{await f.db.close();}
 });
+test('destination consent SQL: a missing choice, fabricated deferral, stale button and mixed batch cannot authorize an optional destination',async()=>{
+ const f=await fixture();try{
+  await f.prepare();const token=crypto.randomUUID(),pending={...f.draft,destination:null,fareMode:'unquoted',quoteCents:null,quoteH3:null,quoteBasis:null,confirmation:null,awaitingLocation:'destination',destinationPrompt:token,destinationDeferred:false};
+  const event=await f.enqueue('Revisar destino'),claim=await f.begin(event.eventId);await f.commit(event.eventId,claim,{...f.decision(),draft:pending});
+  const chosen={...pending,fareMode:'quoted',quoteBasis:'pickup',quoteCents:4500,quoteH3:taxiH3Scope(f.draft.origin,f.draft.origin),confirmation:crypto.randomUUID(),awaitingLocation:null,destinationPrompt:null,destinationDeferred:true};
+  await assert.rejects(f.scalar('SELECT taxi_bot_validate_quote($1,$2,$3)',[tenant,waba,{...chosen,destinationDeferred:false}]),/destination choice required/);
+  for(const message of [{text:'Hola',button:null},{text:'¿Se lo digo al chofer?',button:null},{text:'',button:'txd_'+crypto.randomUUID()}]){
+   const e=await f.enqueue(message.text,customer,crypto.randomUUID(),message.button),c=await f.begin(e.eventId);
+   await assert.rejects(f.commit(e.eventId,c,{...f.decision(),draft:chosen}),/explicit destination choice required/);await f.commit(e.eventId,c,f.decision('reply'));
+  }
+  const mixed=await f.enqueue('',customer,crypto.randomUUID(),'txd_'+token);await f.enqueue('Mejor voy al Centro');const mc=await f.begin(mixed.eventId);
+  await assert.rejects(f.commit(mixed.eventId,mc,{...f.decision(),draft:chosen}),/explicit destination choice required/);await f.commit(mixed.eventId,mc,f.decision('reply'));
+  const current=await f.enqueue('Se lo digo al chofer'),cc=await f.begin(current.eventId);await f.commit(current.eventId,cc,{...f.decision(),draft:chosen});
+  assert.equal(await f.scalar("SELECT draft->>'destinationDeferred' FROM taxi_bot_sessions WHERE customer=$1",[customer]),'true');
+  assert.equal(await f.scalar('SELECT count(*)::int FROM viajes'),0);assert.equal(await f.scalar('SELECT count(*)::int FROM taxi_bot_offers'),0);
+ }finally{await f.db.close();}
+});
+
+test('conversation trace SQL: question interpretation and composed replies remain validated, private, bounded records',async()=>{
+ const f=await fixture();try{
+  const packet={version:'taxi-trace-v1',durationMs:2,steps:[{phase:'compose',outcome:'ok',durationMs:2,inputHash:'a'.repeat(64),outputHash:'b'.repeat(64),code:'generated'}],interpretationPrivate:{intent:'question',fields:{}}};
+  assert.equal(await f.scalar('SELECT taxi_bot_trace_packet_valid($1)',[packet]),true);
+  assert.equal(await f.scalar('SELECT taxi_bot_trace_packet_valid($1)',[{...packet,steps:[{...packet.steps[0],phase:'dispatch'}]}]),false);
+  await f.db.exec('SET ROLE anon');await assert.rejects(f.scalar('SELECT taxi_bot_trace_packet_valid($1)',[packet]),/permission denied/);
+ }finally{await f.db.close();}
+});
+
 test('GPS pickup proof SQL: a copied pin of another passenger, modified coordinates or missing native message cannot authorize a summary',async()=>{
  const f=await fixture();try{
   await f.prepare();const validate=(draft:unknown,phone=customer)=>f.scalar('SELECT taxi_bot_validate_pickup($1,$2,$3,$4)',[tenant,waba,phone,draft]);await validate(f.draft);
@@ -442,6 +474,7 @@ async function fixture(options:{legacy?:boolean;seedCoverageBeforeMigration?:boo
     await db.exec(gpsBookingSql);
     await db.exec(privateReferenceQuoteSql);
     await db.exec(resetMinimumSql);
+    await db.exec(destinationDialogueSql);
   }
   // These legacy protocol fixtures explicitly act as customers too. Driver-only access has separate tests below.
   await db.query('INSERT INTO taxi_bot_allowed_customers(tenant_id,phone)VALUES($1,$2),($1,$3),($1,$4)',[tenant,customer,driverPhone,'+529630000004']);
@@ -1170,7 +1203,7 @@ test('taxi end-to-end: signed webhook → durable queue → real tool decoder �
       await f.db.exec("UPDATE taxi_bot_events SET received_at=clock_timestamp()-interval '2 seconds'WHERE state='pending'");return{raw,hash,timestamp,id};
     }
     const initial=await inbound(current);await engine.tick();assert.equal(modelCalls,1);assert.equal(await f.scalar('SELECT count(*)::int FROM viajes'),0);
-    assert.equal(await f.scalar("SELECT meta->>'engineVersion'FROM taxi_bot_turn_traces LIMIT 1"),'taxi-bot-v9.1-panel-attention');
+    assert.equal(await f.scalar("SELECT meta->>'engineVersion'FROM taxi_bot_turn_traces LIMIT 1"),'taxi-bot-v10-destination-dialogue');
     assert.equal(await f.scalar("SELECT meta->>'promptHash'FROM taxi_bot_turn_traces LIMIT 1"),await fingerprint(TAXI_INTERPRETER_CONTRACT));
     let summary=f.obj(await f.scalar('SELECT draft FROM taxi_bot_sessions WHERE customer=$1',[customer]));assert.equal(summary.confirmation,null);assert.equal(summary.pickupText,'Centro');
     await inbound('',customer,crypto.randomUUID(),null,{latitude:16.25,longitude:-92.13});await engine.tick();summary=f.obj(await f.scalar('SELECT draft FROM taxi_bot_sessions WHERE customer=$1',[customer]));assert.ok(summary.confirmation);assert.equal(summary.quoteCents,4500);assert.equal(modelCalls,1);

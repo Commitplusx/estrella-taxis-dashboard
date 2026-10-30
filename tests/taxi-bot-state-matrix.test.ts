@@ -82,6 +82,8 @@ for (let fields = 0; fields < 8; fields++) {
                   name: fields & 1 ? "Persona Prueba" : null,
                   origin: fields & 2 ? origin : null,
                   destination: fields & 4 ? destination : null,
+                  // These historical review states already chose to tell the driver later; pending choices have dedicated dialogue tests.
+                  destinationDeferred:!(fields & 4),
                   quoteCents: 6500,
                   quoteH3: taxiH3Scope(origin, fields & 4 ? destination : origin),
                   confirmation: review === "absent" || pending ? null : token,

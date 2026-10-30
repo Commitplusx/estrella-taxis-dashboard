@@ -2,7 +2,7 @@ import { record, TrackingError, positiveId } from '../../tracking/contracts.ts';
 import { taxiH3Cell, type H3QuoteScope } from './h3.ts';
 import { parseNeighborhoodArea, streetReference, type NeighborhoodArea } from './neighborhoodContracts.ts';
 export { record };
-export const TAXI_BOT_VERSION='taxi-bot-v9.1-panel-attention';
+export const TAXI_BOT_VERSION='taxi-bot-v10-destination-dialogue';
 export interface TaxiChannel {
   tenantId:string; waba:string; enabled:boolean; name:string; city:string;
   centerLat:number; centerLng:number; radiusKm:number; dispatcher:string|null;
@@ -17,6 +17,7 @@ export interface Draft {
   quoteH3:H3QuoteScope|null;
   originArea?:NeighborhoodArea|null;destinationArea?:NeighborhoodArea|null;
   pickupText?:string|null;pickupMessageId?:string|null;destinationText?:string|null;quoteBasis?:'pickup'|'route'|null;
+  destinationDeferred?:boolean;destinationPrompt?:string|null;
 }
 export interface Trip {id:string;state:'buscando_conductor'|'en_camino'|'completado'|'cancelado'|'cancelado_timeout';taxiName:string|null}
 export interface TaxiSession {revision:number;mode:'bot'|'human';draft:Draft;active:Trip|null;history:History[]}
@@ -27,7 +28,7 @@ export interface TaxiInbound {
 }
 export interface FieldValue {value:string;evidence:string}
 export interface Interpretation {
-  intent:'provide'|'quote'|'confirm'|'cancel'|'status'|'human'|'smalltalk'|'ambiguous';
+  intent:'provide'|'quote'|'question'|'confirm'|'cancel'|'status'|'human'|'smalltalk'|'ambiguous';
   fields:{name?:FieldValue;origin?:FieldValue;destination?:FieldValue;pickupReference?:FieldValue};
 }
 export interface TaxiMessage {to:string;text:string;buttons?:{id:string;title:string}[];locationRequest?:'origin'|'destination'}
@@ -110,9 +111,11 @@ export function parseSession(value:unknown):TaxiSession {
     const state=a.state;if(state==='buscando_conductor'||state==='en_camino'||state==='completado'||state==='cancelado'||state==='cancelado_timeout')active={id:String(a.id),state,taxiName:a.taxiName===null?null:String(a.taxiName)};
   }
   const originArea=parseNeighborhoodArea(d.originArea),destinationArea=parseNeighborhoodArea(d.destinationArea);
+  if(d.destinationDeferred!==undefined&&typeof d.destinationDeferred!=='boolean'||d.destinationPrompt!==undefined&&d.destinationPrompt!==null&&(typeof d.destinationPrompt!=='string'||!/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(d.destinationPrompt)||awaitingLocation!=='destination'||d.confirmation!==null))throw new TrackingError(502,'invalid_taxi_destination_choice','La elección de destino no es válida.');
+  if(d.destinationDeferred===true&&(destination||d.destinationText||destinationArea||awaitingLocation==='destination'))throw new TrackingError(502,'invalid_taxi_destination_choice','El destino pendiente no coincide con su elección.');
   if(originArea&&origin||destinationArea&&destination||originArea&&d.confirmation!==null)throw new TrackingError(502,'invalid_taxi_area','Falta aclarar una colonia del recorrido.');
   if(d.pickupText!==undefined&&d.pickupText!==null&&!text(d.pickupText,400)||d.pickupMessageId!==undefined&&d.pickupMessageId!==null&&!text(d.pickupMessageId,256)||d.destinationText!==undefined&&d.destinationText!==null&&!text(d.destinationText,400)||d.quoteBasis!==undefined&&d.quoteBasis!==null&&d.quoteBasis!=='pickup'&&d.quoteBasis!=='route')throw new TrackingError(502,'invalid_taxi_context','Los datos del recorrido no son válidos.');
-  return {revision:value.revision,mode:value.mode==='human'?'human':'bot',draft:{fareMode,name:d.name===null?null:String(d.name),origin,destination,quoteCents:d.quoteCents===null?null:Number(d.quoteCents),confirmation:d.confirmation===null?null:String(d.confirmation),expiresAt:d.expiresAt===null?null:String(d.expiresAt),awaitingLocation,pendingLocation,quoteH3,...(d.originArea!==undefined?{originArea}:{}),...(d.destinationArea!==undefined?{destinationArea}:{}),...(d.pickupText!==undefined?{pickupText:d.pickupText===null?null:String(d.pickupText)}:{}),...(d.pickupMessageId!==undefined?{pickupMessageId:d.pickupMessageId===null?null:String(d.pickupMessageId)}:{}),...(d.destinationText!==undefined?{destinationText:d.destinationText===null?null:String(d.destinationText)}:{}),...(d.quoteBasis!==undefined?{quoteBasis:d.quoteBasis==='pickup'?'pickup':d.quoteBasis==='route'?'route':null}:{})},active,history};
+  return {revision:value.revision,mode:value.mode==='human'?'human':'bot',draft:{fareMode,name:d.name===null?null:String(d.name),origin,destination,quoteCents:d.quoteCents===null?null:Number(d.quoteCents),confirmation:d.confirmation===null?null:String(d.confirmation),expiresAt:d.expiresAt===null?null:String(d.expiresAt),awaitingLocation,pendingLocation,quoteH3,...(d.destinationDeferred!==undefined?{destinationDeferred:d.destinationDeferred===true}:{}),...(d.destinationPrompt!==undefined?{destinationPrompt:d.destinationPrompt===null?null:String(d.destinationPrompt)}:{}),...(d.originArea!==undefined?{originArea}:{}),...(d.destinationArea!==undefined?{destinationArea}:{}),...(d.pickupText!==undefined?{pickupText:d.pickupText===null?null:String(d.pickupText)}:{}),...(d.pickupMessageId!==undefined?{pickupMessageId:d.pickupMessageId===null?null:String(d.pickupMessageId)}:{}),...(d.destinationText!==undefined?{destinationText:d.destinationText===null?null:String(d.destinationText)}:{}),...(d.quoteBasis!==undefined?{quoteBasis:d.quoteBasis==='pickup'?'pickup':d.quoteBasis==='route'?'route':null}:{})},active,history};
 }
 export function parseCandidates(raw:unknown):Candidate[] {
   if(!Array.isArray(raw)||raw.length>3)throw new TrackingError(502,'invalid_taxi_candidates','La selección de unidades no es válida.');

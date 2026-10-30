@@ -1,6 +1,6 @@
 import {emptyDraft,type TaxiDecision,type TaxiInbound,type TaxiSession}from'./contracts.ts';
 import { TrackingError } from "../../tracking/contracts.ts";
-import { cancelsTaxi,resetCommand } from "./policy.ts";
+import { cancelsTaxi,resetCommand,defersDestination } from "./policy.ts";
 
 export type ConversationPhase =
   | "human"
@@ -26,6 +26,7 @@ export function conversationPhase(
   }
   if (d.awaitingLocation === "destination") return "destination";
   if (!d.origin || d.origin.source !== 'gps' || !d.pickupMessageId || d.awaitingLocation === "origin") return "origin";
+  if(!hasDestination(d)&&d.destinationDeferred!==true)return 'destination';
   if (!d.name) return "name";
   if (!d.confirmation || !d.expiresAt) return "ready_for_review";
   return Date.parse(d.expiresAt) > now ? "review" : "review_expired";
@@ -39,8 +40,9 @@ export function currentConsent(
 /** Facts persisted by the backend, not a step or completion invented by the model. */
 export function taxiProgress(s:TaxiSession,now:number){
   const phase=conversationPhase(s,now),d=s.draft;
-  return {phase,hasPickupGps:Boolean(d.origin?.source==='gps'&&d.pickupMessageId),hasPassengerName:Boolean(d.name),missing:[...(!d.origin||d.origin.source!=='gps'||!d.pickupMessageId?['pickup_gps']:[]),...(!d.name?['passenger_name']:[]),...(d.fareMode!=='quoted'||d.quoteCents===null?['server_fare']:[])],destinationOptional:true,confirmation:'current_button_only',hasPickupNote:Boolean(d.pickupText),hasDestination:Boolean(d.destination||d.destinationText||d.destinationArea),canRequest:phase==='review'&&d.fareMode==='quoted'&&d.quoteCents!==null};
+  return {phase,hasPickupGps:Boolean(d.origin?.source==='gps'&&d.pickupMessageId),hasPassengerName:Boolean(d.name),missing:[...(!d.origin||d.origin.source!=='gps'||!d.pickupMessageId?['pickup_gps']:[]),...(!hasDestination(d)&&d.destinationDeferred!==true?['destination_choice']:[]),...(!d.name?['passenger_name']:[]),...(d.fareMode!=='quoted'||d.quoteCents===null?['server_fare']:[])],destinationOptional:true,destinationDeferred:d.destinationDeferred===true,confirmation:'current_button_only',hasPickupNote:Boolean(d.pickupText),hasDestination:hasDestination(d),canRequest:phase==='review'&&d.fareMode==='quoted'&&d.quoteCents!==null};
 }
+export function hasDestination(d:TaxiSession['draft']):boolean{return Boolean(d.destination||d.destinationText||d.destinationArea);}
 /** Derived state: the persisted session remains the single source of truth. */
 export function assertTaxiTransition(
   s: TaxiSession,
@@ -60,6 +62,10 @@ export function assertTaxiTransition(
     d.messages.some((m) => m.to !== messages.at(-1)?.from)
   ) fail();
   if(d.draft.fareMode==='unquoted'&&(d.draft.quoteCents!==null||d.draft.quoteH3!==null))fail();
+  if(d.draft.destinationDeferred===true&&s.draft.destinationDeferred!==true){
+    const event=messages[0];
+    if(d.action!=='draft'||messages.length!==1||s.draft.awaitingLocation!=='destination'||!s.draft.destinationPrompt||!s.draft.expiresAt||Date.parse(s.draft.expiresAt)<=now||hasDestination(d.draft)||!(event.type==='button'&&event.button==='txd_'+s.draft.destinationPrompt||event.type==='text'&&defersDestination(event.text)))fail();
+  }
   if (d.messages.some((m) => m.locationRequest && (
     !['draft','reset'].includes(d.action) || s.mode !== 'bot' ||
     (s.active && ['buscando_conductor', 'en_camino'].includes(s.active.state)) ||
@@ -110,7 +116,7 @@ export function assertTaxiTransition(
     ) fail();
     if (Date.parse(d.draft.expiresAt ?? "") > now + 11 * 60000) fail();
     const changed =
-      (["name", "origin", "destination", "quoteCents", "quoteH3", "fareMode", "pickupText", "destinationText", "destinationArea", "quoteBasis"] as const)
+      (["name", "origin", "destination", "quoteCents", "quoteH3", "fareMode", "pickupText", "destinationText", "destinationArea", "quoteBasis", "destinationDeferred", "destinationPrompt"] as const)
         .some((key) =>
           JSON.stringify(s.draft[key]) !== JSON.stringify(d.draft[key])
         );

@@ -2,6 +2,9 @@ import { record, type Interpretation } from './contracts.ts';
 import { TrackingError } from '../../tracking/contracts.ts';
 export const normalize=(s:string)=>s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/\s+/g,' ').trim();
 export const resetCommand=(s:string):boolean=>/^\s*\/reset\s*$/i.test(s);
+export function defersDestination(s:string):boolean{
+ return /^(?:aun no (?:lo )?se|todavia no (?:lo )?se|no (?:lo )?se|(?:mejor |prefiero )?(?:se )?lo (?:digo|dire|indico) al (?:chofer|conductor)|(?:mejor )?despues|(?:de momento|por ahora) no|prefiero no (?:decirlo|darlo)(?: ahorita)?)[.!]*$/.test(normalize(s));
+}
 export function draftLocationRequest(s:string):'origin'|'destination'|null {
   const match=/^(?:(?:cambiar|cambia|corregir|corrige) (?:el |la )?)?(destino|origen|recogida)[.!¡]*$/.exec(normalize(s));
   return match?match[1]==='destino'?'destination':'origin':null;
@@ -66,7 +69,7 @@ function fieldClause(clause:string,chosen:string):string {
 export function parseInterpretation(raw:unknown,current:string):Interpretation {
   if(!record(raw)||Object.keys(raw).some((k)=>!['intent','fields'].includes(k))||!record(raw.fields))throw new TrackingError(502,'invalid_taxi_intent','No se pudo interpretar la solicitud con seguridad.');
   const intent=raw.intent;
-  if(intent!=='provide'&&intent!=='quote'&&intent!=='confirm'&&intent!=='cancel'&&intent!=='status'&&intent!=='human'&&intent!=='smalltalk'&&intent!=='ambiguous')throw new TrackingError(502,'invalid_taxi_intent','Intención no válida.');
+  if(intent!=='provide'&&intent!=='quote'&&intent!=='question'&&intent!=='confirm'&&intent!=='cancel'&&intent!=='status'&&intent!=='human'&&intent!=='smalltalk'&&intent!=='ambiguous')throw new TrackingError(502,'invalid_taxi_intent','Intención no válida.');
   const fields:Interpretation['fields']={};
   for(const [key,v] of Object.entries(raw.fields)) {
     if((key!=='name'&&key!=='origin'&&key!=='destination'&&key!=='pickupReference')||!record(v)||Object.keys(v).some((k)=>!['value','evidence'].includes(k))||typeof v.value!=='string'||typeof v.evidence!=='string')throw new TrackingError(502,'invalid_taxi_field','Campo no válido.');

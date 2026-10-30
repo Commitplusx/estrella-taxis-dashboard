@@ -5,6 +5,7 @@ import { TrackingError } from "../../tracking/contracts.ts";
 type TaxiToolName =
   | "actualizar_recorrido"
   | "cotizar_viaje"
+  | "responder_duda"
   | "consultar_mi_viaje"
   | "escalar_a_base"
   | "saludar"
@@ -44,6 +45,7 @@ const noArguments = {
 };
 /** One atomic proposal; the existing coordinator executes permitted services and SQL owns mutations. */
 export const TAXI_CONVERSATION_TOOLS: readonly TaxiToolDefinition[] = [
+  {type:'function',function:{name:'responder_duda',description:'Atiende una duda sobre cómo pedir el taxi, ubicación, destino, nombre, confirmación o el servicio. Conserva en fields cualquier dato o cambio explícito que venga junto con la pregunta. No inventa políticas, horarios, pagos ni disponibilidad; el servidor aporta los hechos para responder. Para importes usa cotizar_viaje y para la situación real del taxi consultar_mi_viaje.',parameters:withFields}},
   {
     type: "function",
     function: {
@@ -156,7 +158,7 @@ export function parseTaxiToolCompletion(
     );
   }
   let intent: Interpretation["intent"];
-  if (fn.name === "actualizar_recorrido" || fn.name === "cotizar_viaje") {
+  if (fn.name === "actualizar_recorrido" || fn.name === "cotizar_viaje" || fn.name==='responder_duda') {
     if (
       Object.keys(args).length !== 1 || !record(args.fields) ||
       (fn.name === "actualizar_recorrido" &&
@@ -169,7 +171,7 @@ export function parseTaxiToolCompletion(
       );
     }
     return parseInterpretation({
-      intent: fn.name === "actualizar_recorrido" ? "provide" : "quote",
+      intent: fn.name === "actualizar_recorrido" ? "provide" : fn.name==='responder_duda'?'question':"quote",
       fields: args.fields,
     }, current);
   }
