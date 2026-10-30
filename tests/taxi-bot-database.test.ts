@@ -36,6 +36,7 @@ const optionalFareSql=readFileSync(new URL('../estrella-taxis-backend/supabase/m
 const addressGeocodeSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261030201500_taxi_address_geocoding.sql',import.meta.url),'utf8');
 const neighborhoodsSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261030210000_taxi_neighborhoods.sql',import.meta.url),'utf8');
 const dispatchSafetySql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261030223000_taxi_dispatch_safety.sql',import.meta.url),'utf8');
+const conversationEmojisSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261030234500_taxi_conversation_emojis.sql',import.meta.url),'utf8');
 const tenant='11111111-1111-4111-8111-111111111111',other='22222222-2222-4222-8222-222222222222',waba='+529630000001',customer='+529630000002',driverPhone='+529630000003';
 test('neighborhood SQL: reads only base-owned H3, keeps prices single-sourced and private',async()=>{
  const f=await fixture();try{
@@ -243,7 +244,7 @@ async function fixture(options:{legacy?:boolean;seedCoverageBeforeMigration?:boo
   if(!options.legacy){await db.exec(baseZonesSql);await db.exec(baseFleetSql);await db.exec(baseContactsSql);
     await db.exec("CREATE TABLE perfiles(traccar_user_id integer PRIMARY KEY CHECK(traccar_user_id>0),empresa_id uuid REFERENCES empresas(id),rol text CHECK(rol IN('superadmin','admin_empresa','operador')),created_at timestamptz DEFAULT now())");
     await db.exec(personAccountsSql);
-    await db.exec(optionalFareSql);await db.exec(neighborhoodsSql);await db.exec(dispatchSafetySql);
+    await db.exec(optionalFareSql);await db.exec(neighborhoodsSql);await db.exec(dispatchSafetySql);await db.exec(conversationEmojisSql);
   }
   // These legacy protocol fixtures explicitly act as customers too. Driver-only access has separate tests below.
   await db.query('INSERT INTO taxi_bot_allowed_customers(tenant_id,phone)VALUES($1,$2),($1,$3),($1,$4)',[tenant,customer,driverPhone,'+529630000004']);
@@ -755,6 +756,25 @@ test('taxi SQL: only the offered driver accepts, first acceptance wins and dupli
     assert.equal(await f.scalar("SELECT count(*)::int FROM taxi_bot_outbox WHERE dedupe_key LIKE 'trip-assigned:%'"),1);
     const again=await f.enqueue('botón',driverPhone),gc=await f.begin(again.eventId);await f.commit(again.eventId,gc,{...f.decision('driver_accept'),offerId:offers[0].id});assert.equal(await f.scalar("SELECT count(*)::int FROM viajes WHERE estado='en_camino'"),1);
   }finally{await f.db.close();}
+});
+test('taxi status notifications match trip state from request through assignment, completion and timeout',async()=>{
+  const f=await fixture();try{
+    await f.prepare();await f.confirm();
+    assert.match(String(await f.scalar("SELECT body->>'text'FROM taxi_bot_outbox WHERE dedupe_key LIKE 'trip-created:%'")),/^🚕 Tu solicitud quedó registrada/);
+    assert.match(String(await f.scalar("SELECT body->>'text'FROM taxi_bot_outbox WHERE dedupe_key LIKE 'offer:%'")),/^🚕/);
+    const offer=(await f.db.query<Record<string,unknown>>('SELECT id FROM taxi_bot_offers WHERE device_id=1')).rows[0];assert.ok(offer);
+    const accepted=await f.enqueue('botón',driverPhone),acceptClaim=await f.begin(accepted.eventId);
+    await f.commit(accepted.eventId,acceptClaim,{...f.decision('driver_accept'),offerId:offer.id});
+    const assigned=String(await f.scalar("SELECT body->>'text'FROM taxi_bot_outbox WHERE dedupe_key LIKE 'trip-assigned:%'"));assert.match(assigned,/^🚕/);assert.match(assigned,/😊/);
+    const finished=await f.enqueue('botón',driverPhone),finishClaim=await f.begin(finished.eventId);
+    await f.commit(finished.eventId,finishClaim,{...f.decision('driver_finish'),offerId:offer.id});
+    const completion=String(await f.scalar("SELECT body->>'text'FROM taxi_bot_outbox WHERE dedupe_key LIKE 'trip-finished:%'"));assert.match(completion,/^🚕/);assert.match(completion,/😊/);
+  }finally{await f.db.close();}
+  const timed=await fixture();try{
+    await timed.prepare();await timed.confirm(customer,[]);await timed.db.exec("SELECT set_config('app.taxi_bot_write','on',false);UPDATE viajes SET created_at=clock_timestamp()-interval '13 minutes';SELECT set_config('app.taxi_bot_write','off',false)");
+    assert.equal(await timed.scalar('SELECT taxi_bot_maintain()'),1);
+    const timeout=String(await timed.scalar("SELECT body->>'text'FROM taxi_bot_outbox WHERE dedupe_key LIKE 'timeout-customer:%'"));assert.match(timeout,/^🚕/);assert.match(timeout,/🙂/);
+  }finally{await timed.db.close();}
 });
 test('taxi SQL: tenant scope, private trips and protocol guards cannot be bypassed by old routes',async()=>{
   const f=await fixture();try{

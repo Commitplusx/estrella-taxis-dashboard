@@ -66,6 +66,14 @@ Deno.test('a live ride returns persisted status without requesting a second taxi
   const f=fixture(),s=session(true);s.active={id:crypto.randomUUID(),state:'buscando_conductor',taxiName:null};const d=await f.run('Mándame otro',s);equal(d.action,'reply');assert(d.messages[0].text.includes('Todavía no hay una unidad confirmada'));equal(f.calls().calls,0);
   s.active.state='en_camino';s.active.taxiName='Unidad 1';assert((await f.run('¿Ya viene?',s)).messages[0].text.includes('ya aceptó'));
 });
+Deno.test('taxi messages use friendly emojis only for their conversational state',async()=>{
+  const greeting=await fixture().run('Hola');assert(/😊/.test(greeting.messages[0]?.text??''));assert(/🚕/.test(greeting.messages[0]?.text??''));
+  const current='Soy Persona Prueba, de Centro a Terminal';
+  const summary=await fixture({intent:'provide',fields:{name:{value:'Persona Prueba',evidence:current},origin:{value:'Centro',evidence:current},destination:{value:'Terminal',evidence:current}}}).run(current);
+  assert(/^🚕 ¿Así queda tu viaje\?/.test(summary.messages[0]?.text??''));equal(summary.messages[0]?.buttons?.[0]?.title,'Confirmar viaje');
+  const active=session(true);active.active={id:crypto.randomUUID(),state:'buscando_conductor',taxiName:null};assert(/^🚕/.test((await fixture().run('¿Cómo va?',active)).messages[0]?.text??''));
+  assert(/😊/.test((await fixture().run('Gracias')).messages[0]?.text??''));
+});
 Deno.test('explicit cancellation binds only the persisted active trip',async()=>{
   const f=fixture(),s=session(true);s.active={id:crypto.randomUUID(),state:'en_camino',taxiName:'Unidad 1'};const d=await f.run('Cancela mi taxi',s);equal(d.action,'cancel');equal(d.tripId,s.active.id);equal(f.calls().calls,0);
 });
