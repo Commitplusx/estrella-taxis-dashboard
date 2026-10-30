@@ -6,7 +6,7 @@ import { bindTaxiAccount, restoreTrackingUser } from '../lib/taxiSession';
 import { useNativeApp } from '../hooks/useNativeApp';
 import { taxiCoverageCache } from '../lib/taxiCoverageCache';
 
-export type UserRole = 'superadmin' | 'admin_empresa' | 'operador';
+export type UserRole = 'superadmin' | 'admin_empresa' | 'operador' | 'owner' | 'driver' | 'owner_driver';
 
 export interface PermisosSistema {
   reporte_pdf: boolean;
@@ -81,7 +81,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (account.tenants.length !== 1 || !company) {
       throw new Error('Tu cuenta necesita una base de taxis asignada.');
     }
-    setUserRole(account.canConfigure ? 'admin_empresa' : 'operador');
+    setUserRole(account.accessRole ?? (account.canConfigure ? 'admin_empresa' : 'operador'));
     setEmpresaId(company.id);
     setEmpresaData({ id: company.id, nombre_empresa: company.name, logo_url: null, tipo_negocio: 'taxi' });
     const plan = company.plan;

@@ -1106,12 +1106,135 @@
 .taxi-admin .taxi-contact-toolbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
 .taxi-admin .taxi-contact-toolbar label { display: flex; flex-direction: row; align-items: center; gap: 10px; flex: 1; min-width: min(100%, 240px); }
 .taxi-admin .taxi-contact-toolbar input { min-width: 0; width: 100%; }
+.taxi-admin .taxi-contact-toolbar .taxi-contact-filter { flex: 0 1 185px; min-width: 150px; }
 .taxi-admin .taxi-contact-list { max-height: 440px; overflow-y: auto; scrollbar-color: #94a3b8 transparent; scrollbar-width: thin; }
 .taxi-admin .taxi-contact-list li > div { min-width: 0; overflow-wrap: anywhere; }
-.taxi-admin .taxi-contact-list li[aria-current="true"] { background: var(--ta-soft); }
-.taxi-admin .taxi-contact-role { display: block; margin-top: 4px; font-size: 14px; color: #334155; }
+.taxi-admin .taxi-contact-list li { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) auto; padding: 18px 8px; transition: background-color 140ms; }
+.taxi-admin .taxi-contact-list li:hover { background: #f8fafc; }
+.taxi-admin .taxi-contact-list li.is-saved { animation: taxi-contact-saved 1.6s ease-out; }
+.taxi-admin .taxi-contact-results { margin: 0 0 6px; font-size: 13px; font-variant-numeric: tabular-nums; }
+.taxi-admin.taxi-people-page { width: 100%; }
+.taxi-admin .taxi-people-base { display: flex; align-items: center; gap: 24px; margin-bottom: 24px; }
+.taxi-admin .taxi-people-base label { flex: 0 1 380px; min-width: 0; }
+.taxi-admin .taxi-people-base p { flex: 1; font-size: 14px; max-width: 52ch; }
+.taxi-admin .taxi-people-help { max-width: 75ch; font-size: 14px; }
+.taxi-admin .taxi-gps-records { margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--ta-line); }
+.taxi-admin .taxi-gps-records > p { margin-top: 4px; font-size: 13px; max-width: 75ch; }
+.taxi-admin .taxi-gps-records > button svg { transition: transform 160ms ease-out; }
+.taxi-admin .taxi-gps-records > button svg.is-open { transform: rotate(180deg); }
+.taxi-admin .taxi-contact-role { display: inline-block; margin: 5px 0 2px; padding: 2px 7px; border-radius: 5px; font-size: 12px; color: #334155; background: #edf1f6; }
+.taxi-admin .taxi-contact-role.is-pending { color: #79500b; background: #fff4d9; }
+.taxi-admin .taxi-contact-identity strong { display: block; font-weight: 650; }
+.taxi-admin .taxi-contact-row-actions { display: flex; flex-direction: column; align-items: stretch; gap: 5px; max-width: 210px; }
+.taxi-admin .taxi-contact-row-actions small { overflow-wrap: anywhere; }
+.taxi-admin .taxi-contact-editor-tabs { display: flex; gap: 12px; border-bottom: 1px solid var(--ta-line); margin-bottom: 24px; }
+.taxi-admin .taxi-contact-editor-tabs button { min-height: 44px; padding: 8px 12px; background: none; border: 0; border-bottom: 2px solid transparent; color: var(--ta-muted); }
+.taxi-admin .taxi-contact-editor-tabs .is-active { border-bottom-color: var(--ta-blue); color: var(--ta-blue); font-weight: 650; }
+.taxi-admin .taxi-contact-access-help { font-size: 14px; margin-bottom: 20px; grid-column: 1/-1; }
+.taxi-admin .taxi-personal-facts { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 24px; margin: 24px 0; }
+.taxi-admin .taxi-personal-facts dt { font-size: 13px; color: var(--ta-muted); }
+.taxi-admin .taxi-personal-facts dd { margin: 5px 0 0; font-weight: 600; overflow-wrap: anywhere; }
+.taxi-admin .taxi-contact-offers { display: flex; align-items: center; gap: 7px; font-size: 13px; color: var(--ta-muted); margin-top: 8px; }
+.taxi-admin .taxi-contact-offers i { width: 6px; height: 6px; flex: 0 0 6px; border-radius: 50%; background: #8995a4; }
+.taxi-admin .taxi-contact-offers.is-receiving { color: #146246; }
+.taxi-admin .taxi-contact-offers.is-receiving i { background: #16815d; }
+.taxi-admin .taxi-contact-warning { display: flex; align-items: center; gap: 5px; margin-top: 5px; font-size: 12px; color: #8d2b20; }
+.taxi-admin .taxi-contact-warning svg { flex-shrink: 0; }
 .taxi-admin .taxi-enable small { display: block; color: #475569; font-weight: 400; margin-top: 4px; }
 .taxi-admin .taxi-sr-only { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
+.taxi-admin .taxi-contact-feedback { margin: 16px 0 0; animation: taxi-contact-feedback 180ms ease-out; }
+html:has(.taxi-contact-dialog[open]) { overflow: hidden; }
+.taxi-admin .taxi-contact-dialog {
+  color: var(--ta-ink);
+  background: #fff;
+  width: min(760px, calc(100% - 48px));
+  max-width: none;
+  max-height: min(850px, calc(100dvh - 48px));
+  padding: 0;
+  margin: auto;
+  border: 0;
+  border-radius: 16px;
+  box-shadow: 0 24px 80px #0d1b3438;
+  overflow: hidden;
+  opacity: 0;
+  transform: translateY(10px) scale(.985);
+  transition: opacity 150ms ease-out, transform 150ms ease-out, display 150ms allow-discrete, overlay 150ms allow-discrete;
+}
+.taxi-admin .taxi-contact-dialog[open] {
+  opacity: 1;
+  transform: none;
+  transition: opacity 220ms ease-out, transform 280ms cubic-bezier(.16, 1, .3, 1), display 280ms allow-discrete, overlay 280ms allow-discrete;
+}
+.taxi-admin .taxi-contact-dialog::backdrop {
+  background: #17233700;
+  transition: background-color 180ms ease-out, display 180ms allow-discrete, overlay 180ms allow-discrete;
+}
+.taxi-admin .taxi-contact-dialog[open]::backdrop { background: #17233780; }
+@starting-style {
+  .taxi-admin .taxi-contact-dialog[open] { opacity: 0; transform: translateY(10px) scale(.985); }
+  .taxi-admin .taxi-contact-dialog[open]::backdrop { background: #17233700; }
+}
+.taxi-admin .taxi-contact-editor { display: flex; flex-direction: column; max-height: min(850px, calc(100dvh - 48px)); }
+.taxi-admin .taxi-contact-editor-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; padding: 24px 28px 20px; border-bottom: 1px solid var(--ta-line); flex-shrink: 0; }
+.taxi-admin .taxi-contact-editor-header h2 { font-size: 23px; }
+.taxi-admin .taxi-contact-editor-header p { margin-top: 6px; font-size: 14px; max-width: 55ch; }
+.taxi-admin .taxi-contact-close { display: grid; place-items: center; width: 44px; height: 44px; flex: 0 0 44px; border-radius: 8px; background: #f1f4f8; color: #435169; border: 0; }
+.taxi-admin .taxi-contact-close:hover:not(:disabled) { background: #e5ebf2; color: var(--ta-ink); }
+.taxi-admin .taxi-contact-editor-body { min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 24px 28px; scrollbar-width: thin; scrollbar-color: #94a3b8 transparent; scroll-padding-block: 20px; }
+.taxi-admin .taxi-contact-fields { border: 0; margin: 0; padding: 0; min-width: 0; }
+.taxi-admin .taxi-contact-fields + .taxi-contact-fields { margin-top: 28px; }
+.taxi-admin .taxi-contact-fields legend { padding: 0; font-size: 16px; font-weight: 650; margin-bottom: 16px; }
+.taxi-admin .taxi-contact-fields .taxi-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; margin: 0; }
+.taxi-admin .taxi-contact-name, .taxi-admin .taxi-contact-gps, .taxi-admin .taxi-contact-fields .taxi-phone-field { grid-column: 1/-1; }
+.taxi-admin .taxi-contact-receiving { padding: 16px; border: 0; border-radius: 8px; background: var(--ta-soft); margin: 0; }
+.taxi-admin .taxi-contact-receiving input { width: 24px; min-height: 24px; height: 24px; }
+.taxi-admin .taxi-contact-preview { padding: 10px 12px; font-size: 13px; background: #fff7e6; color: #68410d; border-radius: 7px; margin: 0 0 20px; }
+.taxi-admin .taxi-contact-editor-footer { flex-shrink: 0; padding: 16px 28px 24px; border-top: 1px solid var(--ta-line); background: #fff; }
+.taxi-admin .taxi-contact-save-hint { font-size: 13px; margin-bottom: 12px; }
+.taxi-admin .taxi-contact-editor-actions { display: flex; align-items: center; justify-content: flex-end; gap: 12px; }
+.taxi-admin .taxi-contact-editor-actions .taxi-primary { min-width: 180px; }
+.taxi-admin .taxi-contact-editor-footer .taxi-error { margin-bottom: 14px; max-height: 120px; overflow-y: auto; }
+.taxi-admin .taxi-contact-discard { animation: taxi-contact-feedback 150ms ease-out; }
+.taxi-admin .taxi-contact-discard strong { font-size: 15px; }
+.taxi-admin .taxi-contact-discard p { margin-top: 4px; font-size: 14px; }
+.taxi-admin .taxi-contact-discard > div { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 14px; }
+.taxi-admin .taxi-contact-discard-button { min-height: 44px; padding: 10px 14px; color: #8d2b20; background: #fff0ed; border: 0; border-radius: 8px; font-weight: 600; }
+.taxi-admin .taxi-contact-discard-button:hover { background: #ffe0da; }
+.taxi-admin .taxi-contact-spinner { animation: taxi-contact-spin 900ms linear infinite; }
+.taxi-admin .taxi-contact-editor button:active:not(:disabled), .taxi-admin .taxi-contact-list button:active:not(:disabled), .taxi-admin .taxi-contact-toolbar button:active:not(:disabled) { transform: scale(.98); }
+@keyframes taxi-contact-spin { to { transform: rotate(360deg); } }
+@keyframes taxi-contact-feedback { from { opacity: .35; } to { opacity: 1; } }
+@keyframes taxi-contact-saved { from { background-color: #e9f5ee; } to { background-color: #fff; } }
+@media (max-width:760px) {
+  .taxi-admin .taxi-personal-facts { grid-template-columns: 1fr; }
+  .taxi-admin .taxi-people-base { display: block; }
+  .taxi-admin .taxi-people-base p { margin-top: 10px; }
+  .taxi-people-page .taxi-admin-header { flex-direction: column; }
+  .taxi-admin .taxi-contact-list li { grid-template-columns: minmax(0, 1fr) auto; gap: 8px 12px; }
+  .taxi-admin .taxi-contact-list .taxi-contact-details { grid-row: 2; }
+  .taxi-admin .taxi-contact-list .taxi-contact-row-actions { grid-column: 2; grid-row: 1 / 3; max-width: 140px; }
+  .taxi-admin .taxi-contact-toolbar .taxi-contact-search { flex-basis: 100%; }
+  .taxi-admin .taxi-contact-toolbar .taxi-contact-filter { flex: 1; min-width: 0; }
+  .taxi-admin .taxi-contact-dialog { width: 100%; max-height: calc(100dvh - 12px); margin: auto 0 0; border-radius: 16px 16px 0 0; transform: translateY(24px); }
+  .taxi-admin .taxi-contact-dialog[open] { transform: none; }
+  .taxi-admin .taxi-contact-editor { max-height: calc(100dvh - 12px); }
+  .taxi-admin .taxi-contact-editor-header { padding: 20px 20px 16px; gap: 12px; }
+  .taxi-admin .taxi-contact-editor-header h2 { font-size: 21px; }
+  .taxi-admin .taxi-contact-editor-body { padding: 20px; }
+  .taxi-admin .taxi-contact-fields .taxi-fields { grid-template-columns: minmax(0, 1fr); gap: 18px; }
+  .taxi-admin .taxi-contact-fields + .taxi-contact-fields { margin-top: 24px; }
+  .taxi-admin .taxi-contact-editor-footer { padding: 14px 20px max(20px, env(safe-area-inset-bottom)); }
+  .taxi-admin .taxi-contact-editor-actions { display: grid; grid-template-columns: auto minmax(0, 1fr); }
+  .taxi-admin .taxi-contact-editor-actions .taxi-primary { min-width: 0; }
+  @starting-style { .taxi-admin .taxi-contact-dialog[open] { transform: translateY(24px); } }
+}
+@media (prefers-reduced-motion:reduce) {
+  .taxi-admin .taxi-contact-dialog, .taxi-admin .taxi-contact-dialog[open] { transform: none; transition: opacity 100ms linear, display 100ms allow-discrete, overlay 100ms allow-discrete; }
+  .taxi-admin .taxi-contact-dialog::backdrop { transition: background-color 100ms linear, display 100ms allow-discrete, overlay 100ms allow-discrete; }
+  .taxi-admin .taxi-contact-spinner { animation: none; }
+  .taxi-admin .taxi-contact-editor button:active:not(:disabled), .taxi-admin .taxi-contact-list button:active:not(:disabled), .taxi-admin .taxi-contact-toolbar button:active:not(:disabled) { transform: none; }
+  @starting-style { .taxi-admin .taxi-contact-dialog[open] { transform: none; } }
+}
 @media (max-width:700px) {
   .taxi-admin .taxi-phone-inputs select { flex-basis: 130px; width: 42%; }
 }

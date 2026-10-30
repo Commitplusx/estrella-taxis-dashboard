@@ -1,5 +1,5 @@
 import { ids, positiveId, record, TrackingError } from './contracts.ts';
-import { requestJson, type Fetcher } from './http.ts';
+import { readJson, requestJson, type Fetcher } from './http.ts';
 import type { TrackingStore } from './store.ts';
 export interface FleetDevice { id: number; name: string; status?:'online'|'offline'|'unknown' }
 export interface FleetIdentity {userId:number;admin:boolean;cookie:string}
@@ -39,6 +39,20 @@ export class FleetApi {
   }
   async get(path: string, cookie: string, signal?: AbortSignal, maxBytes=2097152): Promise<unknown> {
     return (await requestJson(this.fetcher,`${this.base}${path}`,{ headers:{ Accept:'application/json', Cookie:cookie },signal },10000,maxBytes)).data;
+  }
+  async write(path: string, method: 'POST' | 'PUT' | 'DELETE', cookie: string, payload: Record<string, unknown>, signal?: AbortSignal): Promise<unknown> {
+    if (!/^\/(?:users(?:\/[1-9][0-9]*)?|permissions)$/.test(path)) throw new Error('Invalid account administration path.');
+    let response: Response;
+    try {
+      response = await this.fetcher(this.base + path, { method, headers: { Accept: 'application/json', 'Content-Type': 'application/json', Cookie: cookie },
+        body: JSON.stringify(payload), signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(15000)]) : AbortSignal.timeout(15000), redirect: 'error' });
+    } catch { throw new TrackingError(503, 'account_write_uncertain', 'No se confirmó el cambio en Traccar. Comprueba la misma solicitud.'); }
+    if (!response.ok) {
+      await response.body?.cancel();
+      throw new TrackingError(503, 'account_write_uncertain', 'Traccar no confirmó el cambio de acceso. Comprueba la misma solicitud.');
+    }
+    if (response.status === 204) return null;
+    return await readJson(response, 2097152);
   }
   async jobSession(email:string,password:string,signal?:AbortSignal):Promise<FleetSession> {
     if(!email || !password) throw new TrackingError(503,'job_not_configured','Falta configurar la cuenta del cálculo programado.');

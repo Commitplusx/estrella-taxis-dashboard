@@ -4,6 +4,7 @@
 // =====================================================
 
 import { readJson } from '../../estrella-taxis-backend/supabase/functions/_shared/tracking/http.ts';
+import { record } from '../../estrella-taxis-backend/supabase/functions/_shared/tracking/contracts.ts';
 export const BASE_URL = '/api'; // Usa el proxy de Vite en Local y el de Vercel en Producción
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
@@ -123,7 +124,7 @@ export const api = {
       return {id:item.id,deviceId:item.deviceId,latitude:item.latitude,longitude:item.longitude,fixTime:item.fixTime,
         serverTime:typeof value.serverTime==='string'?value.serverTime:item.fixTime,altitude:typeof value.altitude==='number'?value.altitude:0,speed:value.speed,
         valid:typeof value.valid==='boolean'?value.valid:undefined,outdated:typeof value.outdated==='boolean'?value.outdated:undefined,
-        course:typeof value.course==='number'?value.course:0,address:typeof value.address==='string'?value.address:'',attributes:typeof value.attributes==='object' && value.attributes!==null && !Array.isArray(value.attributes)?value.attributes:{}};
+        course:typeof value.course==='number'?value.course:0,address:typeof value.address==='string'?value.address:'',attributes:record(value.attributes)?value.attributes:{}};
     });
   },
 

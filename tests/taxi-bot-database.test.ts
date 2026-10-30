@@ -29,7 +29,70 @@ const driverSetupSql=readFileSync(new URL('../estrella-taxis-backend/supabase/mi
 const baseZonesSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261029195350_taxi_base_owned_zones.sql',import.meta.url),'utf8');
 const baseFleetSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261030134513_taxi_base_fleet.sql',import.meta.url),'utf8');
 const baseContactsSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261030135906_taxi_base_contacts.sql',import.meta.url),'utf8');
+const personAccountsSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261030180000_taxi_person_accounts.sql',import.meta.url),'utf8');
 const tenant='11111111-1111-4111-8111-111111111111',other='22222222-2222-4222-8222-222222222222',waba='+529630000001',customer='+529630000002',driverPhone='+529630000003';
+test('person account SQL: changing taxi and driver role updates the existing login and dispatch WhatsApp atomically',async()=>{
+ const f=await fixture();try{
+  const id=crypto.randomUUID();await f.db.query("INSERT INTO taxi_base_contacts(id,tenant_id,unit_number,name,phone_input,role,device_id)VALUES($1,$2,'487','Persona','9630000094','owner',1)",[id,tenant]);
+  const bind=async(assignment:Record<string,unknown>)=>{
+   const version=await f.scalar("SELECT taxi_bot_contact_record(c)->>'version'FROM taxi_base_contacts c WHERE id=$1",[id]),request=crypto.randomUUID();
+   const b=f.obj(await f.scalar('SELECT taxi_account_begin($1,$2,$3,$4,$5,$6,$7,$8)',[tenant,42,request,id,version,'person@example.test',81,assignment]));assert.equal(b.state,'proceed');
+   return f.obj(await f.scalar('SELECT taxi_account_finish($1,$2,$3,$4)',[42,request,b.lease,81]));
+  };
+  assert.equal((await bind({role:'owner',deviceId:1,receiveOffers:false,driverVersion:null})).state,'saved');
+  const driverVersion=await f.scalar("SELECT taxi_bot_driver_record(d)->>'version'FROM conductores d WHERE device_id=2");
+  const moved=await bind({role:'driver',deviceId:2,receiveOffers:true,driverVersion});assert.equal(moved.state,'saved');
+  assert.equal(f.obj(moved.contact).accountUserId,81);assert.equal(f.obj(moved.contact).deviceId,2);assert.equal(f.obj(moved.contact).receiving,true);
+  assert.equal(await f.scalar('SELECT rol FROM perfiles WHERE traccar_user_id=81'),'driver');assert.equal(await f.scalar('SELECT count(*)::int FROM perfiles'),1);
+  assert.equal(await f.scalar('SELECT telefono_whatsapp FROM conductores WHERE device_id=2'),'+529630000094');
+  assert.equal(await f.scalar('SELECT count(*)::int FROM taxi_base_contacts'),1);
+ }finally{await f.db.close();}
+});
+test('person account SQL: existing person and Traccar ID share one access, replay and private self profile',async()=>{
+ const f=await fixture();try{
+  const id=crypto.randomUUID(),request=crypto.randomUUID();
+  await f.db.query("INSERT INTO taxi_base_contacts(id,tenant_id,unit_number,name,phone_input,role,device_id)VALUES($1,$2,'487','Persona prueba','9630000091','owner',1)",[id,tenant]);
+  const version=await f.scalar("SELECT taxi_bot_contact_record(c)->>'version' FROM taxi_base_contacts c WHERE id=$1",[id]);
+  const assignment={role:'owner',deviceId:1,receiveOffers:false,driverVersion:null};
+  const args=[tenant,42,request,id,version,'persona@example.test',81,assignment];
+  const begin=f.obj(await f.scalar('SELECT taxi_account_begin($1,$2,$3,$4,$5,$6,$7,$8)',args));assert.equal(begin.state,'proceed');
+  assert.equal(f.obj(await f.scalar('SELECT taxi_account_begin($1,$2,$3,$4,$5,$6,$7,$8)',args)).state,'running');
+  assert.equal(f.obj(await f.scalar('SELECT taxi_account_finish($1,$2,$3,$4)',[42,request,crypto.randomUUID(),81])).state,'operation_changed');
+  const saved=f.obj(await f.scalar('SELECT taxi_account_finish($1,$2,$3,$4)',[42,request,begin.lease,81]));assert.equal(saved.state,'saved');
+  assert.equal(f.obj(saved.contact).accountUserId,81);assert.equal(await f.scalar('SELECT count(*)::int FROM taxi_base_contacts'),1);
+  assert.equal(await f.scalar('SELECT rol FROM perfiles WHERE traccar_user_id=81'),'owner');
+  assert.equal(f.obj(await f.scalar('SELECT taxi_account_begin($1,$2,$3,$4,$5,$6,$7,$8)',args)).activated,false);
+  assert.equal(await f.scalar('SELECT taxi_account_activated($1,$2,$3)',[42,request,81]),true);
+  const replay=f.obj(await f.scalar('SELECT taxi_account_begin($1,$2,$3,$4,$5,$6,$7,$8)',args));assert.equal(replay.activated,true);assert.deepEqual(replay.result,saved);
+  assert.equal(f.obj(f.obj(await f.scalar('SELECT taxi_account_self($1)',[81])).contact).id,id);
+  assert.equal(await f.scalar('SELECT taxi_account_self($1)',[82]),null);
+  for(const role of ['anon','authenticated'])assert.equal(await f.scalar('SELECT has_function_privilege($1,$2,$3)',[role,'taxi_account_self(integer)','EXECUTE']),false);
+ }finally{await f.db.close();}
+});
+test('person account SQL: no cross-base takeover, admin downgrade, duplicate person or stale revision',async()=>{
+ const f=await fixture();try{
+  const id=crypto.randomUUID();await f.db.query("INSERT INTO taxi_base_contacts(id,tenant_id,unit_number,name,phone_input,role,device_id)VALUES($1,$2,'487','Persona','9630000092','owner',1)",[id,tenant]);
+  await f.db.query("INSERT INTO perfiles VALUES(81,$1,'operador'),(82,$2,'admin_empresa')",[other,tenant]);
+  const v=await f.scalar("SELECT taxi_bot_contact_record(c)->>'version'FROM taxi_base_contacts c WHERE id=$1",[id]),a={role:'owner',deviceId:1,receiveOffers:false,driverVersion:null};
+  const begin=(user:number|null,base=tenant,version=v,assignment=a)=>f.scalar('SELECT taxi_account_begin($1,$2,$3,$4,$5,$6,$7,$8)',[base,42,crypto.randomUUID(),id,version,'persona@example.test',user,assignment]);
+  assert.equal(f.obj(await begin(81)).state,'user_forbidden');assert.equal(f.obj(await begin(82)).state,'user_forbidden');assert.equal(f.obj(await begin(42)).state,'user_forbidden');
+  assert.equal(f.obj(await begin(83,other)).state,'contact_forbidden');assert.equal(f.obj(await begin(83,tenant,'a'.repeat(32))).state,'revision_conflict');
+  assert.equal(f.obj(await begin(83,tenant,v,{...a,deviceId:3})).state,'device_forbidden');assert.equal(await f.scalar('SELECT count(*)::int FROM taxi_account_operations'),0);
+ }finally{await f.db.close();}
+});
+test('person account SQL: durable lease prevents duplicate provisioning and freezes the same person while pending',async()=>{
+ const f=await fixture();try{
+  const id=crypto.randomUUID(),request=crypto.randomUUID();await f.db.query("INSERT INTO taxi_base_contacts(id,tenant_id,unit_number,name,phone_input,role,device_id)VALUES($1,$2,'487','Persona','9630000093','owner',1)",[id,tenant]);
+  const v=await f.scalar("SELECT taxi_bot_contact_record(c)->>'version'FROM taxi_base_contacts c WHERE id=$1",[id]),a={role:'owner',deviceId:1,receiveOffers:false,driverVersion:null};
+  const args=[tenant,42,request,id,v,'persona@example.test',null,a];const first=f.obj(await f.scalar('SELECT taxi_account_begin($1,$2,$3,$4,$5,$6,$7,$8)',args));
+  assert.equal(f.obj(await f.scalar('SELECT taxi_bot_contact_apply($1,$2,$3,$4,$5,$6)',[tenant,42,crypto.randomUUID(),v,id,{unitNumber:'487',name:'Otra',phoneInput:'9630000093',...a}])).state,'account_pending');
+  assert.equal(f.obj(await f.scalar('SELECT taxi_account_begin($1,$2,$3,$4,$5,$6,$7,$8)',[...args.slice(0,2),crypto.randomUUID(),...args.slice(3)])).state,'account_pending');
+  await f.db.exec("UPDATE taxi_account_operations SET lease_until=clock_timestamp()-interval '1 second'");
+  const resumed=f.obj(await f.scalar('SELECT taxi_account_begin($1,$2,$3,$4,$5,$6,$7,$8)',args));assert.equal(resumed.state,'proceed');assert.notEqual(resumed.lease,first.lease);
+  const pending=await f.scalar('SELECT taxi_account_pending($1,$2)',[42,tenant]);assert.ok(Array.isArray(pending));assert.equal(pending.length,1);assert.ok(!JSON.stringify(pending).includes('password'));
+  assert.deepEqual(await f.scalar('SELECT taxi_account_pending($1,$2)',[43,tenant]),[]);
+ }finally{await f.db.close();}
+});
 async function fixture(options:{legacy?:boolean;seedCoverageBeforeMigration?:boolean}={}){
   const db=new PGlite();await db.exec(`CREATE ROLE anon;CREATE ROLE authenticated;CREATE ROLE service_role BYPASSRLS;
     CREATE TABLE empresas(id uuid PRIMARY KEY,tipo_negocio text DEFAULT 'taxi',telefono_whatsapp text);INSERT INTO empresas(id)VALUES('${tenant}'),('${other}');
@@ -46,7 +109,10 @@ async function fixture(options:{legacy?:boolean;seedCoverageBeforeMigration?:boo
     await db.exec('ALTER TABLE h3_zonas ADD COLUMN tenant_id uuid');
     await db.query('UPDATE h3_zonas SET tenant_id=$1',[tenant]);
   }
-  if(!options.legacy){await db.exec(baseZonesSql);await db.exec(baseFleetSql);await db.exec(baseContactsSql);}
+  if(!options.legacy){await db.exec(baseZonesSql);await db.exec(baseFleetSql);await db.exec(baseContactsSql);
+    await db.exec("CREATE TABLE perfiles(traccar_user_id integer PRIMARY KEY CHECK(traccar_user_id>0),empresa_id uuid REFERENCES empresas(id),rol text CHECK(rol IN('superadmin','admin_empresa','operador')),created_at timestamptz DEFAULT now())");
+    await db.exec(personAccountsSql);
+  }
   // These legacy protocol fixtures explicitly act as customers too. Driver-only access has separate tests below.
   await db.query('INSERT INTO taxi_bot_allowed_customers(tenant_id,phone)VALUES($1,$2),($1,$3),($1,$4)',[tenant,customer,driverPhone,'+529630000004']);
   await db.query("INSERT INTO conductores(tenant_id,device_id,telefono_whatsapp,nombre)VALUES($1,1,$2,'Unidad 1'),($1,2,'+529630000004','Unidad 2'),($3,3,'+529630000005','Ajena')",[tenant,driverPhone,other]);

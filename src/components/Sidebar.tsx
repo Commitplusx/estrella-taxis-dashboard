@@ -14,6 +14,7 @@ export default function Sidebar({ onClose }: SidebarProps) {
   const { user, userRole, empresaData, logout } = useAuth();
 
   const isSuperadmin = userRole === 'superadmin';
+  const personal = ['owner','driver','owner_driver'].includes(userRole ?? '');
   const tipoNegocio = empresaData?.tipo_negocio || (isSuperadmin ? 'taxi' : 'otro');
   const isTaxi = isSuperadmin || tipoNegocio === 'taxi';
 
@@ -71,7 +72,7 @@ export default function Sidebar({ onClose }: SidebarProps) {
     { to: '/dashboard', icon: <BarChart3 size={18} />, label: 'Dashboard' },
     { to: '/devices', icon: <Car size={18} />, label: 'Mis Taxis' },
     { to: '/zonas-tarifas', icon: <Hexagon size={18} />, label: 'Zonas y tarifas' },
-  ];
+  ].filter(item => !personal || ['/map','/devices'].includes(item.to));
 
   const taxiToolsItems: { to: string; icon: React.ReactNode; label: string; feature?: Feature }[] = [
     { to: '/connections', icon: <Activity size={16} />, label: 'Conexiones' },
@@ -80,7 +81,7 @@ export default function Sidebar({ onClose }: SidebarProps) {
     { to: '/geofences', icon: <Hexagon size={16} />, label: 'Geocercas' },
     { to: '/maintenance', icon: <Wrench size={16} />, label: 'Mantenimientos' },
     { to: '/notifications', icon: <Bell size={16} />, label: 'Notificaciones' },
-  ];
+  ].filter(() => !personal);
 
   const taxiAdminItems: { to: string; icon: React.ReactNode; label: string; always?: boolean; roles?: string[]; feature?: Feature }[] = [
     { to: '/groups', icon: <Layers size={16} />, label: 'Grupos', always: true },
@@ -90,7 +91,7 @@ export default function Sidebar({ onClose }: SidebarProps) {
     { to: '/bot', icon: <Bot size={16} />, label: 'Bases y canales', roles: ['superadmin', 'admin_empresa'] },
     { to: '/users', icon: <Users size={16} />, label: 'Usuarios', roles: ['superadmin', 'admin_empresa'] },
     { to: '/packages', icon: <Package size={16} />, label: 'Planes y asignación', roles: ['superadmin'] },
-  ].filter(item => item.always || (item.roles && userRole && item.roles.includes(userRole)));
+  ].filter(item => (!personal || item.to === '/drivers') && (item.always || (item.roles && userRole && item.roles.includes(userRole))));
 
   // Menús para Giros Comerciales (Restaurante, Farmacia, Refaccionaria, etc.)
   const commerceMainItems: { to: string; icon: React.ReactNode; label: string; feature?: Feature }[] = [

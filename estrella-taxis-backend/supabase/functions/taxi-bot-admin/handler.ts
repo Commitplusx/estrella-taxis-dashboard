@@ -1,5 +1,6 @@
 import {taxiQualityRequest}from"./quality.ts";
 import { driverRequest } from './drivers.ts';
+import { accountRequest } from './accounts.ts';
 import { customerPhones, parseCustomerAccess } from '../_shared/bot/taxis/customerAccess.ts';
 import { FleetApi, type FleetIdentity } from "../_shared/tracking/auth.ts";
 import { record, TrackingError, uuid } from "../_shared/tracking/contracts.ts";
@@ -39,7 +40,7 @@ export function createTaxiAdminHandler(
 ): (req: Request) => Promise<Response> {
   async function access(
     identity: FleetIdentity,
-  ): Promise<{ tenant: string | null; configure: boolean }> {
+  ): Promise<{ tenant: string | null; configure: boolean; limited?: string }> {
     if (identity.admin) return { tenant: null, configure: true };
     const rows = await deps.store.read(
       "perfiles",
@@ -52,7 +53,7 @@ export function createTaxiAdminHandler(
     const p = rows[0];
     if (
       rows.length !== 1 || !record(p) ||
-      (p.rol !== "admin_empresa" && p.rol !== "operador")
+      !['admin_empresa', 'operador', 'owner', 'driver', 'owner_driver'].includes(String(p.rol))
     ) {
       throw new TrackingError(
         403,
@@ -60,7 +61,7 @@ export function createTaxiAdminHandler(
         "Tu cuenta no tiene una base asignada para entrar al panel.",
       );
     }
-    return { tenant: uuid(p.empresa_id), configure: p.rol === "admin_empresa" };
+    return { tenant: uuid(p.empresa_id), configure: p.rol === "admin_empresa", ...(['owner','driver','owner_driver'].includes(String(p.rol)) ? { limited: String(p.rol) } : {}) };
   }
   async function company(tenant: string) {
     const rows = await deps.store.read(
@@ -103,6 +104,13 @@ export function createTaxiAdminHandler(
       }
       const identity = await deps.fleet.identity(req),
         scope = await access(identity);
+      if (scope.limited) {
+        if (raw.action !== 'context' && raw.action !== 'account_self') throw new TrackingError(403, 'personal_account_only', 'Esta cuenta sólo puede consultar su taxi y su propio perfil.');
+        if (raw.action === 'account_self') {
+          exact(raw, ['action']);
+          return json(await deps.store.rpc('taxi_account_self', { p_user: identity.userId }));
+        }
+      }
       if (raw.action === 'companies_list') {
         exact(raw, ['action']);
         const query = new URLSearchParams({
@@ -302,6 +310,8 @@ export function createTaxiAdminHandler(
             channels: [],
             runtimeReady: deps.runtimeReady,
             canConfigure: scope.configure,
+            canManageAccounts: identity.admin,
+            ...(scope.limited ? { accessRole: scope.limited } : {}),
             catalogVersion,
           });
         }
@@ -327,6 +337,8 @@ export function createTaxiAdminHandler(
           channels: channels.map(channelFromRow),
           runtimeReady: deps.runtimeReady,
           canConfigure: scope.configure,
+          canManageAccounts: identity.admin,
+          ...(scope.limited ? { accessRole: scope.limited } : {}),
           catalogVersion,
         });
       }
@@ -373,6 +385,10 @@ export function createTaxiAdminHandler(
         }),
       );
       const channel = rows.length ? channelFromRow(rows[0]) : null;
+      if (raw.action === 'accounts' || raw.action === 'account_save') {
+        if (!channel) throw new TrackingError(404, 'channel_not_found', 'Primero guarda el WhatsApp de la base.');
+        return json(await accountRequest(raw, tenant, waba, identity, deps.fleet, deps.store, AbortSignal.any([req.signal, AbortSignal.timeout(60000)])));
+      }
       if (['drivers', 'driver_save', 'contacts', 'contact_save'].includes(raw.action)) {
         if (!channel) throw new TrackingError(404, 'channel_not_found', 'Primero guarda el WhatsApp de la base en pausa.');
         return json(await driverRequest(raw, tenant, waba, identity, scope.configure, deps.fleet, deps.store, req.signal));

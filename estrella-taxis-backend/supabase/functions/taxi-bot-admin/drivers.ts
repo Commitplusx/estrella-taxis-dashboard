@@ -44,6 +44,8 @@ export async function driverRequest(raw: Record<string, unknown>, tenant: string
       contact_forbidden: 'Ese contacto pertenece a otra base.', revision_conflict: 'El contacto cambió. Actualiza la lista antes de editarlo.',
       driver_changed: 'Cambió quien conduce esa unidad. Actualiza la lista antes de guardar.', phone_conflict: 'Ese WhatsApp ya está registrado en la base.',
       driver_busy: 'Hay un servicio u oferta pendiente. Termínalo antes de cambiar al conductor.', request_conflict: 'La solicitud ya se usó con otros datos. Actualiza la lista.',
+      account_pending: 'Esta persona tiene un alta de acceso pendiente. Complétala antes de cambiar sus datos.',
+      account_assignment_locked: 'La persona tiene un acceso vinculado. Su rol y taxi deben cambiarse desde la administración del acceso.',
     };
     if (saved.state !== 'saved') throw new TrackingError(409, saved.state, errors[saved.state] ?? 'No se confirmó el contacto. Actualiza la lista.');
     const contact = parseBaseContact(saved.contact);

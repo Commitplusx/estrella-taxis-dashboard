@@ -80,6 +80,8 @@ export interface AdminContext {
   runtimeReady: boolean;
   canConfigure: boolean;
   catalogVersion?: string;
+  accessRole?: 'owner' | 'driver' | 'owner_driver';
+  canManageAccounts?: boolean;
 }
 export interface ZonePage {
   zones: AdminZone[];
@@ -321,6 +323,8 @@ export function parseContext(value: unknown): AdminContext {
     channels,
     runtimeReady: value.runtimeReady,
     canConfigure: value.canConfigure,
+    canManageAccounts: value.canManageAccounts === true,
+    ...(value.accessRole === 'owner' || value.accessRole === 'driver' || value.accessRole === 'owner_driver' ? { accessRole: value.accessRole } : {}),
     ...(value.catalogVersion === undefined ? {} : { catalogVersion: uuid(value.catalogVersion) }),
   };
 }

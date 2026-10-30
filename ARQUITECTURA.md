@@ -1,5 +1,7 @@
 # Arquitectura General — Stellar Tracking / Pompeyo
 
+> **Accesos unificados — 30-10-2026:** [Personas, correos y taxis de la misma base](docs/STELLAR_PERSON_ACCOUNTS_20261030.md). Usuarios y Conductores comparten ficha; el administrador vincula el usuario existente de Traccar y el taxi real. Dueños/conductores ven sólo su unidad; el chofer recibe las ofertas en su WhatsApp. SQL publicado y administrador v18 ACTIVE; web candidata en validación. Sin altas reales ni correos/taxis deducidos del Excel. Autorizados sigue vacío por indicación del propietario.
+
 > **Estado vigente — 30-10-2026:** [Canal activo, flota y contactos editables de Pompeyo](docs/STELLAR_POMPEYO_FLEET_20261030.md). Canal terminado en 2491 habilitado con prefijo mexicano verificado en YCloud; consumidor exclusivo `stellar-taxi-bot` online en VPS. 19 unidades GPS vinculadas a la base, 33 contactos del Excel importados, 32 roles por confirmar y un teléfono incompleto. Se conserva el conductor ya registrado y el acceso cerrado a clientes autorizados. SQL publicado y administrador v17; no se enviaron mensajes ni se probó un viaje físico. Las notas anteriores de canal apagado quedan como historial.
 
 > **Corrección de propiedad H3 — 29-10-2026:** [Zonas propias de Pompeyo](docs/STELLAR_BASE_OWNED_ZONES_20261029.md). La cobertura y sus tarifas pertenecen a la base y se usan directamente desde todos sus canales. Se retira el paso de asignar/habilitar hexágonos por WhatsApp. Las instrucciones anteriores sobre esos vínculos quedan reemplazadas.

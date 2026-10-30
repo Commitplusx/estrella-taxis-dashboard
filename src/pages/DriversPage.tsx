@@ -1,555 +1,76 @@
-import React, { useState, useEffect } from 'react';
-import { User, Plus, Trash2, Edit2, X, Save, Hash, Phone, Link, Check, BarChart3 } from 'lucide-react';
-import { useCachedFetch } from '../hooks/useCachedFetch';
-import { dataCache } from '../lib/cache';
-import { api, type TraccarDevice } from '../lib/traccarApi';
-import { trackingCall } from '../lib/trackingClient';
-import { parseScoreHistory, type TrackingScoreRow } from '../lib/trackingContracts';
-import { mapLimit } from '../../estrella-taxis-backend/supabase/functions/_shared/tracking/http.ts';
-import { localDay, positiveId, record } from '../../estrella-taxis-backend/supabase/functions/_shared/tracking/contracts.ts';
-import { useFeature } from '../hooks/useFeature';
+import { useState, useEffect, useMemo } from 'react';
+import { ArrowRight } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-
-interface TraccarDriver {
-  id?: number;
-  name: string;
-  uniqueId: string;
-  attributes?: {phone?:string;[key:string]:unknown};
-}
-
-// ─── Score Badge ──────────────────────────────────────────────────────────────
-function ScoreBadge({ score, label, km }: { score: number; label: string; km?: number }) {
-  const color =
-    score >= 85 ? 'bg-emerald-100 text-emerald-700 border-emerald-200' :
-    score >= 70 ? 'bg-blue-100 text-blue-700 border-blue-200' :
-    score >= 50 ? 'bg-amber-100 text-amber-700 border-amber-200' :
-                  'bg-red-100 text-red-700 border-red-200';
-  return (
-    <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-bold ${color}`}>
-      <BarChart3 size={10} />
-      <span>{score}</span>
-      <span className="font-normal opacity-70">{label}</span>
-      {km !== undefined && <span className="font-normal opacity-60">· {km.toFixed(1)}km</span>}
-    </div>
-  );
-}
-
-// ─── Modal para Crear/Editar Conductor ────────────────────────────────────────
-function DriverModal({
-  driver,
-  onClose,
-  onSaved,
-}: {
-  driver?: TraccarDriver;
-  onClose: () => void;
-  onSaved: () => void;
-}) {
-  const [form, setForm] = useState({
-    name: driver?.name ?? '',
-    uniqueId: driver?.uniqueId ?? '',
-    phone: driver?.attributes?.phone ?? '',
-  });
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState('');
-
-  const handleSave = async () => {
-    if (!form.name.trim() || !form.uniqueId.trim()) {
-      setError('El nombre e identificador son obligatorios.');
-      return;
-    }
-    setSaving(true);
-    setError('');
-    try {
-      const method = driver?.id ? 'PUT' : 'POST';
-      const url = driver?.id ? `/api/drivers/${driver.id}` : '/api/drivers';
-      
-      const payload: {id?:number;name:string;uniqueId:string;attributes:{phone?:string;[key:string]:unknown}} = {
-        name: form.name,
-        uniqueId: form.uniqueId,
-        attributes: {
-          ...(driver?.attributes || {})
-        }
-      };
-      
-      if (form.phone) {
-        payload.attributes.phone = form.phone;
-      }
-      
-      if (driver?.id) {
-        payload.id = driver.id;
-      }
-
-      const res = await fetch(url, {
-        method,
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-
-      if (!res.ok) {
-        throw new Error(await res.text());
-      }
-      
-      onSaved();
-      onClose();
-    } catch (error: unknown) {
-      setError(error instanceof Error?'Error al guardar: '+error.message:'No pudimos guardar el conductor.');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden">
-        <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
-          <h2 className="text-base font-bold text-gray-900 flex items-center gap-2">
-            <User size={18} className="text-emerald-600" />
-            {driver ? 'Editar Conductor' : 'Nuevo Conductor'}
-          </h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition"><X size={18} /></button>
-        </div>
-
-        <div className="p-5 space-y-4">
-          <div>
-            <label className="flex items-center gap-1.5 text-xs font-medium text-gray-600 mb-1">
-              <User size={11} /> Nombre completo
-            </label>
-            <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-              placeholder="Ej: Juan Pérez"
-              className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" />
-          </div>
-
-          <div>
-            <label className="flex items-center gap-1.5 text-xs font-medium text-gray-600 mb-1">
-              <Hash size={11} /> Identificador (RFID / # Empleado)
-            </label>
-            <input value={form.uniqueId} onChange={e => setForm(f => ({ ...f, uniqueId: e.target.value }))}
-              placeholder="Ej: RFID-0045"
-              className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" />
-          </div>
-
-          <div>
-            <label className="flex items-center gap-1.5 text-xs font-medium text-gray-600 mb-1">
-              <Phone size={11} /> Teléfono (opcional)
-            </label>
-            <input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))}
-              placeholder="+52 961 000 0000"
-              className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" />
-          </div>
-
-          {error && <p className="text-xs text-red-600 bg-red-50 px-3 py-2 rounded-xl">{error}</p>}
-        </div>
-
-        <div className="flex gap-2 p-5 pt-0">
-          <button onClick={onClose}
-            className="flex-1 px-4 py-2 border border-gray-200 text-gray-700 rounded-xl text-sm font-medium hover:bg-gray-50 transition">
-            Cancelar
-          </button>
-          <button onClick={handleSave} disabled={saving}
-            className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-xl text-sm font-semibold transition">
-            <Save size={14} />
-            {saving ? 'Guardando...' : 'Guardar'}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── Modal: Asignar Taxis a Conductor ─────────────────────────────────────────
-function AssignTaxisModal({ driver, onClose }: { driver: TraccarDriver; onClose: () => void }) {
-  const [allDevices, setAllDevices] = useState<TraccarDevice[]>([]);
-  const [linked, setLinked] = useState<Set<number>>(new Set());
-  const [saving, setSaving] = useState<number | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    async function load() {
-      try {
-        const all = await api.getAllDevices();
-        
-        // Traccar no soporta filtrar dispositivos por driverId directamente (/api/devices?driverId=X falla).
-        // En su lugar, debemos preguntar a cada dispositivo qué conductores tiene asignados.
-        const linkedIds = new Set<number>();
-        
-        await Promise.all(all.map(async (device) => {
-          try {
-            const res = await fetch(`/api/drivers?deviceId=${device.id}`, { credentials: 'include' });
-            if (res.ok) {
-              const deviceDrivers:unknown = await res.json();
-              if (Array.isArray(deviceDrivers) && deviceDrivers.some((item)=>record(item) && item.id===driver.id)) {
-                linkedIds.add(device.id);
-              }
-            }
-          } catch (e) {
-            console.error(`Error loading drivers for device ${device.id}`, e);
-          }
-        }));
-
-        setAllDevices(all);
-        setLinked(linkedIds);
-      } catch (error) {
-        console.error('Error cargando datos de taxis:', error);
-      } finally {
-        setLoading(false);
-      }
-    }
-    load();
-  }, [driver.id]);
-
-  const toggle = async (deviceId: number) => {
-    if (!driver.id) return;
-    setSaving(deviceId);
-    try {
-      if (linked.has(deviceId)) {
-        await api.unlinkDeviceFromDriver(driver.id, deviceId);
-        setLinked(prev => { const s = new Set(prev); s.delete(deviceId); return s; });
-      } else {
-        await api.linkDeviceToDriver(driver.id, deviceId);
-        setLinked(prev => new Set(prev).add(deviceId));
-      }
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setSaving(null);
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-          <div>
-            <h2 className="text-base font-bold text-gray-900 flex items-center gap-2">
-              Taxis de {driver.name}
-            </h2>
-            <p className="text-xs text-gray-400 mt-0.5">{linked.size} taxi{linked.size !== 1 ? 's' : ''} asignado{linked.size !== 1 ? 's' : ''}</p>
-          </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition"><X size={18} /></button>
-        </div>
-
-        <div className="overflow-y-auto max-h-96">
-          {loading ? (
-            <div className="animate-pulse flex flex-col divide-y divide-gray-50">
-              {[1, 2, 3].map(i => (
-                <div key={i} className="flex items-center justify-between p-4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-2 h-2 rounded-full bg-gray-200"></div>
-                    <div className="space-y-1.5">
-                      <div className="h-4 w-24 bg-gray-200 rounded"></div>
-                      <div className="h-3 w-16 bg-gray-100 rounded"></div>
-                    </div>
-                  </div>
-                  <div className="h-6 w-20 bg-gray-100 rounded-full"></div>
-                </div>
-              ))}
-            </div>
-          ) : allDevices.length === 0 ? (
-            <div className="p-8 text-center text-sm text-gray-400">No hay taxis registrados.</div>
-          ) : (
-            <div className="divide-y divide-gray-50">
-              {allDevices.map(device => {
-                const isLinked = linked.has(device.id);
-                const isSaving = saving === device.id;
-                return (
-                  <div key={device.id} className={`flex items-center justify-between px-6 py-3 transition-colors ${isLinked ? 'bg-emerald-50/50' : 'hover:bg-gray-50'}`}>
-                    <div className="flex items-center gap-3">
-                      <div className={`w-2 h-2 rounded-full ${device.status === 'online' ? 'bg-green-500' : 'bg-gray-300'}`} />
-                      <div>
-                        <p className="text-sm font-medium text-gray-800">{device.name}</p>
-                        <p className="text-xs text-gray-400">{device.uniqueId}</p>
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => toggle(device.id)}
-                      disabled={isSaving}
-                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                        isLinked
-                          ? 'bg-emerald-100 text-emerald-700 hover:bg-red-50 hover:text-red-600'
-                          : 'bg-gray-100 text-gray-500 hover:bg-emerald-50 hover:text-emerald-600'
-                      } disabled:opacity-50`}
-                    >
-                      {isSaving ? (
-                        <span className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                      ) : isLinked ? (
-                        <><Check size={12} /> Asignado</>
-                      ) : (
-                        <><Plus size={12} /> Asignar</>
-                      )}
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-
-        <div className="px-6 py-4 border-t border-gray-100 bg-gray-50 flex justify-end">
-          <button onClick={onClose} className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-sm font-semibold transition">
-            Listo
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── Página principal ─────────────────────────────────────────────────────────
-export default function DriversPage() {
-  const { data, loading, refetch } = useCachedFetch<TraccarDriver[]>('/api/drivers', { ttlMs: 60_000 });
-  const drivers = data ?? [];
+import TaxiDriversPanel from '../components/TaxiDriversPanel';
+import { taxiAdminClient } from '../lib/taxiAdminClient';
+import { createTaxiAdminPreview } from '../lib/taxiAdminPreview';
+import { trackingCall } from '../lib/trackingClient';
+import { record } from '../../estrella-taxis-backend/supabase/functions/_shared/tracking/contracts.ts';
+import { contactRoles, parseBaseContact, type BaseContact } from '../../estrella-taxis-backend/supabase/functions/_shared/bot/taxis/contactAdmin.ts';
+import type { AdminContext } from '../../estrella-taxis-backend/supabase/functions/_shared/bot/taxis/adminContracts.ts';
+import './taxiBotAdmin.css';
+/** The sidebar and WhatsApp settings share the same base contacts and editor. */
+export default function DriversPage({ preview = false, accessMode = false }: { preview?: boolean; accessMode?: boolean }) {
   const { empresaId } = useAuth();
-  const [search, setSearch] = useState('');
-  const [modal, setModal] = useState<{ open: boolean; driver?: TraccarDriver }>({ open: false });
-  const [assigningDriver, setAssigningDriver] = useState<TraccarDriver | null>(null);
-  const [expandedDriver, setExpandedDriver] = useState<number | null>(null);
-  // scores: Map de uniqueId → score del día de hoy
-  const [scores,setScores]=useState<Record<number,TrackingScoreRow[]>>({});
-  const [scoreError,setScoreError]=useState<string|null>(null);
-  const canScore=useFeature('score_diario');
+  return <BaseContactsDirectory key={empresaId ?? 'administrator'} preferredBase={empresaId ?? null} preview={preview} accessMode={accessMode} />;
+}
 
+function BaseContactsDirectory({ preferredBase, preview, accessMode }: { preferredBase: string | null; preview: boolean; accessMode: boolean }) {
+  const client = useMemo(() => preview ? createTaxiAdminPreview() : taxiAdminClient, [preview]);
+  const [context, setContext] = useState<AdminContext | null>(null);
+  const [tenantId, setTenantId] = useState(''), [loading, setLoading] = useState(true), [error, setError] = useState('');
+  const [locked, setLocked] = useState(false), [reload, setReload] = useState(0);
   useEffect(() => {
-    const controller=new AbortController();setScores({});setScoreError(null);
-    async function fetchScores() {
-      if(!canScore || !data?.length) return;
-      try {
-        if(data.length>100) throw new Error('El resumen de calificaciones permite hasta 100 conductores. Revisa las unidades desde su perfil.');
-        const devices=await api.getDevices();if(!devices.length)return;
-        if(devices.length>100)throw new Error('Revisa las calificaciones por grupo: hay más de 100 unidades.');
-        const today=localDay(Date.now());
-        const rows=parseScoreHistory(await trackingCall('calculate-driving-scores',{action:'history',deviceIds:devices.map((device)=>device.id),date:today},controller.signal));
-        const byDevice=new Map(rows.map((row)=>[row.device_id,row]));
-        const assignments=await mapLimit(devices.filter((device)=>byDevice.has(device.id)),3,async(device)=>{
-          const response=await fetch('/api/drivers?deviceId='+device.id,{credentials:'include',headers:{Accept:'application/json'},signal:controller.signal});
-          if(!response.ok)throw new Error('No pudimos verificar las unidades asignadas a cada conductor.');
-          const assigned:unknown=await response.json();
-          if(!Array.isArray(assigned) || !assigned.every((item)=>record(item) && positiveId(item.id)))throw new Error('La asignación de unidades no es válida.');
-          return {deviceId:device.id,driverIds:assigned.flatMap((item)=>record(item) && positiveId(item.id)?[item.id]:[])};
-        });
-        const map:Record<number,TrackingScoreRow[]>={};
-        for(const assignment of assignments){const score=byDevice.get(assignment.deviceId);if(score)for(const id of assignment.driverIds)(map[id] ??= []).push(score);}
-        if(!controller.signal.aborted)setScores(map);
-      } catch(error:unknown) {
-        if(!controller.signal.aborted)setScoreError(error instanceof Error?error.message:'No pudimos consultar las calificaciones.');
-      }
-    }
-    fetchScores();
-    return ()=>controller.abort();
-  }, [empresaId,canScore,data]);
+    const abort = new AbortController();
+    setLoading(true); setError(''); setContext(null);
+    void client.context(abort.signal).then(result => {
+      if (abort.signal.aborted) return;
+      const requested = new URLSearchParams(window.location.search).get('base') ?? preferredBase;
+      if (requested && !result.tenants.some(base => base.id === requested)) throw new Error('Tu cuenta no tiene acceso a esa base.');
+      setTenantId(requested ?? result.tenants[0]?.id ?? '');
+      setContext(result);
+    }).catch((cause: unknown) => {
+      if (!abort.signal.aborted) setError(cause instanceof Error ? cause.message : 'No pudimos consultar los contactos de tu base.');
+    }).finally(() => { if (!abort.signal.aborted) setLoading(false); });
+    return () => abort.abort();
+  }, [preferredBase, reload, client]);
+  const channel = context?.channels.find(item => item.tenantId === tenantId);
+  const baseName = context?.tenants.find(base => base.id === tenantId)?.name;
+  const settingsUrl = '/taxi-bot' + (tenantId ? '?base=' + encodeURIComponent(tenantId) : '') + '#configuracion';
+  if (context?.accessRole) return <PersonalTaxiProfile baseName={baseName ?? 'Pompeyo'} />;
+  return <main className="taxi-admin taxi-people-page">
+    {preview && <p className="taxi-demo">Vista local con contactos de prueba. No guarda cambios ni envía mensajes.</p>}
+    <header className="taxi-admin-header"><div><h1>Conductores y dueños</h1><p>Las personas de tu base, sus unidades y quién recibe los viajes.</p></div>
+      {context && <a className="taxi-secondary" href={settingsUrl}>Configurar WhatsApp <ArrowRight size={17} aria-hidden="true" /></a>}</header>
+    {loading && <p role="status">Consultando tu base…</p>}
+    {error && <div className="taxi-error" role="alert"><span>{error}</span><button className="taxi-text-button" onClick={() => setReload(value => value + 1)}>Reintentar</button></div>}
+    {context && <>
+      {context.tenants.length > 0 ? <div className="taxi-people-base"><label>Base<select value={tenantId} disabled={locked} onChange={event => { setTenantId(event.target.value); }}>{context.tenants.map(base => <option key={base.id} value={base.id}>{base.name}</option>)}</select></label>
+        <p>Estos contactos son de {baseName}. Son los mismos que aparecen en la configuración de WhatsApp.</p></div>
+        : <p className="taxi-error">Tu cuenta necesita una base asignada para consultar sus contactos.</p>}
+      {channel ? <TaxiDriversPanel key={tenantId + '|' + channel.waba} tenantId={tenantId} waba={channel.waba} canEdit={context.canConfigure} canManageAccounts={preview || context.canManageAccounts === true} accessMode={accessMode} preview={preview} disabled={false}
+        onZones={() => { window.location.assign('/zonas-tarifas?base=' + encodeURIComponent(tenantId)); }} onLockChange={setLocked} />
+        : tenantId && <div className="taxi-config"><h2>Falta configurar el WhatsApp de esta base</h2><p>Guarda su canal para administrar los contactos y vincular sus unidades.</p><a className="taxi-text-button" href={settingsUrl}>Ir a configuración <ArrowRight size={17} aria-hidden="true" /></a></div>}
+      <p className="taxi-people-help">El administrador vincula el correo a la persona y su taxi. Los viajes llegan al WhatsApp del conductor que tenga activadas las ofertas de esa unidad.</p>
+    </>}
+  </main>;
+}
 
-  const scoreBadges=(driverId:number|undefined)=>driverId?scores[driverId]?.map((row)=><span key={row.device_id} title={'Unidad: '+row.device_name+' · '+(row.qualityStatus==='sufficient'?'evidencia suficiente':row.qualityStatus==='legacy'?'versión anterior':'datos limitados')}><ScoreBadge score={row.score} label={row.device_name+' · '+(row.qualityStatus==='sufficient'?row.score_label:'revisar datos')}/></span>):null;
-
-  const handleDelete = async (id: number) => {
-    if (!confirm('¿Eliminar este conductor?')) return;
-    await fetch(`/api/drivers/${id}`, { method: 'DELETE', credentials: 'include' });
-    dataCache.invalidate('/api/drivers');
-    refetch();
-  };
-
-  const filtered = drivers.filter(d =>
-    d.name.toLowerCase().includes(search.toLowerCase()) ||
-    d.uniqueId.toLowerCase().includes(search.toLowerCase()) ||
-    (d.attributes?.phone ?? '').includes(search)
-  );
-
-  return (
-    <div className="flex flex-col gap-6 h-full overflow-y-auto p-4 sm:p-6 pb-32 md:pb-10">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div>
-          <h1 className="text-lg font-bold text-gray-900">Conductores</h1>
-          <p className="text-sm text-gray-500 mt-0.5">{drivers.length} conductores registrados</p>
-        </div>
-        <div className="flex items-center gap-3">
-          <div className="relative flex-1 sm:flex-none">
-            <input value={search} onChange={e => setSearch(e.target.value)}
-              placeholder="Buscar conductor..."
-              className="border border-gray-200 rounded-xl px-4 py-2 text-sm pl-9 focus:outline-none focus:ring-2 focus:ring-emerald-500 w-full sm:w-52 bg-gray-50" />
-            <svg className="absolute left-3 top-2.5 text-gray-400" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" />
-            </svg>
-          </div>
-          <button onClick={() => setModal({ open: true })}
-            className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-sm font-semibold transition shadow-sm whitespace-nowrap">
-            <Plus size={16} /> <span className="hidden sm:inline">Nuevo conductor</span><span className="sm:hidden">Nuevo</span>
-          </button>
-        </div>
-      </div>
-
-      {scoreError && <p role="alert" className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">{scoreError}</p>}
-      {canScore && <p className="text-sm text-slate-600">Se muestran las calificaciones de las unidades actualmente vinculadas. No atribuyen todo el recorrido del día a un solo conductor.</p>}
-      {loading ? (
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden animate-pulse">
-          <div className="border-b border-gray-100 bg-gray-50/50 flex px-5 py-3">
-            <div className="w-1/3 h-3 bg-gray-200 rounded"></div>
-            <div className="w-1/3 h-3 bg-gray-200 rounded mx-5"></div>
-            <div className="w-1/3 h-3 bg-gray-200 rounded"></div>
-          </div>
-          <div className="divide-y divide-gray-50">
-            {[1, 2, 3, 4].map(i => (
-              <div key={i} className="flex items-center px-5 py-4">
-                <div className="w-1/3 flex items-center gap-3">
-                  <div className="w-9 h-9 bg-gray-100 rounded-xl"></div>
-                  <div className="h-4 w-32 bg-gray-200 rounded"></div>
-                </div>
-                <div className="w-1/3 px-5">
-                  <div className="h-3 w-24 bg-gray-100 rounded"></div>
-                </div>
-                <div className="w-1/3 px-5">
-                  <div className="h-3 w-28 bg-gray-100 rounded"></div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      ) : filtered.length === 0 ? (
-        <div className="flex flex-col items-center justify-center text-gray-400 gap-3 py-20">
-          <div className="w-14 h-14 bg-gray-100 rounded-2xl flex items-center justify-center">
-            <User size={24} className="text-gray-400" />
-          </div>
-          <p className="text-sm font-medium">
-            {drivers.length === 0 ? 'No hay conductores registrados' : 'Sin resultados para tu búsqueda'}
-          </p>
-          {drivers.length === 0 && (
-            <button onClick={() => setModal({ open: true })}
-              className="mt-2 px-4 py-2 bg-emerald-600 text-white rounded-xl text-sm font-semibold hover:bg-emerald-700 transition">
-              Registrar primer conductor
-            </button>
-          )}
-        </div>
-      ) : (
-        <div className="bg-white md:bg-transparent md:border-none md:shadow-none rounded-2xl border border-gray-100 shadow-sm overflow-hidden md:overflow-visible">
-          
-          {/* Vista Móvil (Tarjetas) */}
-          <div className="md:hidden flex flex-col divide-y divide-gray-100">
-            {filtered.map(driver => (
-              <div 
-                key={driver.id} 
-                className="p-4 flex flex-col gap-3 hover:bg-gray-50 transition-colors cursor-pointer"
-                onClick={() => setExpandedDriver(expandedDriver === driver.id ? null : driver.id!)}
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-emerald-100 rounded-xl flex items-center justify-center text-emerald-700 font-bold text-sm shrink-0">
-                    {driver.name.charAt(0).toUpperCase()}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <h3 className="text-sm font-bold text-gray-900 truncate">{driver.name}</h3>
-                    <p className="text-xs text-gray-500 font-medium">ID: {driver.uniqueId}</p>
-                  </div>
-                  {/* Score badge móvil */}
-                  {scoreBadges(driver.id)}
-                </div>
-
-                {expandedDriver === driver.id && (
-                  <div className="flex flex-col gap-3 pt-3 border-t border-gray-100 mt-1 animate-fade-in" onClick={(e) => e.stopPropagation()}>
-                    {driver.attributes?.phone && (
-                      <div className="text-xs font-medium text-gray-600 bg-gray-50 px-3 py-2 rounded-lg inline-block self-start">
-                        Tel: {driver.attributes.phone}
-                      </div>
-                    )}
-                    <div className="flex items-center gap-2 mt-1">
-                      <button onClick={(e) => { e.stopPropagation(); setAssigningDriver(driver); }}
-                        className="flex-1 px-3 py-2 text-xs font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-xl transition flex items-center justify-center gap-1.5">
-                        <Link size={14} /> Asignar Taxis
-                      </button>
-                      <button onClick={(e) => { e.stopPropagation(); setModal({ open: true, driver }); }}
-                        className="p-2 hover:bg-blue-100 text-blue-600 rounded-xl transition bg-gray-50 border border-gray-100">
-                        <Edit2 size={16} />
-                      </button>
-                      <button onClick={(e) => { e.stopPropagation(); driver.id && handleDelete(driver.id); }}
-                        className="p-2 hover:bg-red-100 text-red-600 rounded-xl transition bg-gray-50 border border-gray-100">
-                        <Trash2 size={16} />
-                      </button>
-                    </div>
-                  </div>
-                )}
-                
-                {expandedDriver !== driver.id && (
-                  <div className="text-center w-full flex items-center justify-center pt-2">
-                    <span className="text-[10px] font-bold text-gray-400 flex items-center gap-1">
-                      Toca para ver acciones y más
-                    </span>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-
-          {/* Vista Desktop (Tabla) */}
-          <div className="hidden md:block bg-white rounded-2xl border border-gray-100 shadow-sm overflow-x-auto">
-            <table className="w-full min-w-[600px] text-left">
-              <thead>
-                <tr className="border-b border-gray-100 bg-gray-50">
-                  <th className="px-5 py-3 text-xs font-bold text-gray-500 uppercase tracking-wider">Conductor</th>
-                  <th className="px-5 py-3 text-xs font-bold text-gray-500 uppercase tracking-wider">Identificador</th>
-                  <th className="px-5 py-3 text-xs font-bold text-gray-500 uppercase tracking-wider">Teléfono</th>
-                  <th className="px-5 py-3 text-xs font-bold text-gray-500 uppercase tracking-wider">Unidades asignadas · hoy</th>
-                  <th className="px-5 py-3 text-xs font-bold text-gray-500 uppercase tracking-wider text-right">Acciones</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map(driver => (
-                  <tr key={driver.id} className="border-b border-gray-50 hover:bg-gray-50/50 transition">
-                    <td className="px-5 py-4">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 bg-emerald-100 rounded-xl flex items-center justify-center text-emerald-700 font-bold text-xs">
-                          {driver.name.charAt(0).toUpperCase()}
-                        </div>
-                        <span className="text-sm font-semibold text-gray-900">{driver.name}</span>
-                      </div>
-                    </td>
-                    <td className="px-5 py-4 text-sm text-gray-600 font-medium">
-                      {driver.uniqueId}
-                    </td>
-                    <td className="px-5 py-4 text-sm text-gray-600">
-                      {driver.attributes?.phone || <span className="text-gray-400 italic">No registrado</span>}
-                    </td>
-                    <td className="px-5 py-4">
-                      {scores[driver.id ?? -1]?.length ? scoreBadges(driver.id) : <span className="text-sm text-slate-600">Sin análisis guardado</span>}
-                    </td>
-                    <td className="px-5 py-4 text-right">
-                      <div className="flex items-center justify-end gap-2">
-                        <button onClick={() => setAssigningDriver(driver)}
-                          className="px-3 py-1.5 text-xs font-semibold text-blue-600 hover:bg-blue-50 border border-gray-200 hover:border-blue-200 rounded-lg transition shadow-sm flex items-center gap-1.5">
-                          <Link size={14} /> Asignar Taxis
-                        </button>
-                        <button onClick={() => setModal({ open: true, driver })}
-                          className="p-1.5 hover:bg-gray-100 text-gray-400 hover:text-blue-600 rounded-md transition" title="Editar">
-                          <Edit2 size={16} />
-                        </button>
-                        <button onClick={() => driver.id && handleDelete(driver.id)}
-                          className="p-1.5 hover:bg-gray-100 text-gray-400 hover:text-red-600 rounded-md transition" title="Eliminar">
-                          <Trash2 size={16} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      {modal.open && (
-        <DriverModal
-          driver={modal.driver}
-          onClose={() => setModal({ open: false })}
-          onSaved={() => {
-            dataCache.invalidate('/api/drivers');
-            refetch();
-          }}
-        />
-      )}
-
-      {assigningDriver && (
-        <AssignTaxisModal
-          driver={assigningDriver}
-          onClose={() => setAssigningDriver(null)}
-        />
-      )}
-    </div>
-  );
+function PersonalTaxiProfile({ baseName }: { baseName: string }) {
+  const { user } = useAuth();
+  const [person, setPerson] = useState<BaseContact | null>(null), [error, setError] = useState('');
+  useEffect(() => {
+    const abort = new AbortController();
+    void trackingCall('taxi-bot-admin', { action: 'account_self' }, abort.signal).then(result => {
+      if (!record(result)) throw new Error('Tu acceso no tiene una persona vinculada. Pide al administrador que lo revise.');
+      const contact = parseBaseContact(result.contact);
+      if (!abort.signal.aborted) setPerson(contact);
+    }).catch((cause: unknown) => { if (!abort.signal.aborted) setError(cause instanceof Error ? cause.message : 'No pudimos consultar tu perfil.'); });
+    return () => abort.abort();
+  }, []);
+  return <main className="taxi-admin taxi-people-page"><header className="taxi-admin-header"><div><h1>Mi taxi y mi acceso</h1><p>{baseName}</p></div><a className="taxi-secondary" href="/map">Ver mi taxi en el mapa <ArrowRight size={18} aria-hidden="true" /></a></header>
+    {error && <p className="taxi-error" role="alert">{error}</p>}
+    {!person && !error && <p role="status">Consultando tu acceso…</p>}
+    {person && <section className="taxi-config"><h2>{person.name}</h2><dl className="taxi-personal-facts"><div><dt>Correo de acceso</dt><dd>{user?.email}</dd></div><div><dt>Rol</dt><dd>{contactRoles.find(role => role.value === person.role)?.label}</dd></div><div><dt>Unidad</dt><dd>{person.unitNumber} · GPS #{person.deviceId}</dd></div><div><dt>WhatsApp</dt><dd>{person.phone ?? 'Pendiente de completar'}</dd></div><div><dt>Ofertas de viaje</dt><dd>{person.receiving ? 'Llegan a tu WhatsApp cuando la unidad está disponible' : 'No recibes ofertas de viaje'}</dd></div></dl><p>Para cambiar el taxi, tus datos o el conductor, solicita el cambio al administrador de la base.</p></section>}
+  </main>;
 }

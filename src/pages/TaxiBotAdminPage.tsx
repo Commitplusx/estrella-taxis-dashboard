@@ -627,7 +627,7 @@ export default function TaxiBotAdminPage(
       )}
       {tenantId && tab === "config" && (
         <>
-        {channel && <TaxiDriversPanel key={tenantId + '|' + waba} tenantId={tenantId} waba={waba} canEdit={canConfigure} preview={preview} disabled={busy || Boolean(pending)}
+        {channel && <TaxiDriversPanel key={tenantId + '|' + waba} tenantId={tenantId} waba={waba} canEdit={canConfigure} canManageAccounts={preview || context.canManageAccounts === true} preview={preview} disabled={busy || Boolean(pending)}
           onZones={() => setTab('zones')} onLockChange={setQualityLocked} />}
         <TaxiChannelForm
           key={tenantId + "|" + (newChannel ? "new" : waba) + "|" + formVersion}

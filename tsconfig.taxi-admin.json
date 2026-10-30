@@ -2,5 +2,5 @@
   "extends":"./tsconfig.app.json",
   "compilerOptions":{"strict":true,"noUnusedLocals":true,"noUnusedParameters":true},
   "include":[],
-  "files":["src/pages/TaxiBotAdminPage.tsx","src/components/TaxiZoneMap.tsx","src/components/TaxiChannelForm.tsx","src/lib/taxiAdminClient.ts","src/lib/taxiAdminPreview.ts","src/pages/BotPage.tsx","src/lib/companyAdminClient.ts"]
+  "files":["src/pages/TaxiBotAdminPage.tsx","src/pages/DriversPage.tsx","src/components/TaxiZoneMap.tsx","src/components/TaxiChannelForm.tsx","src/lib/taxiAdminClient.ts","src/lib/taxiAdminPreview.ts","src/pages/BotPage.tsx","src/lib/companyAdminClient.ts"]
 }

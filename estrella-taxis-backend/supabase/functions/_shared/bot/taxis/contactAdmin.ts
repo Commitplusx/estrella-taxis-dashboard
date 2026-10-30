@@ -9,6 +9,7 @@ export type ContactRole = typeof contactRoles[number]['value'];
 export interface BaseContact {
   id: string; unitNumber: string; name: string; phoneInput: string; phone: string | null;
   role: ContactRole; deviceId: number | null; receiving: boolean; version: string;
+  accountUserId?: number | null;
 }
 export interface ContactSetup extends DriverSetup { contacts: BaseContact[] }
 export function isContactRole(value: unknown): value is ContactRole { return contactRoles.some(role => role.value === value); }
@@ -19,9 +20,10 @@ export function parseBaseContact(value: unknown): BaseContact {
     typeof value.phoneInput !== 'string' || value.phoneInput.length > 40 || !/^[+0-9 ()-]*$/.test(value.phoneInput) ||
     !(value.phone === null || typeof value.phone === 'string' && /^\+[1-9][0-9]{7,14}$/.test(value.phone)) ||
     !isContactRole(value.role) || !(value.deviceId === null || positiveId(value.deviceId)) || typeof value.receiving !== 'boolean' ||
-    typeof value.version !== 'string' || !/^[a-f0-9]{32}$/.test(value.version)) throw new TrackingError(502, 'invalid_contact', 'No pudimos comprobar los datos del contacto.');
+    typeof value.version !== 'string' || !/^[a-f0-9]{32}$/.test(value.version) ||
+    !(value.accountUserId === undefined || value.accountUserId === null || positiveId(value.accountUserId))) throw new TrackingError(502, 'invalid_contact', 'No pudimos comprobar los datos del contacto.');
   return { id: value.id, unitNumber: value.unitNumber, name: value.name, phoneInput: value.phoneInput, phone: value.phone,
-    role: value.role, deviceId: value.deviceId, receiving: value.receiving, version: value.version };
+    role: value.role, deviceId: value.deviceId, receiving: value.receiving, version: value.version, accountUserId: value.accountUserId ?? null };
 }
 export function parseContactSetup(value: unknown): ContactSetup {
   if (!record(value) || !Array.isArray(value.contacts) || value.contacts.length > 500) throw new TrackingError(502, 'invalid_contacts', 'No pudimos cargar los contactos de la base.');

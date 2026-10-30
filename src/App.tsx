@@ -1,5 +1,5 @@
 import React, {lazy,Suspense} from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import Layout from './components/Layout';
@@ -28,7 +28,9 @@ import TrackPage from './pages/TrackPage';
 const TaxiBotAdminPage=lazy(()=>import('./pages/TaxiBotAdminPage'));
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
-  const { user } = useAuth();
+  const { user, userRole } = useAuth();
+  const location = useLocation();
+  if (user && ['owner','driver','owner_driver'].includes(userRole ?? '') && !['/drivers','/map','/devices'].includes(location.pathname)) return <Navigate to="/drivers" replace />;
   return user ? <>{children}</> : <Navigate to="/login" replace />;
 }
 
@@ -106,6 +108,7 @@ function AppRoutes() {
 }
 
 export default function App() {
+  if(import.meta.env.DEV&&window.location.pathname==='/conductores-diseno')return <DriversPage preview/>;
   if(import.meta.env.DEV&&window.location.pathname==='/zonas-tarifas-diseno')return <Suspense fallback={<p className="p-8">Cargando zonas y tarifas…</p>}><TaxiBotAdminPage preview zoneEditor/></Suspense>;
   if(import.meta.env.DEV&&window.location.pathname==='/taxi-bot-diseno')return <Suspense fallback={<p className="p-8">Cargando vista de diseño…</p>}><TaxiBotAdminPage preview/></Suspense>;
   return (
