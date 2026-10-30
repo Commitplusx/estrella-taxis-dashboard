@@ -4,7 +4,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync}from'node:fs';
 import {PGlite}from'@electric-sql/pglite';
-import {emptyDraft,parseSession,record}from'../estrella-taxis-backend/supabase/functions/_shared/bot/taxis/contracts.ts';
+import {emptyDraft,parseSession,parseStoredInbound,record}from'../estrella-taxis-backend/supabase/functions/_shared/bot/taxis/contracts.ts';
 import {TaxiEngine}from'../estrella-taxis-backend/supabase/functions/_shared/bot/taxis/engine.ts';
 import {coordinateTaxi,type TaxiServices}from'../estrella-taxis-backend/supabase/functions/_shared/bot/taxis/coordinator.ts';
 import {createTaxiServices}from'../estrella-taxis-backend/supabase/functions/_shared/bot/taxis/services.ts';
@@ -44,6 +44,22 @@ const gpsBookingSql=readFileSync(new URL('../estrella-taxis-backend/supabase/mig
 const privateReferenceQuoteSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261031173000_taxi_reference_quote_private_reads.sql',import.meta.url),'utf8');
 const tenant='11111111-1111-4111-8111-111111111111',other='22222222-2222-4222-8222-222222222222',waba='+529630000001',customer='+529630000002',driverPhone='+529630000003';
 const pompeyo='4cf9acf1-f07e-4a01-9396-eb5bde3e7411';
+
+test('native pin persistence: a failed model turn survives SQL commit, role clarification and resumed name capture without creating a trip',async()=>{
+ const f=await fixture();try{
+  await f.seedH3();let modelCalls=0;
+  const channel:TaxiChannel={tenantId:tenant,waba,enabled:true,name:'Base sintética',city:'Comitán',centerLat:16.25,centerLng:-92.13,radiusKm:20,dispatcher:null,model:'fixture',baseCents:null,perKmCents:null,pricingMode:'h3_zone_max'};
+  const services:TaxiServices={interpret:async(text)=>{modelCalls++;if(text==='y otra cosa')throw Error('Declared provider outage');assert.equal(text,'Soy Mariana');return parseInterpretation({intent:'provide',fields:{name:{value:'Mariana',evidence:text}}},text);},resolve:async()=>{throw Error('No textual resolver expected');},quote:async()=>4500,candidates:async()=>{throw Error('No current click, no dispatch');}};
+  const turn=async(event:Record<string,unknown>)=>{const claim=await f.begin(event.eventId);assert.equal(claim.state,'proceed');assert.ok(Array.isArray(claim.messages));const decision=await coordinateTaxi(claim.messages.map(item=>parseStoredInbound(item,Date.now())),parseSession(claim.session),channel,services,Date.now());await f.commit(claim.eventId,claim,{...decision});return decision;};
+  const pinId=crypto.randomUUID(),pin=await f.enqueue('',customer,pinId,null,{lat:16.25,lng:-92.13});await f.enqueue('y otra cosa');
+  const first=await turn(pin);assert.equal(first.draft.pendingLocation?.messageId,pinId);assert.equal(first.draft.confirmation,null);
+  assert.equal(await f.scalar("SELECT draft->'pendingLocation'->>'messageId' FROM taxi_bot_sessions WHERE customer=$1",[customer]),pinId);
+  const selected=await turn(await f.enqueue('ahí me recoges'));assert.equal(selected.draft.pickupMessageId,pinId);assert.equal(selected.draft.origin?.source,'gps');assert.equal(selected.draft.confirmation,null);
+  const reviewed=await turn(await f.enqueue('Soy Mariana'));assert.equal(reviewed.draft.name,'Mariana');assert.equal(reviewed.draft.pickupMessageId,pinId);assert.equal(reviewed.draft.quoteCents,4500);assert.ok(reviewed.draft.confirmation);assert.equal(modelCalls,2);
+  assert.equal(await f.scalar('SELECT count(*)::int FROM viajes'),0);assert.equal(await f.scalar('SELECT count(*)::int FROM taxi_bot_offers'),0);
+  assert.equal(await f.scalar("SELECT count(*)::int FROM taxi_bot_events WHERE state='completed'"),4);
+ }finally{await f.db.close();}
+});
 
 test('GPS button consent SQL: typed assent cannot create trips, offers or notifications; the current click works once without a destination',async()=>{
  const f=await fixture();try{
@@ -1016,7 +1032,7 @@ test('taxi end-to-end: signed webhook → durable queue → real tool decoder �
       await f.db.exec("UPDATE taxi_bot_events SET received_at=clock_timestamp()-interval '2 seconds'WHERE state='pending'");return{raw,hash,timestamp,id};
     }
     const initial=await inbound(current);await engine.tick();assert.equal(modelCalls,1);assert.equal(await f.scalar('SELECT count(*)::int FROM viajes'),0);
-    assert.equal(await f.scalar("SELECT meta->>'engineVersion'FROM taxi_bot_turn_traces LIMIT 1"),'taxi-bot-v7-gps-button');
+    assert.equal(await f.scalar("SELECT meta->>'engineVersion'FROM taxi_bot_turn_traces LIMIT 1"),'taxi-bot-v8-context');
     assert.equal(await f.scalar("SELECT meta->>'promptHash'FROM taxi_bot_turn_traces LIMIT 1"),await fingerprint(TAXI_INTERPRETER_CONTRACT));
     let summary=f.obj(await f.scalar('SELECT draft FROM taxi_bot_sessions WHERE customer=$1',[customer]));assert.equal(summary.confirmation,null);assert.equal(summary.pickupText,'Centro');
     await inbound('',customer,crypto.randomUUID(),null,{latitude:16.25,longitude:-92.13});await engine.tick();summary=f.obj(await f.scalar('SELECT draft FROM taxi_bot_sessions WHERE customer=$1',[customer]));assert.ok(summary.confirmation);assert.equal(summary.quoteCents,4500);assert.equal(modelCalls,1);

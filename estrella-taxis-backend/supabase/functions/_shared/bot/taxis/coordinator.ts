@@ -40,9 +40,10 @@ async function decideTaxi(messages:TaxiInbound[],session:TaxiSession,channel:Tax
     ...base,action:'draft',reason,draft:{...d,confirmation:null,expiresAt:null,quoteCents:null,quoteH3:null,awaitingLocation:role,pendingLocation:null},
     messages:[{to:latest.from,locationRequest:role,text:`${body??(role==='origin'?'Compárteme el pin GPS donde te recogemos con el botón. Si ya escribiste la dirección, la conservo como referencia.':'El destino es opcional. Puedes escribirlo o compartir su pin si quieres precisarlo.')} 🚕`}],
   });
-  const clarifyPending=(reason:string):TaxiDecision=>{
-    const d:Draft={...session.draft,confirmation:null,expiresAt:null};
-    const phase=conversationPhase(session,now);
+  const clarifyPending=(reason:string,draft:Draft=session.draft):TaxiDecision=>{
+    const d:Draft={...draft,confirmation:null,expiresAt:null};
+    const phase=conversationPhase({...session,draft:d},now);
+    if(reason==='unclear_name'||reason==='pickup_reference_too_long')return {...reply(reason==='unclear_name'?'¿Ese es el nombre del pasajero? ¿A nombre de quién queda el viaje?':'La referencia quedó muy larga. ¿Me la dices más breve para que el conductor pueda identificarte?',reason),action:'draft',draft:d};
     if(phase==='origin'||phase==='destination'){
       const area=phase==='origin'?d.originArea:d.destinationArea;
       const body=area
@@ -129,26 +130,41 @@ async function decideTaxi(messages:TaxiInbound[],session:TaxiSession,channel:Tax
     d[selectedRole]=d.pendingLocation.place;if(selectedRole==='origin')d.pickupMessageId=d.pendingLocation.messageId??null;d[selectedRole==='origin'?'originArea':'destinationArea']=null;d.pendingLocation=null;d.awaitingLocation=null;
     return prepareSummary(d,'summary');
   }
+  const native=messages.filter((m)=>m.location!==null);
+  if(native.length>1)return {...reply('Recibí más de una ubicación. ¿Cuál es el punto donde te recogemos?','multiple_locations'),action:'draft',draft:{...d,confirmation:null,expiresAt:null}};
   let interpretation:Interpretation;
+  let interpretationIssue:'interpretation_failed'|'ambiguous_intent'|'unclear_name'|'pickup_reference_too_long'|null=null;
   try{interpretation=current&&!(selectedRole&&messages.some((m)=>m.location!==null))?await services.interpret(current,session,channel,signal):{intent:'provide',fields:{}};}
-  catch{return clarifyPending('interpretation_failed');}
+  catch{interpretationIssue='interpretation_failed';interpretation={intent:'ambiguous',fields:{}};}
   if(interpretation.intent==='human')return human('model_handoff');
-  if(interpretation.intent==='ambiguous'||interpretation.intent==='cancel'||interpretation.intent==='confirm')return clarifyPending('ambiguous_intent');
-  if(interpretation.intent==='status')return reply('Todavía no has solicitado el taxi. Primero hay que revisar el recorrido y confirmar el resumen.','no_active_status');
-  if(interpretation.fields.pickupReference){
-    const note=interpretation.fields.pickupReference.value,combined=d.pickupText&&!d.pickupText.includes(note)?d.pickupText+'. '+note:note;
-    if(combined.length>400)return {...reply('La referencia quedó muy larga. ¿Me la dices más breve para que el conductor pueda identificarte?','pickup_reference_too_long'),action:'draft',draft:{...d,confirmation:null,expiresAt:null}};
-    d.pickupText=combined;changed=true;
+  if(interpretationIssue||interpretation.intent==='ambiguous'||interpretation.intent==='cancel'||interpretation.intent==='confirm'){
+    interpretationIssue??='ambiguous_intent';
+    if(!native.length)return clarifyPending(interpretationIssue);
+    interpretation={intent:'provide',fields:{}};
+  }
+  if(interpretation.intent==='status'){
+    if(!native.length)return reply('Todavía no has solicitado el taxi. Primero hay que revisar el recorrido y confirmar el resumen.','no_active_status');
+    interpretationIssue='ambiguous_intent';interpretation={intent:'provide',fields:{}};
   }
   if(interpretation.fields.name){
     const chosen=normalize(interpretation.fields.name.value).replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
     const explicit=new RegExp('\\b(?:me llamo|soy|a nombre de|mi nombre es)\\s+'+chosen+'(?:\\b|$)').test(normalize(interpretation.fields.name.evidence));
     const contextualAnswer=conversationPhase(session,now)==='name'&&!d.name;
-    if(!explicit&&!contextualAnswer)return {...reply('¿Ese es el nombre del pasajero? ¿A nombre de quién queda el viaje?','unclear_name'),action:'draft',draft:{...d,confirmation:null,expiresAt:null}};
+    if(!explicit&&!contextualAnswer){
+      if(!native.length)return clarifyPending('unclear_name',d);
+      interpretationIssue='unclear_name';interpretation={intent:'provide',fields:{}};
+    }
+  }
+  if(interpretation.fields.pickupReference){
+    const note=interpretation.fields.pickupReference.value,combined=d.pickupText&&!d.pickupText.includes(note)?d.pickupText+'. '+note:note;
+    if(combined.length>400){
+      if(!native.length)return clarifyPending('pickup_reference_too_long',d);
+      interpretationIssue='pickup_reference_too_long';interpretation={intent:'provide',fields:{}};
+    }else{d.pickupText=combined;changed=true;}
+  }
+  if(interpretation.fields.name){
     d.name=interpretation.fields.name.value;changed=true;
   }
-  const native=messages.filter((m)=>m.location!==null);
-  if(native.length>1)return {...reply('Recibí más de una ubicación. ¿Cuál es el punto donde te recogemos?','multiple_locations'),action:'draft',draft:{...d,confirmation:null,expiresAt:null}};
   const unresolved:('origin'|'destination')[]=[];
   const recognized:Partial<Record<'origin'|'destination',NeighborhoodArea[]>>={};
   const referenceConflicts:Partial<Record<'origin'|'destination',string>>={};
@@ -175,6 +191,7 @@ async function decideTaxi(messages:TaxiInbound[],session:TaxiSession,channel:Tax
     const resolvedIndex=unresolved.indexOf(target);if(resolvedIndex>=0)unresolved.splice(resolvedIndex,1);
   }
   if(changed){d.confirmation=null;d.expiresAt=null;d.quoteCents=null;d.quoteH3=null;}
+  if(interpretationIssue)return clarifyPending(interpretationIssue,d);
   if(unresolved.length===1){
     const field=unresolved[0],areas=recognized[field];
     const conflict=referenceConflicts[field];if(conflict)return requestLocation(d,field,'neighborhood_reference_conflict',`La ubicación que encontré no cae en ${conflict}. ¿Me confirmas la colonia o me das otra calle o referencia? Si prefieres, comparte el pin.`);

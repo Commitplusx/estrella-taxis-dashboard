@@ -9,6 +9,7 @@ files.push(...['tests/taxi-bot-trace.test.ts','tests/taxi-bot-quality.test.ts','
 files.push(...['src/lib/taxiQualityClient.ts','src/components/TaxiQualityPanel.tsx','estrella-taxis-backend/supabase/functions/_shared/bot/taxis/qualityContracts.ts'].map((file)=>resolve(root,file)));
 files.push(...['src/components/TaxiNeighborhoodsPanel.tsx','tests/taxi-neighborhoods.test.ts','estrella-taxis-backend/supabase/functions/taxi-bot-admin/neighborhoods.ts','estrella-taxis-backend/supabase/functions/_shared/bot/taxis/neighborhoods.ts','estrella-taxis-backend/supabase/functions/_shared/bot/taxis/neighborhoodContracts.ts'].map(f=>resolve(root,f)));
 const failures:string[]=[];
+files.push(...['tests/taxi-gps-booking.test.ts','tests/taxi-contextual-replies.test.ts','tests/taxi-language-hardening.test.ts','tests/fixtures/taxi-contextual-intents.ts','tests/fixtures/taxi-language-hardening.ts','estrella-taxis-backend/supabase/functions/_shared/bot/taxis/conversationReply.ts'].map(file=>resolve(root,file)));
 files.push(resolve(root,'tests/taxi-native-location.test.ts'));
 files.push(resolve(root,'tests/taxi-natural-flow.test.ts'));
 files.push(resolve(root,'tests/taxi-address-geocoder.test.ts'),resolve(taxi,'addressGeocoder.ts'));

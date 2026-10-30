@@ -23,6 +23,8 @@ export function locationRole(s:string):'origin'|'destination'|null {
   const n=normalize(s).replace(/[.!¡]+$/,'');
   if(/^(?:(?:es|ese es|este es|el pin es|la ubicacion es) (?:el |mi )?)?(?:origen|punto de recogida|recogida)$/.test(n))return 'origin';
   if(/^(?:(?:es|ese es|este es|el pin es|la ubicacion es) (?:el |mi )?)?destino$/.test(n))return 'destination';
+  if(/^(?:ahi me recoges|aqui me recoges|es donde estoy|(?:ese|este) es donde me vas a recoger|es donde me recoges)$/.test(n))return 'origin';
+  if(/^(?:ahi voy|alla voy|es a donde voy|(?:ese|este) es el lugar al que voy|ahi quiero llegar)$/.test(n))return 'destination';
   return null;
 }
 export function activeRideChange(s:string):boolean {
@@ -41,6 +43,19 @@ function serviceRequestQuestion(clause:string):boolean {
     || /^(?:(?:me|nos)\s+(?:(?:puedes?|podrias?)\s+)?(?:llevas?|llevar|recoges?|recoger)|(?:puedes?|podrias?)\s+(?:llevar|recoger)(?:me|nos))\s+(?:a|al|en|hasta|de)\s+\S/.test(request)
     || /^(?:(?:puedes?|podrias?)\s+)?(?:pasas?|pasar)\s+por\s+(?:mi|nosotros)\s+(?:a|al|en)\s+\S/.test(request);
 }
+/** Scope polarity to the actual field; an unrelated "no llevo equipaje" does not negate its address. */
+function fieldClause(clause:string,chosen:string):string {
+  const n=normalize(clause),escaped=chosen.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+  const at=[...n.matchAll(new RegExp('(?<![\\p{L}\\p{N}_])'+escaped+'(?![\\p{L}\\p{N}_])','gu'))].at(-1)?.index??-1;if(at<0)return n;
+  let start=0,end=n.length;
+  for(const match of n.matchAll(/[,;]|\b(?:no|sino|mejor|mas bien|quise decir|perdon|ahora)\b|\by\s+(?=(?:voy|vamos|llevame|llevanos|estoy|recogeme|me llamo|soy)\b)/g)){
+    const index=match.index,finish=index+match[0].length;
+    if(match[0]==='mejor'&&/a lo\s+$/.test(n.slice(0,index)))continue;
+    if(finish<=at)start=match[0]===','||match[0]===';'?finish:index;
+    else if(index>=at+chosen.length){end=index;break;}
+  }
+  return n.slice(start,end).trim();
+}
 /** Each new field must cite the current message; history cannot authorize a new mutation. */
 export function parseInterpretation(raw:unknown,current:string):Interpretation {
   if(!record(raw)||Object.keys(raw).some((k)=>!['intent','fields'].includes(k))||!record(raw.fields))throw new TrackingError(502,'invalid_taxi_intent','No se pudo interpretar la solicitud con seguridad.');
@@ -50,28 +65,31 @@ export function parseInterpretation(raw:unknown,current:string):Interpretation {
   for(const [key,v] of Object.entries(raw.fields)) {
     if((key!=='name'&&key!=='origin'&&key!=='destination'&&key!=='pickupReference')||!record(v)||Object.keys(v).some((k)=>!['value','evidence'].includes(k))||typeof v.value!=='string'||typeof v.evidence!=='string')throw new TrackingError(502,'invalid_taxi_field','Campo no válido.');
     const value=v.value.trim(),evidence=v.evidence.trim();
-    if(value.length<2||value.length>(key==='name'?80:400)||evidence.length<value.length||evidence.length>3000||!current.includes(evidence)||!normalize(evidence).includes(normalize(value))||/[<>]/.test(value)||[...value].some((c)=>c.charCodeAt(0)<32))throw new TrackingError(502,'unproven_taxi_field','El dato no coincide con el mensaje actual.');
+    const chosen=normalize(value),escaped=chosen.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+    const literal=new RegExp('(?<![\\p{L}\\p{N}_])'+escaped+'(?![\\p{L}\\p{N}_])','u');
+    if(value.length<2||value.length>(key==='name'?80:400)||evidence.length<value.length||evidence.length>3000||!current.includes(evidence)||!literal.test(normalize(evidence))||/[<>]/.test(value)||[...value].some((c)=>c.charCodeAt(0)<32))throw new TrackingError(502,'unproven_taxi_field','El dato no coincide con el mensaje actual.');
     const start=current.indexOf(evidence),before=current.slice(0,start),after=current.slice(start+evidence.length);
     // The evidence cannot crop a negation or a later correction out of its clause.
     const clauseStart=Math.max(before.lastIndexOf('.'),before.lastIndexOf('\n'),before.lastIndexOf(';'))+1;
     const tail=after.search(/[.\n;]/);const clause=current.slice(clauseStart,tail<0?current.length:start+evidence.length+tail);
-    const n=normalize(clause),chosen=normalize(value);
+    const n=fieldClause(clause,chosen),whole=normalize(clause);
     const corrections=[...n.matchAll(/\b(?:sino|mejor|mas bien|quise decir|perdon)\b[,: ]*/g)];
     const marker=corrections[corrections.length-1];
     const correction=marker?n.slice((marker.index??0)+marker[0].length):null;
     const quoteQuestion=intent==='quote'&&/\b(?:cuanto (?:cuesta|sale|cobra|cobran)|que (?:precio|tarifa)|cual es (?:el precio|la tarifa))\b/.test(n);
     const serviceQuestion=intent==='provide'&&key!=='name'&&serviceRequestQuestion(clause);
-    const escaped=chosen.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
     const negated=new RegExp('\\bno\\s+(?:(?:en|a|al|de|desde|para|hacia|el|la|es|era|estoy|voy)\\s+)*'+escaped+'(?:\\b|$)').test(n);
+    // Keep an explicit negative qualifier in a visual note, never a cropped positive claim from it.
+    const referenceContrast=key==='pickupReference'&&/\bno\b/.test(chosen)&&!/^no\b/.test(chosen);
     // A cropped citation from an earlier bubble cannot defeat a later correction.
     // Explicit corrections of the other endpoint do not invalidate this endpoint.
-    const all=current.split('\n').map(normalize).join('\n'),chosenAt=all.lastIndexOf(chosen),later=all.slice(chosenAt+chosen.length);
-    const laterCorrection=[...later.matchAll(/(?:^|[.\n;])\s*(?:no[, ]+)?(?:mejor|mas bien|quise decir|perdon|sino)\b[^.;\n]*/g)].some((m)=>{
-      const other=key==='origin'?'destino|voy a|vamos a':key==='destination'?'origen|recogida|recogeme':'origen|destino|recogida';
+    const all=current.split('\n').map(normalize).join('\n'),chosenAt=[...all.matchAll(new RegExp(literal.source,'gu'))].at(-1)?.index??-1,later=all.slice(chosenAt+chosen.length);
+    const laterCorrection=[...later.matchAll(/(?:^|[.,\n;])\s*(?:no[, ]+)?(?:mejor|mas bien|quise decir|perdon|sino|ahora)\b[^,.;\n]*/g)].some((m)=>{
+      const other=key==='origin'?'destino|voy a|vamos a|lleva(?:me|nos) (?:a|al)|me dirijo (?:a|al)':key==='destination'?'origen|recogida|recogeme|estoy en|te espero en':'origen|destino|recogida';
       return key==='name'?/\b(?:nombre|me llamo|soy)\b/.test(m[0]):!new RegExp('\\b(?:'+other+')\\b').test(m[0]);
     });
     const alternative=key!=='name'&&/\s(?:o|u)\s/.test(n);
-    if(negated||alternative||laterCorrection||(/[?¿]/.test(clause)&&!quoteQuestion&&!serviceQuestion)||/\b(?:si pudiera|tal vez|quizas|a lo mejor|podria|si voy|no se si)\b/.test(n)||(/\bno\b/.test(n)&&(correction===null||!correction.includes(chosen)))||(correction!==null&&!correction.includes(chosen))||/\b(?:dijo|dice|ejemplo|supongamos)\b/.test(n))throw new TrackingError(502,'ambiguous_taxi_field','Hace falta aclarar el dato antes de cambiarlo.');
+    if((negated&&!referenceContrast)||alternative||laterCorrection||(/[?¿]/.test(n)&&!quoteQuestion&&!serviceQuestion)||/\b(?:si pudiera|tal vez|quizas|a lo mejor|podria|si voy|no se si)\b/.test(whole)||(!referenceContrast&&/\bno\b/.test(n)&&(correction===null||!correction.includes(chosen)))||(correction!==null&&!correction.includes(chosen))||/\b(?:dijo|dice|ejemplo|supongamos)\b/.test(whole))throw new TrackingError(502,'ambiguous_taxi_field','Hace falta aclarar el dato antes de cambiarlo.');
     if(key==='name'&&/\b(?:taxi|mandalo|confirmo|hola|si|no|origen|destino)\b/.test(chosen))throw new TrackingError(502,'invalid_taxi_name','Falta el nombre del pasajero.');
     fields[key]={value,evidence};
   }
