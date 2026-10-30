@@ -29,7 +29,7 @@ export class TaxiEngine {
     return {tenantId:String(c.tenant_id),waba:String(c.waba),enabled:c.enabled,name:String(c.name),city:String(c.city),centerLat:c.center_lat,centerLng:c.center_lng,radiusKm:radius,dispatcher:c.dispatcher===null?null:String(c.dispatcher),model:String(c.model),baseCents:base,perKmCents:perKm,pricingMode};
   }
   private async permitted(c:TaxiChannel):Promise<void>{
-    if(!c.enabled||!c.dispatcher)throw new TrackingError(503,'taxi_channel_disabled','El canal de taxis todavía no está activado con una base de atención.');
+    if(!c.enabled)throw new TrackingError(503,'taxi_channel_disabled','El canal de taxis todavía no está activado.');
     if(!this.config.ycloudKey||this.config.workerSecret.length<32)throw new TrackingError(503,'taxi_transport_not_configured','Falta completar el transporte privado del bot de taxis.');
     const rows=await this.store.read('empresas',new URLSearchParams({select:'id,activo,tipo_negocio,paquete:paquetes(activo,incluye_whatsapp)',id:'eq.'+c.tenantId,limit:'1'}));
     const e=rows[0],p=record(e)?e.paquete:null;

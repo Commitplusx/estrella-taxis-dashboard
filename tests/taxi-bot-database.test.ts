@@ -1088,6 +1088,50 @@ test('taxi SQL: service-only functions and live conversation limits remain enfor
   }finally{await f.db.close();}
 });
 
+test('taxi reset ingress: without an alert phone, signed webhook → SQL queue → worker → trace → native location reply → provider ACK, once',async()=>{
+ const f=await fixture();try{
+  await f.prepare();await f.db.query('UPDATE taxi_bot_channels SET dispatcher=NULL,base_cents=5500 WHERE tenant_id=$1',[tenant]);
+  const rpcArgs:Record<string,string[]>={taxi_bot_enqueue:['p_tenant','p_waba','p_message','p_hash','p_payload'],taxi_bot_begin:['p_event'],taxi_bot_commit:['p_event','p_lease','p_revision','p_decision'],taxi_bot_trace_start:['p_event','p_lease','p_revision','p_meta'],taxi_bot_trace_fail:['p_event','p_lease','p_code','p_packet'],taxi_bot_outbox_permitted:['p_id','p_lease'],taxi_bot_outbox_complete:['p_id','p_lease','p_state','p_provider','p_error'],taxi_bot_maintain:[]};
+  const store:TrackingStore={writePackages:denyAdminWrite,writeCompanyPackage:denyAdminWrite,writeCompanyStatus:denyAdminWrite,writeScores:denyAdminWrite,
+   read:async(table,q)=>{
+    if(table==='taxi_bot_channels')return(await f.db.query<Record<string,unknown>>('SELECT * FROM taxi_bot_channels WHERE waba=$1',[q.get('waba')?.slice(3)])).rows;
+    if(table==='empresas')return[{id:tenant,activo:true,tipo_negocio:'taxi',paquete:{activo:true,incluye_whatsapp:true}}];
+    if(table==='taxi_bot_outbox')return(await f.db.query<Record<string,unknown>>("SELECT tenant_id,waba FROM taxi_bot_outbox WHERE state IN('pending','sending')ORDER BY created_at LIMIT 100")).rows;
+    throw Error('Undeclared reset fixture read '+table);
+   },
+   rpc:async(name,args)=>{
+    if(name==='taxi_bot_pending')return(await f.db.query<Record<string,unknown>>('SELECT * FROM taxi_bot_pending()')).rows;
+    if(name==='taxi_bot_outbox_claim')return(await f.db.query<Record<string,unknown>>('SELECT * FROM taxi_bot_outbox_claim($1,$2)',[args.p_tenant,args.p_waba])).rows;
+    const keys=rpcArgs[name];if(!keys)throw Error('Undeclared reset fixture RPC '+name);
+    return f.scalar('SELECT '+name+'('+keys.map((_,i)=>'$'+(i+1)).join(',')+')',keys.map(key=>args[key]));
+   }
+  };
+  const never=async():Promise<never>=>{throw Error('A reset cannot invoke the interpreter, geocoder, quotes or fleet.');};
+  let providerCalls=0;
+  const transport:Fetcher=async(url,init)=>{
+   assert.equal(String(url),'https://api.ycloud.com/v2/whatsapp/messages');assert.equal(init?.method,'POST');providerCalls++;
+   const body:unknown=JSON.parse(String(init?.body));assert.ok(record(body));assert.equal(body.from,waba);assert.equal(body.to,customer);
+   assert.ok(record(body.interactive));assert.equal(body.interactive.type,'location_request_message');assert.deepEqual(body.interactive.action,{name:'send_location'});
+   return Response.json({id:'fixture-reset-provider'});
+  };
+  const secret='fixture-webhook-secret-not-real',workerSecret='fixture-worker-secret-at-least-32-characters';
+  const engine=new TaxiEngine(store,{interpret:never,resolve:never,quote:never,candidates:never},{webhookSecret:secret,workerSecret,ycloudKey:'fixture-key',now:()=>Date.now()},transport);
+  const raw=JSON.stringify({type:'whatsapp.inbound_message',createTime:new Date().toISOString(),whatsappInboundMessage:{id:crypto.randomUUID(),from:customer,to:waba,type:'text',text:{body:'/reset'}}});
+  const timestamp=String(Math.floor(Date.now()/1000)),key=await crypto.subtle.importKey('raw',new TextEncoder().encode(secret),{name:'HMAC',hash:'SHA-256'},false,['sign']);
+  const digest=[...new Uint8Array(await crypto.subtle.sign('HMAC',key,new TextEncoder().encode(timestamp+'.'+raw)))].map(byte=>byte.toString(16).padStart(2,'0')).join(''),signature='t='+timestamp+',s='+digest;
+  const response=await engine.inbound(raw,signature);assert.equal(response?.status,200);assert.equal(f.obj(await response?.json()).queued,true);
+  await new Promise<void>(resolve=>setTimeout(resolve,1700));
+  const tick=await engine.worker({action:'taxi_tick'},workerSecret);assert.equal(tick?.status,200);assert.deepEqual(await tick?.json(),{processed:1,deferred:0,failed:0});
+  assert.equal(providerCalls,1);assert.equal(await f.scalar("SELECT count(*)::int FROM taxi_bot_turn_traces WHERE action='reset'AND state='committed'"),1);
+  assert.equal(await f.scalar("SELECT count(*)::int FROM taxi_bot_outbox WHERE state='accepted'AND provider_id='fixture-reset-provider'"),1);
+  assert.equal(await f.scalar("SELECT draft->>'name'FROM taxi_bot_sessions WHERE customer=$1",[customer]),null);
+  assert.equal(await f.scalar('SELECT last_reset_at IS NOT NULL FROM taxi_bot_sessions WHERE customer=$1',[customer]),true);
+  const duplicate=await engine.inbound(raw,signature);assert.equal(f.obj(await duplicate?.json()).duplicate,true);await engine.tick();assert.equal(providerCalls,1);
+  await assert.rejects(engine.inbound(raw+' ',signature),/Firma de proveedor no válida/);
+  assert.equal(await f.scalar('SELECT count(*)::int FROM viajes'),0);assert.equal(await f.scalar('SELECT count(*)::int FROM taxi_bot_offers'),0);
+ }finally{await f.db.close();}
+});
+
 test('taxi end-to-end: signed webhook → durable queue → real tool decoder → summary → one trip → provider ACK → driver acceptance',async()=>{
   const f=await fixture();try{
     await f.seedH3();
@@ -1126,7 +1170,7 @@ test('taxi end-to-end: signed webhook → durable queue → real tool decoder �
       await f.db.exec("UPDATE taxi_bot_events SET received_at=clock_timestamp()-interval '2 seconds'WHERE state='pending'");return{raw,hash,timestamp,id};
     }
     const initial=await inbound(current);await engine.tick();assert.equal(modelCalls,1);assert.equal(await f.scalar('SELECT count(*)::int FROM viajes'),0);
-    assert.equal(await f.scalar("SELECT meta->>'engineVersion'FROM taxi_bot_turn_traces LIMIT 1"),'taxi-bot-v9-reset-minimum');
+    assert.equal(await f.scalar("SELECT meta->>'engineVersion'FROM taxi_bot_turn_traces LIMIT 1"),'taxi-bot-v9.1-panel-attention');
     assert.equal(await f.scalar("SELECT meta->>'promptHash'FROM taxi_bot_turn_traces LIMIT 1"),await fingerprint(TAXI_INTERPRETER_CONTRACT));
     let summary=f.obj(await f.scalar('SELECT draft FROM taxi_bot_sessions WHERE customer=$1',[customer]));assert.equal(summary.confirmation,null);assert.equal(summary.pickupText,'Centro');
     await inbound('',customer,crypto.randomUUID(),null,{latitude:16.25,longitude:-92.13});await engine.tick();summary=f.obj(await f.scalar('SELECT draft FROM taxi_bot_sessions WHERE customer=$1',[customer]));assert.ok(summary.confirmation);assert.equal(summary.quoteCents,4500);assert.equal(modelCalls,1);

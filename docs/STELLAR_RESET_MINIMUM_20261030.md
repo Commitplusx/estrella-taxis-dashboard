@@ -1,6 +1,18 @@
 # Reinicio de conversación y mínimo de Pompeyo — 30 de octubre de 2026
 
-Estado comprobado: motor `taxi-bot-v9-reset-minimum` publicado en Stellar Tracking, proyecto `izrsxygazsalfhpaualj`. Sustituye la versión v8 descrita en `STELLAR_LANGUAGE_HARDENING_20261030.md`; conserva su interpretación natural y todas las condiciones de GPS y botón vigente.
+Estado actual comprobado: motor `taxi-bot-v9.1-panel-attention` publicado en Stellar Tracking, proyecto `izrsxygazsalfhpaualj`. Sustituye v9 y la versión v8 descrita en `STELLAR_LANGUAGE_HARDENING_20261030.md`; conserva su interpretación natural y todas las condiciones de GPS y botón vigente.
+
+## Corrección de recepción v9.1
+
+La prueba real posterior a v9 detectó que un `/reset` nuevo no llegó a la cola. `TaxiEngine.permitted` todavía exigía el teléfono de avisos humanos tanto al recibir mensajes como al procesarlos o enviar respuestas. Con ese teléfono vacío, devolvía `taxi_channel_disabled` antes del guardado, aunque el canal estuviera habilitado. Las pruebas anteriores de administración y SQL no recorrían esta comprobación del motor; OPTIONS 200 y coincidencia de fuentes tampoco acreditaban la recepción funcional.
+
+La validación ahora exige el canal habilitado, transporte privado configurado y plan de WhatsApp activo; el teléfono adicional sigue siendo opcional. No se alteraron números de conductores, tarifas, autorizados ni tablas. Se conservaron las reproducciones fallidas antes de editar.
+
+Una regresión integrada nueva recorre el webhook firmado → cola PostgreSQL → consumidor real → traza y reinicio → salida persistente → solicitud nativa de ubicación → aceptación simulada del proveedor, con teléfono de avisos nulo. Comprueba además reentrega sin duplicar mensajes, rechazo de firma alterada y ausencia de viajes/ofertas. La matriz del motor comprueba el permiso del plan tanto con teléfono adicional como sin él.
+
+La ejecución completa aprobó **5,826 pruebas Deno y 121 Node**, control estático y tipos. Se publicaron y descargaron `ycloud-webhook` **22**, `process-queue` **22** y `taxi-bot-admin` **28**: sus archivos ejecutables coinciden con el paquete revisado. El consumidor está en línea. Sólo cambian `engine.ts` y la versión de `contracts.ts`; no hay otra migración. Los respaldos y manifiestos de esta corrección están en `.codex-tmp/taxi-ingress-20261030/`; las reproducciones están en `.codex-tmp/taxi-reset-20261030/runtime-*-before.log`.
+
+El mensaje rechazado antes de guardarse no se fabrica ni se inserta manualmente. Se solicitó una nueva prueba del pasajero; la aceptación del proveedor o la entrega real se informan únicamente cuando existan sus eventos.
 
 ## Conversación
 
@@ -27,7 +39,7 @@ El teléfono adicional de avisos humanos es opcional: la sesión, mensajes y tra
 
 La publicación inicial se detuvo sin cambios parciales: una regla antigua exigía ese teléfono para habilitar el canal y otra impedía usar el propio número del bot. La nueva migración retira únicamente la exigencia obsoleta de teléfono adicional; mantiene la validación de número distinto, los permisos del plan, transporte, conductores, cobertura y aislamiento por base. Para Pompeyo elimina la referencia inválida al mismo remitente y mantiene activo el canal. No asigna un número personal inventado.
 
-## Verificación y publicación
+## Verificación y publicación inicial v9
 
 - 5,824 pruebas Deno y 120 pruebas Node, incluidas transacciones SQL y contratos, aprobadas con tipos. También aprobaron el control estático de 91 archivos, los puntos de entrada y el tipado estricto del panel y pruebas.
 - Las regresiones nuevas reproducen el conflicto con el canal **habilitado**, comprueban atención humana persistida sin teléfono adicional y ofertas destinadas al conductor. Se conservaron los fallos previos a la corrección.

@@ -434,9 +434,9 @@ Deno.test("taxi admin: WhatsApp activation needs its own plan feature, not voice
   );
   equal(denied.counts().writes, 0);
 });
-for (const whatsapp of [true, false]) {
+for (const dispatcher of [null, '+529630000099']) for (const whatsapp of [true, false]) {
   Deno.test(
-    "taxi engine: channel plan checks WhatsApp " + whatsapp +
+    "taxi engine: channel plan checks WhatsApp " + whatsapp + ' with alert phone ' + (dispatcher ? 'configured' : 'absent') +
       " independently from voice",
     async () => {
       const f = fixture({ whatsapp, voice: !whatsapp });
@@ -448,7 +448,7 @@ for (const whatsapp of [true, false]) {
             ? [{
               ...channel,
               enabled: true,
-              dispatcher: "+529630000099",
+              dispatcher,
               model: "fixture",
             }]
             : f.store.read(table, q),
