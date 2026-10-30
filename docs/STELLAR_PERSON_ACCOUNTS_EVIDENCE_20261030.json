@@ -1,0 +1,49 @@
+{
+  "date": "2026-10-30",
+  "project": "izrsxygazsalfhpaualj",
+  "commit": "066fb99",
+  "migration": {
+    "version": "20261030151720",
+    "name": "taxi_person_accounts"
+  },
+  "function": {
+    "slug": "taxi-bot-admin",
+    "version": 18,
+    "status": "ACTIVE"
+  },
+  "web": {
+    "asset": "/assets/index-KckVZQm2.js",
+    "sha256": "3aea8371434a850520cf384860957fbf87d60a208aa056da8db6a3b2daa9a513",
+    "matched": true,
+    "authenticatedDirectoryVerified": true,
+    "authenticatedModalVerified": true,
+    "existingNonAdminAccountsVisible": 3
+  },
+  "sqlBodiesMatched": 8,
+  "runtimeFilesMatched": 20,
+  "counts": {
+    "units": 19,
+    "contacts": 33,
+    "profiles": 0,
+    "authorized": 0,
+    "driversActive": 1,
+    "accountsLinked": 0,
+    "accountOperations": 0
+  },
+  "channelEnabled": true,
+  "privateAccountOperations": true,
+  "tests": {
+    "sqlIntegration": 71,
+    "accountSqlFinal": 4,
+    "handlers": 56,
+    "session": 4,
+    "strictTypes": true,
+    "build": true,
+    "qualitySources": 75
+  },
+  "limitations": [
+    "No real account created or linked during verification",
+    "No physical owner login or WhatsApp trip tested"
+  ],
+  "authorizedCustomersKeptEmpty": true
+}
