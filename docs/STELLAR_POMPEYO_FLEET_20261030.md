@@ -6,7 +6,7 @@ Destino: proyecto independiente `izrsxygazsalfhpaualj`, web `https://stellar.est
 
 El canal de Pompeyo terminado en 2491 está habilitado, revisión 5. Se corrigió el prefijo mexicano con el número exacto devuelto por YCloud, conectado y con calidad GREEN. El endpoint de YCloud está activo y apunta a `ycloud-webhook` del proyecto independiente. Los hashes de clave de proveedor y firma coinciden con la configuración que introdujo el propietario en Supabase. No se cambiaron esos secretos.
 
-La empresa y su plan están activos e incluyen WhatsApp. Se conserva el acceso cerrado: un cliente autorizado, terminado en 9156. Activar el canal no abre el bot a todos los contactos importados. No se enviaron mensajes, ofertas ni viajes de prueba durante esta entrega.
+La empresa y su plan están activos e incluyen WhatsApp. Se conserva el acceso cerrado. Durante el trabajo, el propietario vació Autorizados desde el panel (revisión 4) y **confirmó después “Mantén la lista vacía”**. Hay cero clientes autorizados: el canal está habilitado pero no atenderá clientes hasta agregarlos. Los contactos de flota no se convierten en clientes autorizados. El agente no envió mensajes, ofertas ni viajes de prueba; hubo tres eventos del propietario anteriores a vaciar la lista, sin viajes.
 
 Se registraron las **19 unidades reales de Traccar** en `taxi_base_units`, con pertenencia única por ID de dispositivo y FK de `conductores`. El vínculo con la base no exige inventar un WhatsApp. El IMEI no interviene en esta relación. No se copiaron los teléfonos de chips GPS a conductores. El vínculo histórico de un solo conductor Traccar con todas las unidades no se tomó como evidencia de quién conduce cada taxi.
 
@@ -29,6 +29,7 @@ El guardado usa la sesión real de Traccar, los permisos de base y RPC privada c
 - `20261030134513_taxi_base_fleet.sql`: historial remoto `20261030135107`.
 - `20261030135906_taxi_base_contacts.sql`: historial remoto `20261030141448`.
 - `taxi-bot-admin` v17 ACTIVE. Paquete cerrado de 21 archivos; 19 fuentes runtime descargadas coinciden, el bundler elimina una importación sólo de tipos. Cinco funciones SQL de contactos y tres de flota comprobadas contra fuentes revisadas.
+- Implementación `138610d` publicada en `main`. La web productiva sirve `/assets/index-D5jl9djs.js` y el módulo `/assets/TaxiBotAdminPage-reh1r8rU.js` coincide por SHA-256 con el build revisado. [Evidencia sin datos personales](STELLAR_POMPEYO_FLEET_EVIDENCE_20261030.json).
 - RLS y privilegios privados en las tablas nuevas; sin alertas WARN/ERROR del asesor de seguridad después del despliegue.
 - 67 pruebas SQL/integración, 28 pruebas del handler de conductores/contactos y 18 del administrador aprobadas. Tipado estricto del panel/pruebas/entrada y gate de 70 fuentes aprobados. Pruebas de UI con contactos sintéticos en escritorio y móvil, sin desbordamiento horizontal. No acreditan un guardado autenticado físico ni recepción de WhatsApp.
 - Respaldo local privado antes de cada mutación, IDs de solicitudes, inventario verificado, importación por huella y lecturas posteriores bajo `.codex-tmp/`, excluido de Git.

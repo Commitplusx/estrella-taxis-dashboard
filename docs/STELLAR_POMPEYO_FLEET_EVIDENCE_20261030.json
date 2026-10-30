@@ -1,0 +1,70 @@
+{
+  "adminRuntimeSourcesCompared": 19,
+  "sqlSourcesCompared": 8,
+  "adminVersion": 17,
+  "worker": {
+    "restarts": 0,
+    "status": "online",
+    "release": "/opt/stellar-taxi-bot/releases/20261030-pompeyo",
+    "privateFileMode": "0600",
+    "startupSaved": true,
+    "name": "stellar-taxi-bot"
+  },
+  "securityWarnErrorCount": 0,
+  "state": {
+    "trips": 0,
+    "zones": 2541,
+    "events": 3,
+    "mexico": true,
+    "contacts": 33,
+    "zoneHash": "f9f657b160095b3f3a12446033da083d",
+    "contactRls": true,
+    "pendingRoles": 32,
+    "activeDrivers": 1,
+    "channelEnabled": true,
+    "linkedGpsUnits": 19,
+    "incompletePhones": 1,
+    "anonContactAccess": false,
+    "authorizedClients": 0,
+    "authenticatedContactAccess": false
+  },
+  "date": "2026-10-30",
+  "implementationCommit": "138610d",
+  "authenticatedBrowserSaveTest": false,
+  "fleetMigration": {
+    "version": "20261030135107",
+    "name": "taxi_base_fleet"
+  },
+  "readinessProbe": {
+    "code": "invalid_taxi_message",
+    "validated": "signature, enabled channel, provider configuration and plan; expected rejection before message enqueue",
+    "http": 400
+  },
+  "physicalTripTest": false,
+  "physicalWhatsappTest": false,
+  "sourceWorkbookSha256": "d5c7b5c048af0752fc55908f607daeae45f1e5dce4ebd08e031f1093b7c3bb33",
+  "adminStatus": "ACTIVE",
+  "channelEnabled": true,
+  "privateDataExcludedFromRepository": true,
+  "tests": {
+    "driverContactHandler": 28,
+    "sql": 67,
+    "strictTypes": true,
+    "qualityGateFiles": 70,
+    "build": true,
+    "administrativeHandler": 18
+  },
+  "contactsMigration": {
+    "version": "20261030141448",
+    "name": "taxi_base_contacts"
+  },
+  "projectId": "izrsxygazsalfhpaualj",
+  "web": {
+    "matched": true,
+    "hash": "c10f796bca91e5d3710044ade5b42bca83b405f9173f0ce867be8fac3cab8acd",
+    "chunk": "/assets/TaxiBotAdminPage-reh1r8rU.js",
+    "main": "/assets/index-D5jl9djs.js"
+  },
+  "ownerConfirmedEmptyAllowlist": true,
+  "customerAccessRevision": 4
+}
