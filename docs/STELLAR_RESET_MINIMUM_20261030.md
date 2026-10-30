@@ -12,7 +12,7 @@ Una regresión integrada nueva recorre el webhook firmado → cola PostgreSQL �
 
 La ejecución completa aprobó **5,826 pruebas Deno y 121 Node**, control estático y tipos. Se publicaron y descargaron `ycloud-webhook` **22**, `process-queue` **22** y `taxi-bot-admin` **28**: sus archivos ejecutables coinciden con el paquete revisado. El consumidor está en línea. Sólo cambian `engine.ts` y la versión de `contracts.ts`; no hay otra migración. Los respaldos y manifiestos de esta corrección están en `.codex-tmp/taxi-ingress-20261030/`; las reproducciones están en `.codex-tmp/taxi-reset-20261030/runtime-*-before.log`.
 
-El mensaje rechazado antes de guardarse no se fabrica ni se inserta manualmente. Se solicitó una nueva prueba del pasajero; la aceptación del proveedor o la entrega real se informan únicamente cuando existan sus eventos.
+El mensaje rechazado antes de guardarse no se fabricó ni se insertó manualmente. Tras publicar v9.1 llegaron dos `/reset` nuevos a las 16:48, hora de Ciudad de México: ambos terminaron como `completed / conversation_reset`, con traza v9.1, reinicio duradero y respuesta marcada `read` por los eventos verificados del proveedor. Esto acredita recepción, reinicio y lectura de esas respuestas reales; todavía no acredita una reserva y aceptación física de un conductor.
 
 ## Conversación
 
