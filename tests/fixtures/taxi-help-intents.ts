@@ -1,6 +1,7 @@
 import type{TaxiContextCase}from'./taxi-contextual-intents.ts';
 /** Frozen synthetic development cases before running the new model contract. They do not measure blind accuracy. */
 export const TAXI_HELP_CASES:readonly TaxiContextCase[]=[
+ {id:'direct-taxi-request',context:'origin',message:'Buenas tardes, me puede enviar un taxi',expected:{intent:'request',fields:{}}},
  {id:'why-location',context:'origin',message:'¿Por qué me pides mi ubicación?',expected:{intent:'question',fields:{}}},
  {id:'how-location',context:'origin',message:'Oye y cómo te mando la ubicación?',expected:{intent:'question',fields:{}}},
  {id:'written-instead-gps',context:'origin',message:'¿No basta con darte mi dirección escrita?',expected:{intent:'question',fields:{}}},

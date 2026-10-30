@@ -44,8 +44,10 @@ const gpsBookingSql=readFileSync(new URL('../estrella-taxis-backend/supabase/mig
 const privateReferenceQuoteSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261031173000_taxi_reference_quote_private_reads.sql',import.meta.url),'utf8');
 const resetMinimumSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261031180000_taxi_conversation_reset_minimum.sql',import.meta.url),'utf8');
 const destinationDialogueSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261031190000_taxi_destination_dialogue.sql',import.meta.url),'utf8');
+const messageBatchingSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261031200000_taxi_15s_message_batching.sql',import.meta.url),'utf8');
 const tenant='11111111-1111-4111-8111-111111111111',other='22222222-2222-4222-8222-222222222222',waba='+529630000001',customer='+529630000002',driverPhone='+529630000003';
 const pompeyo='4cf9acf1-f07e-4a01-9396-eb5bde3e7411';
+function unknownArray(value:unknown):value is unknown[]{return Array.isArray(value);}
 
 test('minimum fare SQL: pickup, GPS route and written locality respect the configured base minimum without rewriting source tariffs',async()=>{
  const f=await fixture();try{
@@ -63,6 +65,31 @@ test('minimum fare SQL: pickup, GPS route and written locality respect the confi
   await f.scalar('SELECT taxi_bot_validate_quote($1,$2,$3)',[tenant,waba,{...draft,quoteCents:5500}]);
   assert.equal(await f.scalar('SELECT price_cents FROM taxi_bot_base_zones WHERE tenant_id=$1 AND h3_index=$2',[tenant,scope.originCell]),4500);
   assert.equal(await f.scalar('SELECT fare_cents FROM taxi_bot_localities WHERE tenant_id=$1',[tenant]),4900);
+ }finally{await f.db.close();}
+});
+test('15-second debounce SQL: text and GPS from a burst stay together until the conversation is quiet',async()=>{
+ const f=await fixture();try{
+  await f.prepare();
+  const batch=[
+   await f.enqueue('Buenas tardes',customer,crypto.randomUUID(),null,null,0),
+   await f.enqueue('Me puede enviar un taxi',customer,crypto.randomUUID(),null,null,0),
+   await f.enqueue('',customer,crypto.randomUUID(),null,{lat:16.25,lng:-92.13},0),
+   await f.enqueue('A esta dirección',customer,crypto.randomUUID(),null,null,0),
+   await f.enqueue('',customer,crypto.randomUUID(),null,{lat:16.26,lng:-92.14},0),
+   await f.enqueue('Y voy para esta',customer,crypto.randomUUID(),null,null,0),
+  ];
+  assert.equal(f.obj(await f.begin(batch[0].eventId)).state,'debounce');
+  assert.equal(await f.scalar('SELECT count(*)::int FROM taxi_bot_pending()'),0);
+  for(const event of batch.slice(0,-1))await f.db.query("UPDATE taxi_bot_events SET received_at=clock_timestamp()-interval '16 seconds'WHERE id=$1",[event.eventId]);
+  assert.equal(f.obj(await f.begin(batch[0].eventId)).state,'debounce','a later text or location restarts the quiet window');
+  assert.equal(await f.scalar('SELECT count(*)::int FROM taxi_bot_pending()'),0,'old events from an active burst are not polled repeatedly');
+  for(const event of batch.slice(-1))await f.db.query("UPDATE taxi_bot_events SET received_at=clock_timestamp()-interval '16 seconds'WHERE id=$1",[event.eventId]);
+  assert.equal(await f.scalar('SELECT count(*)::int FROM taxi_bot_pending()'),batch.length);
+  const claim=f.obj(await f.begin(batch[0].eventId));assert.equal(claim.state,'proceed');
+  if(!unknownArray(claim.messages))throw new TypeError('The SQL batch must contain a validated array of inbound messages.');
+  const messages=claim.messages;assert.equal(messages.length,batch.length);
+  assert.deepEqual(messages.map((message)=>f.obj(message).text),['Buenas tardes','Me puede enviar un taxi','','A esta dirección','','Y voy para esta']);
+  assert.equal(await f.scalar('SELECT count(*)::int FROM viajes'),0);assert.equal(await f.scalar('SELECT count(*)::int FROM taxi_bot_offers'),0);
  }finally{await f.db.close();}
 });
 test('Pompeyo minimum migration: only its reviewed channel receives 55 pesos and a new revision',async()=>{
@@ -117,9 +144,13 @@ test('conversation reset SQL: clears context, rejects old GPS and button, supers
   const freshId=crypto.randomUUID(),fresh=await f.enqueue('',customer,freshId,null,{lat:f.draft.origin.lat,lng:f.draft.origin.lng});
   // Ordinary fixtures backdate receive times to bypass debounce. A fresh pin must stay after the reset boundary.
   await f.db.query('UPDATE taxi_bot_events SET received_at=clock_timestamp()WHERE id=$1',[fresh.eventId]);
-  await new Promise<void>(resolve=>setTimeout(resolve,1700));
+  await f.db.query("UPDATE taxi_bot_events SET received_at=clock_timestamp()-interval '16 seconds'WHERE state='pending'");
   const freshClaim=await f.begin(fresh.eventId);
-  const freshDraft={...f.draft,pickupMessageId:freshId,confirmation:crypto.randomUUID()};
+  const freshDraft={...emptyDraft(),origin:f.draft.origin,pickupMessageId:freshId,awaitingLocation:'destination' as const};
+  assert.equal(freshClaim.eventId,fresh.eventId);
+  assert.equal(await f.scalar("SELECT message->>'id'FROM taxi_bot_events WHERE id=$1",[fresh.eventId]),freshId);
+  assert.equal(await f.scalar("SELECT message->>'type'FROM taxi_bot_events WHERE id=$1",[fresh.eventId]),'location');
+  assert.equal(await f.scalar("SELECT state FROM taxi_bot_events WHERE id=$1",[fresh.eventId]),'processing');
   await f.commit(fresh.eventId,freshClaim,{...f.decision('draft'),draft:freshDraft});assert.equal(await f.scalar("SELECT draft->>'pickupMessageId'FROM taxi_bot_sessions WHERE customer=$1",[customer]),freshId);
  }finally{await f.db.close();}
 });
@@ -475,16 +506,17 @@ async function fixture(options:{legacy?:boolean;seedCoverageBeforeMigration?:boo
     await db.exec(privateReferenceQuoteSql);
     await db.exec(resetMinimumSql);
     await db.exec(destinationDialogueSql);
+    await db.exec(messageBatchingSql);
   }
   // These legacy protocol fixtures explicitly act as customers too. Driver-only access has separate tests below.
   await db.query('INSERT INTO taxi_bot_allowed_customers(tenant_id,phone)VALUES($1,$2),($1,$3),($1,$4)',[tenant,customer,driverPhone,'+529630000004']);
   await db.query("INSERT INTO conductores(tenant_id,device_id,telefono_whatsapp,nombre)VALUES($1,1,$2,'Unidad 1'),($1,2,'+529630000004','Unidad 2'),($3,3,'+529630000005','Ajena')",[tenant,driverPhone,other]);
   const scalar=async(query:string,args:unknown[]=[])=>Object.values((await db.query<Record<string,unknown>>(query,args)).rows[0])[0];
   const obj=(v:unknown):Record<string,unknown>=>{if(!record(v))throw new TypeError('Expected a JSON object from the SQL fixture.');return v;};
-  const enqueue=async(content='Un taxi',from=customer,id=crypto.randomUUID(),button:string|null=null,location:{lat:number;lng:number}|null=null)=>{
+  const enqueue=async(content='Un taxi',from=customer,id=crypto.randomUUID(),button:string|null=null,location:{lat:number;lng:number}|null=null,ageSeconds=16)=>{
     const message={id,from,to:waba,at:new Date().toISOString(),type:button?'button':location?'location':'text',text:content,button,location};
     const result=obj(await scalar('SELECT taxi_bot_enqueue($1,$2,$3,$4,$5)',[tenant,waba,message,'a'.repeat(64),{type:'whatsapp.inbound_message',whatsappInboundMessage:{id,from,to:waba}}]));
-    await db.query("UPDATE taxi_bot_events SET received_at=clock_timestamp()-interval '2 seconds'WHERE id=$1",[result.eventId]);return result;
+    await db.query("UPDATE taxi_bot_events SET received_at=clock_timestamp()-($2::int*interval '1 second')WHERE id=$1",[result.eventId,ageSeconds]);return result;
   };
   const begin=async(id:unknown)=>{const c=obj(await scalar('SELECT taxi_bot_begin($1)',[id]));if(c.state==='proceed'){const session=parseSession(c.session);await scalar('SELECT taxi_bot_trace_start($1,$2,$3,$4)',[c.eventId,c.lease,session.revision,{version:'taxi-trace-v1',engineVersion:'fixture',model:'fixture-model',promptHash:'a'.repeat(64),phaseBefore:conversationPhase(session,Date.now())}]);}return c;};
   const draft={...emptyDraft(),fareMode:'quoted' as const,quoteBasis:'route' as 'route'|'pickup',name:'Persona Prueba',origin:{text:'Centro',lat:16.25,lng:-92.13,placeId:null,source:'gps' as const},destination:{text:'Terminal',lat:16.26,lng:-92.14,placeId:null,source:'gps' as const},pickupMessageId:String(crypto.randomUUID()),quoteCents:6500,confirmation:crypto.randomUUID(),expiresAt:new Date(Date.now()+600000).toISOString()};
@@ -765,7 +797,7 @@ test('customer access: a driver-only phone can only answer its own valid offer b
   assert.equal(await f.scalar('SELECT taxi_bot_inbound_allowed($1,$2,$3)',[tenant,waba,message]),true);
   for(const changed of [{...message,from:'+529630000088'},{...message,type:'text',button:null},{...message,button:'txa_'+crypto.randomUUID()}])assert.equal(await f.scalar('SELECT taxi_bot_inbound_allowed($1,$2,$3)',[tenant,waba,changed]),false);
   const e=f.obj(await f.scalar('SELECT taxi_bot_enqueue($1,$2,$3,$4,$5)',[tenant,waba,message,'a'.repeat(64),{}]));
-  await f.db.query("UPDATE taxi_bot_events SET received_at=now()-interval '2 seconds'WHERE id=$1",[e.eventId]);const claim=await f.begin(e.eventId);
+  await f.db.query("UPDATE taxi_bot_events SET received_at=now()-interval '16 seconds'WHERE id=$1",[e.eventId]);const claim=await f.begin(e.eventId);
   await f.commit(e.eventId,claim,{...f.decision('driver_accept'),offerId:offer.id});assert.equal(await f.scalar('SELECT estado FROM viajes'),'en_camino');
  }finally{await f.db.close();}
 });
@@ -1153,7 +1185,7 @@ test('taxi reset ingress: without an alert phone, signed webhook → SQL queue �
   const timestamp=String(Math.floor(Date.now()/1000)),key=await crypto.subtle.importKey('raw',new TextEncoder().encode(secret),{name:'HMAC',hash:'SHA-256'},false,['sign']);
   const digest=[...new Uint8Array(await crypto.subtle.sign('HMAC',key,new TextEncoder().encode(timestamp+'.'+raw)))].map(byte=>byte.toString(16).padStart(2,'0')).join(''),signature='t='+timestamp+',s='+digest;
   const response=await engine.inbound(raw,signature);assert.equal(response?.status,200);assert.equal(f.obj(await response?.json()).queued,true);
-  await new Promise<void>(resolve=>setTimeout(resolve,1700));
+  await f.db.exec("UPDATE taxi_bot_events SET received_at=clock_timestamp()-interval '16 seconds'WHERE state='pending'");
   const tick=await engine.worker({action:'taxi_tick'},workerSecret);assert.equal(tick?.status,200);assert.deepEqual(await tick?.json(),{processed:1,deferred:0,failed:0});
   assert.equal(providerCalls,1);assert.equal(await f.scalar("SELECT count(*)::int FROM taxi_bot_turn_traces WHERE action='reset'AND state='committed'"),1);
   assert.equal(await f.scalar("SELECT count(*)::int FROM taxi_bot_outbox WHERE state='accepted'AND provider_id='fixture-reset-provider'"),1);
@@ -1200,10 +1232,10 @@ test('taxi end-to-end: signed webhook → durable queue → real tool decoder �
       const timestamp=String(Math.floor(Date.now()/1000)),key=await crypto.subtle.importKey('raw',new TextEncoder().encode(secret),{name:'HMAC',hash:'SHA-256'},false,['sign']);
       const hash=[...new Uint8Array(await crypto.subtle.sign('HMAC',key,new TextEncoder().encode(timestamp+'.'+raw)))].map((b)=>b.toString(16).padStart(2,'0')).join('');
       const result=await engine.inbound(raw,`t=${timestamp},s=${hash}`);assert.equal(result?.status,200);
-      await f.db.exec("UPDATE taxi_bot_events SET received_at=clock_timestamp()-interval '2 seconds'WHERE state='pending'");return{raw,hash,timestamp,id};
+      await f.db.exec("UPDATE taxi_bot_events SET received_at=clock_timestamp()-interval '16 seconds'WHERE state='pending'");return{raw,hash,timestamp,id};
     }
     const initial=await inbound(current);await engine.tick();assert.equal(modelCalls,1);assert.equal(await f.scalar('SELECT count(*)::int FROM viajes'),0);
-    assert.equal(await f.scalar("SELECT meta->>'engineVersion'FROM taxi_bot_turn_traces LIMIT 1"),'taxi-bot-v10-destination-dialogue');
+    assert.equal(await f.scalar("SELECT meta->>'engineVersion'FROM taxi_bot_turn_traces LIMIT 1"),'taxi-bot-v11-15s-message-batching');
     assert.equal(await f.scalar("SELECT meta->>'promptHash'FROM taxi_bot_turn_traces LIMIT 1"),await fingerprint(TAXI_INTERPRETER_CONTRACT));
     let summary=f.obj(await f.scalar('SELECT draft FROM taxi_bot_sessions WHERE customer=$1',[customer]));assert.equal(summary.confirmation,null);assert.equal(summary.pickupText,'Centro');
     await inbound('',customer,crypto.randomUUID(),null,{latitude:16.25,longitude:-92.13});await engine.tick();summary=f.obj(await f.scalar('SELECT draft FROM taxi_bot_sessions WHERE customer=$1',[customer]));assert.ok(summary.confirmation);assert.equal(summary.quoteCents,4500);assert.equal(modelCalls,1);

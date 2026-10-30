@@ -28,13 +28,36 @@ export function cancellationQuestion(s:string):boolean {
   return /\b(?:cancelar|cancela|cancelalo)\b/.test(normalize(s))&&(/[?¿]/.test(s)||/\b(?:puedes|podrias|se puede|quieres que)\b/.test(normalize(s)));
 }
 /** Role selection is deliberately anchored: an address or a conditional cannot choose a stored pin. */
+function locationRoleSignals(s:string):{origin:boolean;destination:boolean} {
+  const clauses=normalize(s).split(/[\n.!¡?;]+/).map((part)=>part.trim()).filter((part)=>Boolean(part)&&! /\b(?:si|o|u|manana|tal vez|quizas)\b/.test(part));
+  const origin=clauses.some((n)=>
+    /^(?:(?:es|ese es|este es|el pin es|la ubicacion es) (?:el |mi )?)?(?:origen|punto de recogida|recogida)$/.test(n)||
+    /^(?:ahi me recoges|aqui me recoges|es donde estoy|(?:ese|este) es donde me vas a recoger|es donde me recoges|aqui estoy|aca estoy|me esperas aqui|pasas por mi aqui)$/.test(n)||
+    /\b(?:recogeme|recogernos|pasas por mi|pasa por mi|me recoges|me recogen)\b[^\n]*\b(?:esta|esa|aqui|aca|ahi|alla)(?:\s+(?:direccion|ubicacion|punto))?\b/.test(n)||
+    /\b(?:mandame|envíame|enviame|mandas|envias)\s+(?:un\s+)?taxi\s+(?:a|al|en|hasta)\s+(?:esta|esa)(?:\s+(?:direccion|ubicacion))?\b/.test(n)
+  );
+  const destination=clauses.some((n)=>
+    /^(?:(?:es|ese es|este es|el pin es|la ubicacion es) (?:el |mi )?)?destino$/.test(n)||
+    /^(?:ahi voy|alla voy|es a donde voy|(?:ese|este) es el lugar al que voy|ahi quiero llegar)$/.test(n)||
+    /\b(?:voy|vamos|me dirijo)\s+(?:para|pa|a|hasta|hacia)\s+(?:esta|esa|este|ese|aqui|aca|ahi|alla)(?:\s+(?:direccion|ubicacion|lugar|punto))?\b/.test(n)||
+    /\b(?:mi destino|a donde voy)\s+(?:es|queda)\s+(?:esta|ese|esta direccion|esa direccion|aqui|ahi|alla)\b/.test(n)||
+    /\b(?:llevame|llevanos|me llevas|nos llevas)\s+(?:a|al|hasta)\s+(?:esta|esa|este|ese|aqui|aca|ahi|alla)(?:\s+(?:direccion|ubicacion|lugar|punto))?\b/.test(n)
+  );
+  return {origin,destination};
+}
+/** Exact role cues from nearby text may label a native WhatsApp location. */
 export function locationRole(s:string):'origin'|'destination'|null {
-  const n=normalize(s).replace(/[.!¡]+$/,'');
-  if(/^(?:(?:es|ese es|este es|el pin es|la ubicacion es) (?:el |mi )?)?(?:origen|punto de recogida|recogida)$/.test(n))return 'origin';
-  if(/^(?:(?:es|ese es|este es|el pin es|la ubicacion es) (?:el |mi )?)?destino$/.test(n))return 'destination';
-  if(/^(?:ahi me recoges|aqui me recoges|es donde estoy|(?:ese|este) es donde me vas a recoger|es donde me recoges)$/.test(n))return 'origin';
-  if(/^(?:ahi voy|alla voy|es a donde voy|(?:ese|este) es el lugar al que voy|ahi quiero llegar)$/.test(n))return 'destination';
-  return null;
+  const roles=locationRoleSignals(s);
+  if(roles.origin===roles.destination)return null;
+  return roles.origin?'origin':'destination';
+}
+export function locationRoleConflict(s:string):boolean {
+  const roles=locationRoleSignals(s);
+  return roles.origin&&roles.destination;
+}
+/** Deictic text points at a paired native pin; it is not a searchable street name. */
+export function refersToSharedLocation(s:string):boolean {
+  return /^(?:(?:a|en|para|hacia|hasta)\s+)?(?:esta|ese|esa|este|aqui|aca|ahi|alla)(?:\s+(?:direccion|ubicacion|lugar|punto))?[.!¡? ]*$/.test(normalize(s));
 }
 export function activeRideChange(s:string):boolean {
   return /\b(?:cambia|cambiar|mejor|otro destino|otra direccion|corrige|voy a|vamos a|lleva(?:me|nos) a|recoge(?:me|nos) en|recogida en|destino es)\b/.test(normalize(s));
@@ -69,7 +92,7 @@ function fieldClause(clause:string,chosen:string):string {
 export function parseInterpretation(raw:unknown,current:string):Interpretation {
   if(!record(raw)||Object.keys(raw).some((k)=>!['intent','fields'].includes(k))||!record(raw.fields))throw new TrackingError(502,'invalid_taxi_intent','No se pudo interpretar la solicitud con seguridad.');
   const intent=raw.intent;
-  if(intent!=='provide'&&intent!=='quote'&&intent!=='question'&&intent!=='confirm'&&intent!=='cancel'&&intent!=='status'&&intent!=='human'&&intent!=='smalltalk'&&intent!=='ambiguous')throw new TrackingError(502,'invalid_taxi_intent','Intención no válida.');
+  if(intent!=='request'&&intent!=='provide'&&intent!=='quote'&&intent!=='question'&&intent!=='confirm'&&intent!=='cancel'&&intent!=='status'&&intent!=='human'&&intent!=='smalltalk'&&intent!=='ambiguous')throw new TrackingError(502,'invalid_taxi_intent','Intención no válida.');
   const fields:Interpretation['fields']={};
   for(const [key,v] of Object.entries(raw.fields)) {
     if((key!=='name'&&key!=='origin'&&key!=='destination'&&key!=='pickupReference')||!record(v)||Object.keys(v).some((k)=>!['value','evidence'].includes(k))||typeof v.value!=='string'||typeof v.evidence!=='string')throw new TrackingError(502,'invalid_taxi_field','Campo no válido.');

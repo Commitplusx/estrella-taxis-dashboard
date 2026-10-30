@@ -3,6 +3,7 @@ import { parseInterpretation } from "./policy.ts";
 import { TrackingError } from "../../tracking/contracts.ts";
 
 type TaxiToolName =
+  | "solicitar_taxi"
   | "actualizar_recorrido"
   | "cotizar_viaje"
   | "responder_duda"
@@ -45,6 +46,7 @@ const noArguments = {
 };
 /** One atomic proposal; the existing coordinator executes permitted services and SQL owns mutations. */
 export const TAXI_CONVERSATION_TOOLS: readonly TaxiToolDefinition[] = [
+  {type:'function',function:{name:'solicitar_taxi',description:'Reconoce una petición directa de servicio como «Me puede enviar un taxi» cuando todavía no incluye una dirección concreta. No es un saludo, no inventa lugares ni confirma el viaje; el backend continúa desde el dato obligatorio que falta.',parameters:noArguments}},
   {type:'function',function:{name:'responder_duda',description:'Atiende una duda sobre cómo pedir el taxi, ubicación, destino, nombre, confirmación o el servicio. Conserva en fields cualquier dato o cambio explícito que venga junto con la pregunta. No inventa políticas, horarios, pagos ni disponibilidad; el servidor aporta los hechos para responder. Para importes usa cotizar_viaje y para la situación real del taxi consultar_mi_viaje.',parameters:withFields}},
   {
     type: "function",
@@ -176,6 +178,10 @@ export function parseTaxiToolCompletion(
     }, current);
   }
   switch (fn.name) {
+    case "solicitar_taxi":
+      if (Object.keys(args).length !== 0) incomplete();
+      intent = "request";
+      break;
     case "consultar_mi_viaje":
       intent = "status";
       break;

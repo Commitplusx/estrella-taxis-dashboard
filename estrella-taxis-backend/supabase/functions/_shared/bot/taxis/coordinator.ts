@@ -1,7 +1,7 @@
 import {assertTaxiTransition,conversationPhase,hasDestination}from'./stateMachine.ts';
 import type{ModelMetadata}from'./trace.ts';
 import { emptyDraft, type Candidate, type Draft, type Interpretation, type Place, type TaxiChannel, type TaxiDecision, type TaxiInbound, type TaxiSession } from './contracts.ts';
-import { activeRideChange, cancellationQuestion, cancelsTaxi, confirmsTaxi, courtesyOnly, declinesTaxi, locationRole, needsHuman, normalize, unsupportedRide,resetCommand,cancelDraftCommand,draftLocationRequest,defersDestination } from './policy.ts';
+import { activeRideChange, cancellationQuestion, cancelsTaxi, confirmsTaxi, courtesyOnly, declinesTaxi, locationRole, locationRoleConflict, refersToSharedLocation, needsHuman, normalize, unsupportedRide,resetCommand,cancelDraftCommand,draftLocationRequest,defersDestination } from './policy.ts';
 import { getDistanceFromLatLonInKm } from '../../algorithms/headingMatcher.ts';
 import { taxiH3Scope } from './h3.ts';
 import type { NeighborhoodArea } from './neighborhoodContracts.ts';
@@ -23,6 +23,23 @@ export function taxiSummary(d:Draft):string {
 }
 function live(t:TaxiSession['active']):boolean{return t?.state==='buscando_conductor'||t?.state==='en_camino';}
 function within(p:Place,c:TaxiChannel):boolean{return getDistanceFromLatLonInKm(p.lat,p.lng,c.centerLat,c.centerLng)<=c.radiusKm;}
+function nativeLocationSegments(messages:TaxiInbound[]):{message:TaxiInbound;context:string}[]{
+  const indexes=messages.flatMap((message,index)=>message.location?[index]:[]);
+  return indexes.map((index,position)=>{
+    const start=position===0?0:indexes[position-1]+1;
+    const end=position===indexes.length-1?messages.length:index+1;
+    const context=messages.slice(start,end).filter((message)=>message.type==='text').map((message)=>message.text).filter(Boolean).join('\n');
+    return{message:messages[index],context};
+  });
+}
+function inferLocationRole(d:Draft,allowInference:boolean):'origin'|'destination'|null{
+  if(d.awaitingLocation==='origin'||d.awaitingLocation==='destination')return d.awaitingLocation;
+  if(d.awaitingLocation==='choice')return null;
+  if(!allowInference)return null;
+  if(!d.origin||d.origin.source!=='gps'||!d.pickupMessageId)return'origin';
+  if(!d.destinationDeferred&&( !d.destination||d.destination.source==='written'||Boolean(d.destinationText||d.destinationArea)))return'destination';
+  return null;
+}
 export async function coordinateTaxi(messages:TaxiInbound[],session:TaxiSession,channel:TaxiChannel,services:TaxiServices,now:number,signal?:AbortSignal):Promise<TaxiDecision> {
   const decision=await decideTaxi(messages,session,channel,services,now,signal);
   assertTaxiTransition(session,messages,decision,now);
@@ -157,8 +174,7 @@ async function decideTaxi(messages:TaxiInbound[],session:TaxiSession,channel:Tax
     d[selectedRole]=d.pendingLocation.place;if(selectedRole==='origin')d.pickupMessageId=d.pendingLocation.messageId??null;d[selectedRole==='origin'?'originArea':'destinationArea']=null;d.pendingLocation=null;d.awaitingLocation=null;
     return prepareSummary(d,'summary');
   }
-  const native=messages.filter((m)=>m.location!==null);
-  if(native.length>1)return {...reply('Recibí más de una ubicación. ¿Cuál es el punto donde te recogemos?','multiple_locations'),action:'draft',draft:{...d,confirmation:null,expiresAt:null,destinationPrompt:null}};
+  const native=nativeLocationSegments(messages);
   let interpretation:Interpretation;
   let interpretationIssue:'interpretation_failed'|'ambiguous_intent'|'unclear_name'|'pickup_reference_too_long'|null=null;
   try{interpretation=current&&!(selectedRole&&messages.some((m)=>m.location!==null))?await services.interpret(current,session,channel,signal):{intent:'provide',fields:{}};}
@@ -197,6 +213,7 @@ async function decideTaxi(messages:TaxiInbound[],session:TaxiSession,channel:Tax
   const referenceConflicts:Partial<Record<'origin'|'destination',string>>={};
   for(const field of ['origin','destination'] as const) {
     const requested=interpretation.fields[field];if(!requested)continue;
+    if(native.length&&refersToSharedLocation(requested.value))continue;
     changed=true;d.confirmation=null;d.expiresAt=null;d.quoteCents=null;d.quoteH3=null;d.destinationPrompt=null;
     const areaKey=field==='origin'?'originArea':'destinationArea';
     if(field==='origin'){
@@ -209,13 +226,34 @@ async function decideTaxi(messages:TaxiInbound[],session:TaxiSession,channel:Tax
     else {d[field]=null;if(resolved.kind==='reference_conflict')referenceConflicts[field]=resolved.label;if(resolved.kind==='ambiguous'&&resolved.neighborhoods?.length){recognized[field]=resolved.neighborhoods;if(resolved.neighborhoods.length===1)d[areaKey]=resolved.neighborhoods[0];else unresolved.push(field);}if(d.awaitingLocation===field)d.awaitingLocation=null;}
   }
   if(d.awaitingLocation==='choice'&&!d.pendingLocation&&!unresolved.length&&(interpretation.fields.origin||interpretation.fields.destination))d.awaitingLocation=!d.origin?'origin':!d.destination?'destination':null;
-  if(native[0]?.location) {
-    const p=native[0].location;const place:Place={text:`Ubicación compartida (${p.lat.toFixed(5)}, ${p.lng.toFixed(5)})`,lat:p.lat,lng:p.lng,placeId:null,source:'gps'};
-    if(!within(place,channel))return human('outside_service_area','La ubicación queda fuera de la zona configurada. La base debe confirmar ese servicio.');
-    const target=selectedRole??(unresolved.length===1?unresolved[0]:d.awaitingLocation==='origin'||d.awaitingLocation==='destination'?d.awaitingLocation:null)??(!current&&d.awaitingLocation!=='choice'&&(!d.origin||d.origin.source!=='gps')?'origin':null);
-    if(!target)return {...reply('¿Ese pin cambia el punto de recogida o el destino?','location_target_unclear'),action:'draft',draft:{...d,confirmation:null,expiresAt:null,quoteCents:null,quoteH3:null,awaitingLocation:'choice',pendingLocation:{place,expiresAt:new Date(now+10*60000).toISOString(),messageId:native[0].id}}};
-    d[target]=place;d[target==='origin'?'originArea':'destinationArea']=null;if(target==='origin')d.pickupMessageId=native[0].id;else{d.destinationText=null;d.destinationDeferred=false;}d.destinationPrompt=null;d.awaitingLocation=null;d.pendingLocation=null;changed=true;
-    const resolvedIndex=unresolved.indexOf(target);if(resolvedIndex>=0)unresolved.splice(resolvedIndex,1);
+  if(native.length){
+    const preview:Draft={...d},planned:{target:'origin'|'destination';place:Place;messageId:string}[]=[];
+    let unclear:{place:Place;messageId:string}|null=null;
+    for(const item of native){
+      const point=item.message.location;if(!point)continue;
+      const place:Place={text:`Ubicación compartida (${point.lat.toFixed(5)}, ${point.lng.toFixed(5)})`,lat:point.lat,lng:point.lng,placeId:null,source:'gps'};
+      if(!within(place,channel))return human('outside_service_area','La ubicación queda fuera de la zona configurada. La base debe confirmar ese servicio.');
+      const explicit=locationRole(item.context),conflict=locationRoleConflict(item.context);
+      const target=conflict?null:explicit??inferLocationRole(preview,interpretationIssue===null&&planned.length===0&&(!preview.origin||preview.origin.source!=='gps'));
+      if(!target){unclear={place,messageId:item.message.id};break;}
+      planned.push({target,place,messageId:item.message.id});
+      preview[target]=place;
+      preview[target==='origin'?'originArea':'destinationArea']=null;
+      if(target==='origin')preview.pickupMessageId=item.message.id;
+      else{preview.destinationText=null;preview.destinationDeferred=false;}
+      preview.destinationPrompt=null;preview.awaitingLocation=null;preview.pendingLocation=null;
+    }
+    if(unclear){
+      if(native.length===1)return {...reply('¿Este punto es donde pasamos por ti o es a dónde vas? 🚕','location_target_unclear'),action:'draft',draft:{...d,confirmation:null,expiresAt:null,quoteCents:null,quoteH3:null,destinationPrompt:null,awaitingLocation:'choice',pendingLocation:{place:unclear.place,expiresAt:new Date(now+10*60000).toISOString(),messageId:unclear.messageId}}};
+      return {...reply('Me llegaron varias ubicaciones y quiero asociarlas bien. Vuelve a compartirlas indicando cuál es el punto donde pasamos por ti y cuál es tu destino. 🚕','multiple_locations'),action:'draft',draft:{...d,confirmation:null,expiresAt:null,quoteCents:null,quoteH3:null,destinationPrompt:null}};
+    }
+    for(const item of planned){
+      d[item.target]=item.place;d[item.target==='origin'?'originArea':'destinationArea']=null;
+      if(item.target==='origin')d.pickupMessageId=item.messageId;
+      else{d.destinationText=null;d.destinationDeferred=false;}
+      d.destinationPrompt=null;d.awaitingLocation=null;d.pendingLocation=null;changed=true;
+      const resolvedIndex=unresolved.indexOf(item.target);if(resolvedIndex>=0)unresolved.splice(resolvedIndex,1);
+    }
   }
   if(changed){d.confirmation=null;d.expiresAt=null;d.quoteCents=null;d.quoteH3=null;}
   if(interpretationIssue)return clarifyPending(interpretationIssue,d);
@@ -235,6 +273,7 @@ async function decideTaxi(messages:TaxiInbound[],session:TaxiSession,channel:Tax
     const buttons=d.destinationPrompt?[{id:'txd_'+d.destinationPrompt,title:'Se lo digo al chofer'}]:undefined;
     return {...reply('No tengo esa información confirmada. La base puede ayudarte a consultarla; tus datos del viaje siguen guardados.','service_question'),messages:[{to:latest.from,text:'No tengo esa información confirmada. La base puede ayudarte a consultarla; tus datos del viaje siguen guardados.',...(buttons?{buttons}:{})}]};
   }
+  if(interpretation.intent==='request')return prepareSummary(d,'taxi_requested');
   if(interpretation.intent==='smalltalk'&&!changed&&!d.origin&&!d.pendingLocation&&d.awaitingLocation!=='choice')return requestLocation(d,'origin','greeting',`¡Hola! 😊 Somos ${channel.name}. ¿Me compartes tu ubicación con el botón para que pasemos por ti? Puedes agregar una referencia para encontrarte más fácil.`);
   if(!changed&&interpretation.intent==='smalltalk')return reply('Aquí sigo 😊. Si quieres cambiar algo del viaje, dime qué dato revisamos.','smalltalk');
   if(!changed&&interpretation.intent!=='quote'){

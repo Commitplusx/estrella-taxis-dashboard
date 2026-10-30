@@ -4,7 +4,7 @@ import{emptyDraft,type TaxiChannel,type TaxiInbound,type TaxiSession}from'../est
 import{parseTaxiToolCompletion}from'../estrella-taxis-backend/supabase/functions/_shared/bot/taxis/conversationTools.ts';
 import{parseTaxiQuestion}from'../estrella-taxis-backend/supabase/functions/_shared/bot/taxis/conversationReply.ts';
 import{taxiH3Scope}from'../estrella-taxis-backend/supabase/functions/_shared/bot/taxis/h3.ts';
-import{defersDestination}from'../estrella-taxis-backend/supabase/functions/_shared/bot/taxis/policy.ts';
+import{defersDestination,locationRole,locationRoleConflict,refersToSharedLocation}from'../estrella-taxis-backend/supabase/functions/_shared/bot/taxis/policy.ts';
 const now=Date.parse('2026-10-30T23:00:00Z');
 const channel:TaxiChannel={tenantId:'11111111-1111-4111-8111-111111111111',waba:'+529630000001',enabled:true,name:'Base sintética',city:'Comitán',centerLat:16.25,centerLng:-92.13,radiusKm:20,dispatcher:null,model:'fixture',baseCents:5500,perKmCents:null,pricingMode:'h3_zone_max'};
 const inbound=(text:string):TaxiInbound=>({id:crypto.randomUUID(),from:'+529630000002',to:channel.waba,at:new Date(now).toISOString(),type:'text',text,button:null,location:null});
@@ -27,6 +27,32 @@ Deno.test('service questions: the interpreter can propose a question while retai
  const result=parseTaxiToolCompletion(completion('responder_duda',{fields:{destination:{value:'Centro',evidence:'Voy al Centro'}}}),current);
  assertEquals(result.intent,'question');assertEquals(result.fields.destination?.value,'Centro');
 });
+Deno.test('natural taxi request: the interpreter identifies a booking request without inventing an address or confirming a ride',()=>{
+ const result=parseTaxiToolCompletion(completion('solicitar_taxi',{}),'Buenas tardes\nMe puede enviar un taxi');
+ assertEquals(result.intent,'request');assertEquals(result.fields,{});
+});
+Deno.test('natural taxi request: text-only request asks for the pickup naturally and keeps the GPS requirement',async()=>{
+ const s=session(),answer='¡Claro! 😊 Compárteme tu ubicación por aquí y seguimos con tu viaje.';
+ const f:TaxiServices={...services,interpret:async()=>({intent:'request',fields:{}}),question:async(kind,_current,_channel,_signal,context)=>{assertEquals(kind,'pickup_gps');assertEquals(context?.phase,'origin');return answer;}};
+ const result=await coordinateTaxi([inbound('Buenas tardes'),inbound('Me puede enviar un taxi')],s,channel,f,now);
+ assertEquals(result.draft.awaitingLocation,'origin');assertEquals(result.draft.confirmation,null);assertEquals(result.messages[0].locationRequest,'origin');assertEquals(result.messages[0].text,answer);
+});
+Deno.test('native location language: deictic text identifies a paired destination pin without treating “esta” as an address',async()=>{
+ const s=session(),pickup={text:'Recogida',lat:16.25,lng:-92.13,placeId:null,source:'gps' as const},dropoff={text:'Destino',lat:16.26,lng:-92.14,placeId:null,source:'gps' as const};
+ s.draft={...s.draft,origin:pickup,pickupMessageId:'pickup-native',awaitingLocation:'destination',destinationPrompt:crypto.randomUUID(),expiresAt:new Date(now+600000).toISOString()};
+ const destination={...inbound(''),id:'destination-native',type:'location' as const,location:{lat:dropoff.lat,lng:dropoff.lng}};
+ const f:TaxiServices={...services,resolve:never};
+ const result=await coordinateTaxi([inbound('A esta dirección'),destination,inbound('Y voy para esta')],s,channel,f,now);
+ assertEquals(result.draft.destination?.lat,dropoff.lat);assertEquals(result.draft.destination?.lng,dropoff.lng);assertEquals(result.draft.confirmation!==null,true);assertStringIncludes(result.messages[0].text,'Destino: Ubicación compartida');
+});
+Deno.test('native location language: request, pickup pin, deictic destination and destination pin form one review without dispatch',async()=>{
+ const s=session(),pickup={...inbound(''),id:'pickup-native',type:'location' as const,location:{lat:16.25,lng:-92.13}},dropoff={...inbound(''),id:'destination-native',type:'location' as const,location:{lat:16.26,lng:-92.14}};
+ const result=await coordinateTaxi([inbound('Buenas tardes'),inbound('Me puede enviar un taxi'),pickup,inbound('A esta dirección'),dropoff,inbound('Y voy para esta')],s,channel,services,now);
+ assertEquals(result.draft.origin?.lat,16.25);assertEquals(result.draft.destination?.lat,16.26);assert(result.draft.confirmation);assertEquals(result.action,'draft');assertEquals(result.candidates,[]);assertStringIncludes(result.messages[0].text,'Pasamos por ti en: Ubicación compartida');assertStringIncludes(result.messages[0].text,'Destino: Ubicación compartida');assert(result.messages[0].buttons?.[0].id.startsWith('txc_'));
+});
+for(const [text,role] of [['Y voy para esta','destination'],['Voy para esta dirección','destination'],['Me mandas un taxi a esta dirección','origin']] as const)Deno.test('native location language: route cue '+text,()=>assertEquals(locationRole(text),role));
+Deno.test('native location language: a text with both route endpoints is not used to label a single pin',()=>assert(locationRoleConflict('Me recoges aquí y voy para esta')));
+Deno.test('native location language: a deictic pointer is not a literal address',()=>{assert(refersToSharedLocation('a esta dirección'));assert(refersToSharedLocation('esta ubicación'));assertEquals(refersToSharedLocation('Pilita Seca'),false);});
 Deno.test('friendly phrasing: a grounded short explanation can precede the pickup question',()=>{
  const question='Así el chofer puede ubicarte mejor. ¿Me compartes tu ubicación con el botón?';
  assertEquals(parseTaxiQuestion({choices:[{finish_reason:'stop',message:{content:JSON.stringify({question})}}]},'pickup_gps'),question);
