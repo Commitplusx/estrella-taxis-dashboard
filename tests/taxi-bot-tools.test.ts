@@ -1,10 +1,12 @@
 import {
   createTaxiInterpreter,
   TAXI_INTERPRETER_CONTRACT,
+  TAXI_INTERPRETER_EXAMPLES,
 } from "../estrella-taxis-backend/supabase/functions/_shared/bot/taxis/interpreter.ts";
 import {
   emptyDraft,
   record,
+  TAXI_BOT_VERSION,
   type TaxiChannel,
   type TaxiInbound,
   type TaxiSession,
@@ -123,6 +125,30 @@ Deno.test("taxi tools: an explicit current correction can enter the existing int
   assert(
     result.intent === "provide" && result.fields.origin?.value === "Hospital",
   );
+});
+
+Deno.test("interpreter few-shot dialogues all satisfy the strict taxi tool contract", () => {
+  let current: string | null = null;
+  let parsed = 0;
+  for (const message of TAXI_INTERPRETER_EXAMPLES) {
+    if (message.role === "user" && typeof message.content === "string") {
+      const payload: unknown = JSON.parse(message.content);
+      assert(record(payload) && typeof payload.current === "string");
+      current = payload.current;
+      continue;
+    }
+    if (message.role === "assistant" && message.tool_calls) {
+      assert(current, "Every assistant example must follow a synthetic customer turn.");
+      const result = parseTaxiToolCompletion({
+        choices: [{ finish_reason: "tool_calls", message }],
+      }, current);
+      assert(result.intent !== "ambiguous", "A few-shot answer must be a valid current interpretation.");
+      current = null;
+      parsed++;
+    }
+  }
+  assert(parsed >= 8, "The interpreter prompt must retain its varied examples.");
+  assert(current === null, "Every synthetic customer example must have a matching tool answer.");
 });
 
 for (
@@ -650,7 +676,7 @@ Deno.test("taxi tools: trace hashes include tool schemas and record the validate
     );
   const trace = new TaxiTurnTrace(completeSession(), now),
     meta = await trace.metadata(channel);
-  equal(meta.engineVersion, "taxi-bot-v12-natural-replies");
+  equal(meta.engineVersion, TAXI_BOT_VERSION);
   equal(meta.promptHash, await fingerprint(TAXI_INTERPRETER_CONTRACT));
   const decision = await coordinateTaxi(
     [inbound(current)],

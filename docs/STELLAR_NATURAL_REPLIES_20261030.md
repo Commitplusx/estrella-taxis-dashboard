@@ -17,3 +17,13 @@ Las pruebas usan respuestas sintéticas para validar el contrato y los límites.
 ## Publicación
 
 Publicado el 30-10-2026 en el proyecto `izrsxygazsalfhpaualj`: `process-queue` v27 y `ycloud-webhook` v27. La descarga posterior a la publicación confirma que los tres archivos de ejecución modificados coinciden por SHA-256 con el candidato revisado; el resto del código ejecutable conserva el contenido anterior. OPTIONS respondió 200 en ambos endpoints. No se envió un WhatsApp de prueba.
+
+## Ampliación de lenguaje natural, 30-10-2026
+
+El intérprete ahora tiene diez diálogos guiados: combina solicitud coloquial, recogida y destino en cualquier orden; conserva la última corrección; trata preguntas sobre el servicio sin perder los datos del recorrido; reconoce respuestas cortas y errores comunes; y consulta el estado sin afirmar una asignación inexistente. Se añadieron casos sintéticos de solicitud informal, GPS, destino opcional, precio junto con corrección y nombre del pasajero.
+
+El redactor de respuestas usa diez ejemplos situacionales para saludar, explicar por qué necesita el pin, contestar una duda de tarifa sin inventarla, preguntar el destino de forma opcional, aclarar el propósito de un pin, solicitar el nombre, informar una búsqueda sin unidad confirmada y acompañar el botón actual de confirmación. Sus diez salidas pasan por el mismo validador que filtra respuestas del modelo. Los ejemplos no reemplazan el siguiente paso que fija el estado del servidor.
+
+Verificación local de esta ampliación: 5,903 pruebas Deno y 124 pruebas Node/SQL/integración aprobadas; el control de tipos y el control de calidad del bot también pasaron. Los ejemplos son un conjunto sintético de desarrollo y no prueban la precisión de un modelo en vivo; no se mandó un WhatsApp real.
+
+Versión del motor: `taxi-bot-v13-conversational-examples`. Publicado el 30-10-2026 en `izrsxygazsalfhpaualj`: `process-queue` v28 y `ycloud-webhook` v28. Descargué las funciones activas después de publicar: SHA-256 confirma que los tres archivos de ejecución revisados coinciden con el candidato y que no cambió ningún otro archivo ejecutable. OPTIONS respondió 200 en ambos endpoints. No se envió una conversación de prueba por WhatsApp.

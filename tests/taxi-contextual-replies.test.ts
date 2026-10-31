@@ -4,6 +4,7 @@ import { emptyDraft, record, type Interpretation, type TaxiChannel, type TaxiInb
 import { createTaxiInterpreter } from '../estrella-taxis-backend/supabase/functions/_shared/bot/taxis/interpreter.ts';
 import { parseInterpretation } from '../estrella-taxis-backend/supabase/functions/_shared/bot/taxis/policy.ts';
 import { TAXI_CONTEXT_CASES } from './fixtures/taxi-contextual-intents.ts';
+import { TAXI_HELP_CASES } from './fixtures/taxi-help-intents.ts';
 
 const now = Date.parse('2026-10-30T20:00:00Z');
 const channel: TaxiChannel = { tenantId:'11111111-1111-4111-8111-111111111111',waba:'+529630000001',enabled:true,name:'Base sintética',city:'Comitán',centerLat:16.25,centerLng:-92.13,radiusKm:20,dispatcher:null,model:'fixture',baseCents:null,perKmCents:null,pricingMode:'h3_zone_max' };
@@ -21,6 +22,11 @@ for(const item of TAXI_CONTEXT_CASES.filter(item=>item.expected.intent==='provid
   const fields:Interpretation['fields']={};
   for(const key of ['origin','destination','name','pickupReference'] as const){const values=item.expected.fields[key];if(values)fields[key]={value:values[0],evidence:item.message};}
   assertEquals(parseInterpretation({intent:'provide',fields},item.message),{intent:'provide',fields});
+});
+for(const item of TAXI_HELP_CASES)Deno.test('natural service conversation fixture preserves only its literal fields: '+item.id,()=>{
+  const fields:Interpretation['fields']={};
+  for(const key of ['origin','destination','name','pickupReference'] as const){const value=item.expected.fields[key]?.[0];if(value)fields[key]={value,evidence:item.message};}
+  assertEquals(parseInterpretation({intent:item.expected.intent,fields},item.message),{intent:item.expected.intent,fields});
 });
 for (const role of ['origin','destination'] as const) {
   for (const failed of [false,true]) Deno.test(`contextual reply: ${failed?'failed':'ambiguous'} interpretation keeps asking for pending ${role}`,async()=>{

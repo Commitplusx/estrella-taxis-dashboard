@@ -2,7 +2,8 @@ import {assert,assertEquals}from'https://deno.land/std@0.177.0/testing/asserts.t
 import{coordinateTaxi,type TaxiServices}from'../estrella-taxis-backend/supabase/functions/_shared/bot/taxis/coordinator.ts';
 import{emptyDraft,type Interpretation,type TaxiChannel,type TaxiInbound,type TaxiSession}from'../estrella-taxis-backend/supabase/functions/_shared/bot/taxis/contracts.ts';
 import{conversationPhase,currentConsent,taxiProgress}from'../estrella-taxis-backend/supabase/functions/_shared/bot/taxis/stateMachine.ts';
-import{naturalTaxiQuestion,parseTaxiQuestion}from'../estrella-taxis-backend/supabase/functions/_shared/bot/taxis/conversationReply.ts';
+import{naturalTaxiQuestion,parseTaxiQuestion,TAXI_QUESTION_PROMPT,TAXI_REPLY_EXAMPLES}from'../estrella-taxis-backend/supabase/functions/_shared/bot/taxis/conversationReply.ts';
+import{record}from'../estrella-taxis-backend/supabase/functions/_shared/tracking/contracts.ts';
 const now=Date.now(),channel:TaxiChannel={tenantId:'11111111-1111-4111-8111-111111111111',waba:'+529630000001',enabled:true,name:'Base sintética',city:'Comitán',centerLat:16.25,centerLng:-92.13,radiusKm:20,dispatcher:null,model:'fixture',baseCents:null,perKmCents:null,pricingMode:'h3_zone_max'};
 const message=(text:string):TaxiInbound=>({id:crypto.randomUUID(),from:'+529630000002',to:channel.waba,at:new Date(now).toISOString(),type:'text',text,button:null,location:null});
 const state=():TaxiSession=>({revision:0,mode:'bot',active:null,history:[],draft:emptyDraft()});
@@ -54,6 +55,19 @@ Deno.test('natural conversation: generated wording must keep the server-selected
  assertEquals(parseTaxiQuestion(phrasing('Va 😊 ¿A dónde te llevamos? Si todavía no lo decides, puedes decírselo al conductor después.'),'conversation',destination),'Va 😊 ¿A dónde te llevamos? Si todavía no lo decides, puedes decírselo al conductor después.');
  const locationRole={...context,phase:'location_role',nextStep:'location_role' as const};
  assertEquals(parseTaxiQuestion(phrasing('¿El punto es donde pasamos por ti o a dónde te llevamos? 🚕'),'conversation',locationRole),'¿El punto es donde pasamos por ti o a dónde te llevamos? 🚕');
+});
+for(const example of TAXI_REPLY_EXAMPLES)Deno.test('reply prompt example stays inside the server response contract: '+example.id,()=>{
+ assertEquals(parseTaxiQuestion(phrasing(example.response),example.purpose,example.context),example.response);
+});
+Deno.test('the natural reply request sends the worked conversation examples with the current turn',async()=>{
+ const sample=TAXI_REPLY_EXAMPLES[0];let sent=false;
+ const result=await naturalTaxiQuestion(async(_url,init)=>{
+  const body:unknown=JSON.parse(String(init?.body));assert(record(body)&&Array.isArray(body.messages));
+  const system:unknown=body.messages[0];assert(record(system)&&typeof system.content==='string');assert(system.content.includes(sample.current));assert(TAXI_QUESTION_PROMPT.includes('Ejemplo 1 (destination-before-pickup)'));
+  const last:unknown=body.messages.at(-1);assert(record(last)&&typeof last.content==='string');const payload:unknown=JSON.parse(last.content);assert(record(payload));assertEquals(payload.current,sample.current);sent=true;
+  return new Response(JSON.stringify({choices:[{finish_reason:'stop',message:{content:JSON.stringify({question:sample.response})}}]}),{status:200,headers:{'Content-Type':'application/json'}});
+ },'fixture-key','fixture-model','conversation',sample.current,undefined,sample.context);
+ assert(sent);assertEquals(result,sample.response);
 });
 Deno.test('natural questions: provider failure has one bounded attempt and preserves the server question and draft',async()=>{
  let calls=0;const result=await naturalTaxiQuestion(async()=>{calls++;throw Error('Declared provider outage');},'fixture-key','fixture','pickup_gps','Hola');assertEquals(result,null);assertEquals(calls,1);

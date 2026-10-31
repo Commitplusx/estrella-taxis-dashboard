@@ -18,4 +18,10 @@ export const TAXI_HELP_CASES:readonly TaxiContextCase[]=[
  {id:'actual-status',context:'review',message:'¿Ya viene mi taxi?',expected:{intent:'status',fields:{}}},
  {id:'bare-new-destination',context:'destination',message:'Pilita Seca',expected:{intent:'provide',fields:{destination:['Pilita Seca']}}},
  {id:'explicit-change-despite-question',context:'name',message:'Voy a Pilita Seca',expected:{intent:'provide',fields:{destination:['Pilita Seca']}}},
+ {id:'casual-direct-request',context:'origin',message:'Qué onda, ¿me echan la mano con un taxi?',expected:{intent:'request',fields:{}}},
+ {id:'gps-purpose-colloquial',context:'origin',message:'Oye, ¿y para qué ocupas mi ubicación?',expected:{intent:'question',fields:{}}},
+ {id:'destination-not-decided',context:'destination',message:'Todavía no sé a dónde voy, ¿no hay bronca?',expected:{intent:'question',fields:{}}},
+ {id:'fare-and-latest-destination',context:'review',message:'Ya no voy al Centro; mejor a la Terminal. ¿Cuánto sale?',expected:{intent:'quote',fields:{destination:['Terminal']}}},
+ {id:'destination-and-passenger-name',context:'origin',message:'Me llevas al Hospital, a nombre de Jorge',expected:{intent:'provide',fields:{destination:['Hospital'],name:['Jorge']}}},
+ {id:'confirm-button-explanation',context:'review',message:'Si te pongo que sí, ¿ya queda pedido?',expected:{intent:'question',fields:{}}},
 ];
