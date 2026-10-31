@@ -70,7 +70,7 @@ Deno.test('taxi messages use friendly emojis only for their conversational state
   const greeting=await fixture().run('Hola');assert(/😊/.test(greeting.messages[0]?.text??''));assert(/🚕/.test(greeting.messages[0]?.text??''));
   const current='Soy Persona Prueba, de Centro a Terminal';
   const summary=await fixture().run('Sí',session(true));
-  assert(/^🚕 ¿Así queda tu viaje\?/.test(summary.messages[0]?.text??''));equal(summary.messages[0]?.buttons?.[0]?.title,'Confirmar viaje');
+  assert(/^🚕 ¡Listo, Persona Prueba! Ya tenemos los datos de tu viaje\./.test(summary.messages[0]?.text??''));equal(summary.messages[0]?.buttons?.[0]?.title,'Confirmar viaje');
   const active=session(true);active.active={id:crypto.randomUUID(),state:'buscando_conductor',taxiName:null};assert(/^🚕/.test((await fixture().run('¿Cómo va?',active)).messages[0]?.text??''));
   assert(/😊/.test((await fixture().run('Gracias')).messages[0]?.text??''));
 });

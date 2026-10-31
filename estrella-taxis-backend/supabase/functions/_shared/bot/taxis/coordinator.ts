@@ -16,10 +16,22 @@ export interface TaxiServices {
   question?:(kind:TaxiQuestion,current:string,channel:TaxiChannel,signal?:AbortSignal,context?:TaxiReplyContext)=>Promise<string|null>;
 }
 export function taxiSummary(d:Draft):string {
-  const price=d.quoteCents===null?'La base necesita confirmar la tarifa.':`${d.quoteBasis==='pickup'?'Estimación desde tu ubicación':'Tarifa estimada del recorrido'}: $${(d.quoteCents/100).toFixed(2)} MXN.${d.quoteBasis==='pickup'?' El importe del recorrido se confirma con el destino.':''}`;
-  const pickup=d.origin?.text;
-  const map=d.origin?`\n🗺️ Ver ubicación en Maps: https://maps.google.com/?q=${d.origin.lat.toFixed(5)},${d.origin.lng.toFixed(5)}`:'';
-  return `🚕 ¿Así queda tu viaje?\nA nombre de: ${d.name}\n📍 Pasamos por ti en: ${pickup}${map}${d.pickupText?'\nPara encontrarte: '+d.pickupText:''}\nDestino: ${d.destination?.text??d.destinationText??d.destinationArea?.label??'Se lo indicas al chofer'}\n${price}\nSi todo está bien, toca «Confirmar viaje» para que busquemos tu taxi.`;
+  const name=d.name?.trim();
+  const greeting=name?`🚕 ¡Listo, ${name}! Ya tenemos los datos de tu viaje.`:'🚕 ¡Listo! Ya tenemos los datos de tu viaje.';
+  const mapsLink=(place:Place)=>`https://maps.google.com/?q=${place.lat.toFixed(5)},${place.lng.toFixed(5)}`;
+  const pickup=d.origin?`📍 *Pasamos por ti aquí:*\n${mapsLink(d.origin)}${d.pickupText?`\n📝 *Referencia para encontrarte:* ${d.pickupText}`:''}`:'📍 Aún falta confirmar dónde pasamos por ti.';
+  const destination=d.destination
+    ?`🏁 *Y te llevamos aquí:*\n${d.destination.source==='gps'?'':`${d.destination.text}\n`}${mapsLink(d.destination)}`
+    :d.destinationText||d.destinationArea
+      ?`🏁 *Destino:* ${d.destinationText??d.destinationArea?.label}`
+      :'🏁 El destino puedes indicárselo al conductor.';
+  const price=d.quoteCents===null
+    ?'💵 La base necesita confirmar la tarifa antes de solicitar el taxi.'
+    :d.quoteBasis==='pickup'
+      ?`💵 *Tarifa estimada desde tu ubicación:* $${(d.quoteCents/100).toFixed(2)} MXN. El importe final se confirma cuando indiques el destino.`
+      :`💵 *Tarifa estimada del recorrido:* $${(d.quoteCents/100).toFixed(2)} MXN.`;
+  const review=name?`¿Todo está correcto, ${name}? 😊`:'¿Todo está correcto? 😊';
+  return `${greeting}\n\n${pickup}\n\n${destination}\n\n${price}\n\n${review}\nSi es así, toca *Confirmar viaje* aquí abajo y enseguida buscamos un taxi para ti. 🚕`;
 }
 function live(t:TaxiSession['active']):boolean{return t?.state==='buscando_conductor'||t?.state==='en_camino';}
 function within(p:Place,c:TaxiChannel):boolean{return getDistanceFromLatLonInKm(p.lat,p.lng,c.centerLat,c.centerLng)<=c.radiusKm;}

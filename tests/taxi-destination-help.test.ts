@@ -18,9 +18,24 @@ Deno.test('destination dialogue: a pickup pin asks where the passenger is going 
  assertEquals(result.draft.confirmation,null);assertEquals(result.draft.awaitingLocation,'destination');
  assert(result.messages[0].buttons?.some(button=>button.id.startsWith('txd_')));assertStringIncludes(result.messages[0].text,'dónde');
 });
-Deno.test('friendly summary: the shared pickup keeps its coordinates and adds a real Maps link',()=>{
- const draft={...emptyDraft(),name:'Mariana',origin:{text:'Ubicación compartida (16.25637, -92.12810)',lat:16.25637,lng:-92.12810,placeId:null,source:'gps' as const},quoteCents:5500};
- const text=taxiSummary(draft);assertStringIncludes(text,'📍 Pasamos por ti en: Ubicación compartida (16.25637, -92.12810)');assertStringIncludes(text,'🗺️ Ver ubicación en Maps: https://maps.google.com/?q=16.25637,-92.12810');
+Deno.test('friendly summary: personalized pickup and destination links are tappable WhatsApp URLs, with the server fare and explicit button cue',()=>{
+ const draft={...emptyDraft(),name:'Jorge',origin:{text:'Ubicación compartida (16.23533, -92.12439)',lat:16.23533,lng:-92.12439,placeId:null,source:'gps' as const},destination:{text:'Ubicación compartida (16.23554, -92.12495)',lat:16.23554,lng:-92.12495,placeId:null,source:'gps' as const},quoteCents:6500,quoteBasis:'route' as const};
+ const text=taxiSummary(draft);
+ assertStringIncludes(text,'🚕 ¡Listo, Jorge! Ya tenemos los datos de tu viaje.');
+ assertStringIncludes(text,'📍 *Pasamos por ti aquí:*\nhttps://maps.google.com/?q=16.23533,-92.12439');
+ assertStringIncludes(text,'🏁 *Y te llevamos aquí:*\nhttps://maps.google.com/?q=16.23554,-92.12495');
+ assertStringIncludes(text,'💵 *Tarifa estimada del recorrido:* $65.00 MXN.');
+ assertStringIncludes(text,'¿Todo está correcto, Jorge? 😊');
+ assertStringIncludes(text,'toca *Confirmar viaje* aquí abajo y enseguida buscamos un taxi');
+ assertEquals(text.includes('**'),false);assertEquals(text.includes('[Ver punto de recogida]'),false);
+});
+Deno.test('friendly summary: an optional destination and pickup-only fare are stated without implying a route quote',()=>{
+ const draft={...emptyDraft(),name:'Jorge',origin:{text:'Ubicación compartida (16.23533, -92.12439)',lat:16.23533,lng:-92.12439,placeId:null,source:'gps' as const},destinationDeferred:true,quoteCents:5500,quoteBasis:'pickup' as const,pickupText:'Frente a la tienda azul'};
+ const text=taxiSummary(draft);
+ assertStringIncludes(text,'🏁 El destino puedes indicárselo al conductor.');
+ assertStringIncludes(text,'📝 *Referencia para encontrarte:* Frente a la tienda azul');
+ assertStringIncludes(text,'*Tarifa estimada desde tu ubicación:* $55.00 MXN. El importe final se confirma cuando indiques el destino.');
+ assertEquals(text.includes('https://maps.google.com/?q='),true);
 });
 Deno.test('service questions: the interpreter can propose a question while retaining an explicit route update',()=>{
  const current='Voy al Centro, ¿me mostrarás un resumen antes?';
@@ -43,12 +58,12 @@ Deno.test('native location language: deictic text identifies a paired destinatio
  const destination={...inbound(''),id:'destination-native',type:'location' as const,location:{lat:dropoff.lat,lng:dropoff.lng}};
  const f:TaxiServices={...services,resolve:never};
  const result=await coordinateTaxi([inbound('A esta dirección'),destination,inbound('Y voy para esta')],s,channel,f,now);
- assertEquals(result.draft.destination?.lat,dropoff.lat);assertEquals(result.draft.destination?.lng,dropoff.lng);assertEquals(result.draft.confirmation!==null,true);assertStringIncludes(result.messages[0].text,'Destino: Ubicación compartida');
+ assertEquals(result.draft.destination?.lat,dropoff.lat);assertEquals(result.draft.destination?.lng,dropoff.lng);assertEquals(result.draft.confirmation!==null,true);assertStringIncludes(result.messages[0].text,'🏁 *Y te llevamos aquí:*');assertStringIncludes(result.messages[0].text,'https://maps.google.com/?q=16.26000,-92.14000');
 });
 Deno.test('native location language: request, pickup pin, deictic destination and destination pin form one review without dispatch',async()=>{
  const s=session(),pickup={...inbound(''),id:'pickup-native',type:'location' as const,location:{lat:16.25,lng:-92.13}},dropoff={...inbound(''),id:'destination-native',type:'location' as const,location:{lat:16.26,lng:-92.14}};
  const result=await coordinateTaxi([inbound('Buenas tardes'),inbound('Me puede enviar un taxi'),pickup,inbound('A esta dirección'),dropoff,inbound('Y voy para esta')],s,channel,services,now);
- assertEquals(result.draft.origin?.lat,16.25);assertEquals(result.draft.destination?.lat,16.26);assert(result.draft.confirmation);assertEquals(result.action,'draft');assertEquals(result.candidates,[]);assertStringIncludes(result.messages[0].text,'Pasamos por ti en: Ubicación compartida');assertStringIncludes(result.messages[0].text,'Destino: Ubicación compartida');assert(result.messages[0].buttons?.[0].id.startsWith('txc_'));
+ assertEquals(result.draft.origin?.lat,16.25);assertEquals(result.draft.destination?.lat,16.26);assert(result.draft.confirmation);assertEquals(result.action,'draft');assertEquals(result.candidates,[]);assertStringIncludes(result.messages[0].text,'📍 *Pasamos por ti aquí:*');assertStringIncludes(result.messages[0].text,'🏁 *Y te llevamos aquí:*');assert(result.messages[0].buttons?.[0].id.startsWith('txc_'));
 });
 for(const [text,role] of [['Y voy para esta','destination'],['Voy para esta dirección','destination'],['Me mandas un taxi a esta dirección','origin']] as const)Deno.test('native location language: route cue '+text,()=>assertEquals(locationRole(text),role));
 Deno.test('native location language: a text with both route endpoints is not used to label a single pin',()=>assert(locationRoleConflict('Me recoges aquí y voy para esta')));
