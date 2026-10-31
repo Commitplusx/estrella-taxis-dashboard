@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
+import{useLocation}from'react-router-dom';
 
 import { Layers, Crosshair, Zap, Power, Radio, ShieldAlert, Bell, Battery, Activity, MapPin, X, Wifi, WifiOff, Play, Square, Terminal, CheckCircle2, Key, Plus, Minus, Ruler, Loader2, Brain, Search } from 'lucide-react';
 import { toast } from 'react-hot-toast';
@@ -132,6 +133,7 @@ export function generateInfoWindowContent(device: TraccarDevice, pos: TraccarPos
 }
 
 export default function MapPage() {
+  const{pathname}=useLocation(),isMapRoute=pathname==='/map'||pathname==='/';
   const { user, empresaId, userRole } = useAuth();
   const canSimulate=(userRole==='superadmin'||userRole==='admin_empresa')&&!user?.readonly;
   const companyRef = useRef(empresaId);
@@ -223,6 +225,7 @@ export default function MapPage() {
   },[clearSimElements]);
   const simulationToolChanged=useCallback((tool:SimulationMapTool)=>{simulationTool.current=tool;},[]);
   useEffect(()=>{setIsSimulatorActive(false);setSimulationPoint(null);clearSimElements();simDraftRef.current?.clearLayers();},[canSimulate,empresaId,clearSimElements]);
+  useEffect(()=>{if(!isMapRoute){setIsSimulatorActive(false);setSimulationPoint(null);clearSimElements();simDraftRef.current?.clearLayers();}},[isMapRoute,clearSimElements]);
   useEffect(() => {
     const map = leafletMapRef.current;
     if (!map || !mapsLoaded) return;
@@ -528,10 +531,10 @@ export default function MapPage() {
 
   // Manejar visibilidad del BottomNav en móviles cuando se abre/cierra una tarjeta
   useEffect(() => {
-    const update=()=>window.dispatchEvent(new CustomEvent((currentSelectedDevice||isSimulatorActive)&&window.innerWidth<640?'hideBottomNav':'showBottomNav'));
+    const update=()=>window.dispatchEvent(new CustomEvent(isMapRoute&&(currentSelectedDevice||isSimulatorActive)&&window.innerWidth<640?'hideBottomNav':'showBottomNav'));
     update();window.addEventListener('resize',update);
     return()=>{window.removeEventListener('resize',update);window.dispatchEvent(new CustomEvent('showBottomNav'));};
-  }, [currentSelectedDevice,isSimulatorActive]);
+  }, [currentSelectedDevice,isSimulatorActive,isMapRoute]);
 
   // Move live markers without recreating the map or waiting for a full data reload.
   const updateMarkerImperative = useCallback((device: TraccarDevice, pos: TraccarPosition) => {
