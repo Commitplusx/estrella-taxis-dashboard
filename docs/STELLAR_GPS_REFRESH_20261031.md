@@ -2,7 +2,9 @@
 
 ## Estado vigente
 
-Actualización posterior: el simulador integrado al mapa usa el mismo refresco y selector. Las versiones vigentes pasan a `process-queue`/`ycloud-webhook` v43 y `taxi-bot-admin` v35; ver [Simulador de asignación](STELLAR_DISPATCH_SIMULATION_20261031.md). La evidencia y prueba física descritas abajo corresponden al despliegue anterior.
+Política vigente posterior: [treinta minutos y detención persistente](STELLAR_DISPATCH_IDLE_POLICY_20261031.md), worker/webhook v45 y administrador v37. El puente conserva la detención sin renovarla al importar GPS.
+
+Historial del simulador: su primera integración usó el mismo refresco y selector con worker/webhook v43 y administrador v35; ver [Simulador de asignación](STELLAR_DISPATCH_SIMULATION_20261031.md). La evidencia y prueba física descritas abajo corresponden al despliegue original, anterior a la política vigente.
 
 ## Despliegue original de este documento
 

@@ -1,0 +1,167 @@
+{
+  "date": "2026-10-31T21:41:17.957Z",
+  "project": "izrsxygazsalfhpaualj",
+  "codeCommit": "d3feef658c50e4e4a8654d9e275d052b2b2f7706",
+  "functions": [
+    {
+      "name": "ycloud-webhook",
+      "version": 45,
+      "status": "ACTIVE"
+    },
+    {
+      "name": "process-queue",
+      "version": 45,
+      "status": "ACTIVE"
+    },
+    {
+      "name": "taxi-bot-admin",
+      "version": 37,
+      "status": "ACTIVE"
+    }
+  ],
+  "runtimeVerification": [
+    {
+      "name": "process-queue",
+      "files": 31,
+      "hashesMatch": true,
+      "options": 200
+    },
+    {
+      "name": "ycloud-webhook",
+      "files": 31,
+      "hashesMatch": true,
+      "options": 200
+    },
+    {
+      "name": "taxi-bot-admin",
+      "files": 38,
+      "hashesMatch": true,
+      "options": 200
+    }
+  ],
+  "bridge": {
+    "backup": "/root/wialon-bridge/backups/motion-20261031-e32748e9a310",
+    "before": "e32748e9a3102db821ce7456e5c77d882ca57ad97fad8d54642314421fe39f12",
+    "after": "f0550e294ce06662b01f2847b79a5ad0ae0ccd29a5484d34cb49115d9203d52c",
+    "module": "587dfdfa65efd9307bc0b7cf719645f4fbfb06f43855dc30ac79aa23b3545ab8",
+    "restarted": false
+  },
+  "refresh": {
+    "unauthorized": 401,
+    "authorized": 200,
+    "synced": 18,
+    "completedAt": "2026-10-31T21:33:59.344Z",
+    "elapsedMs": 11
+  },
+  "persistence": {
+    "durableUnits": 18,
+    "reloadPreservesTimers": true,
+    "mode": "600"
+  },
+  "processesBefore": [
+    {
+      "name": "wialon-bridge",
+      "pid": 78261,
+      "status": "online",
+      "restarts": 2
+    },
+    {
+      "name": "bot-worker",
+      "pid": 879,
+      "status": "online",
+      "restarts": 0
+    },
+    {
+      "name": "stellar-taxi-bot",
+      "pid": 56254,
+      "status": "online",
+      "restarts": 0
+    }
+  ],
+  "processesAfter": [
+    {
+      "name": "wialon-bridge",
+      "pid": 81234,
+      "status": "online",
+      "restarts": 3
+    },
+    {
+      "name": "bot-worker",
+      "pid": 879,
+      "status": "online",
+      "restarts": 0
+    },
+    {
+      "name": "stellar-taxi-bot",
+      "pid": 56254,
+      "status": "online",
+      "restarts": 0
+    }
+  ],
+  "businessBefore": {
+    "in_turn": 13,
+    "offers": 1,
+    "outbox": 86,
+    "positions_linked": 19,
+    "requests": 4,
+    "trips": 3
+  },
+  "businessAfter": {
+    "in_turn": 13,
+    "offers": 1,
+    "outbox": 86,
+    "positions_linked": 19,
+    "requests": 4,
+    "trips": 3
+  },
+  "web": {
+    "url": "https://stellar.estrella-eats.mx/map",
+    "status": 200,
+    "asset": "/assets/index-DMxsR6ZC.js",
+    "sha256": "443b6021ae1acfa6e83bab4f9364bb6dee4ca71cd6957a3d91585c7c0c81dc2d",
+    "simulatorPresent": true
+  },
+  "tests": {
+    "fullDeno": 22822,
+    "nodeBridgeAndMap": 50,
+    "focusedAfterReview": 194,
+    "mapAfterReview": 9,
+    "strictMapTypes": true,
+    "strictAdminTypes": true,
+    "cleanBuild": true,
+    "qualityFiles": 140,
+    "globalRepositoryTypes": "pre-existing failures outside changed surface"
+  },
+  "dryRun": {
+    "asOf": "2026-10-31T21:35:52.663Z",
+    "source": "scoped production Traccar snapshot + published selector readback",
+    "units": 19,
+    "motionAttestations": 18,
+    "selectedCount": 3,
+    "cases": [
+      {
+        "stationarySeconds": 1200,
+        "reason": "selected",
+        "freshGps": true
+      },
+      {
+        "stationarySeconds": 1800,
+        "reason": "selected",
+        "freshGps": true
+      },
+      {
+        "stationarySeconds": 1801,
+        "reason": "idle_timeout",
+        "freshGps": true
+      }
+    ],
+    "tripsCreated": 0,
+    "whatsAppMessagesSent": 0
+  },
+  "visualReview": {
+    "disposition": "recapture",
+    "sourceFindingsResolved": 2,
+    "currentCapturesAvailable": false,
+    "reason": "Work browser control disabled; old screenshots are not proof of this delta"
+  }
+}

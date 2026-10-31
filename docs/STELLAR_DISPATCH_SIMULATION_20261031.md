@@ -1,5 +1,7 @@
 # Simulador de asignación de Pompeyo
 
+Política vigente posterior: [treinta minutos y detención persistente](STELLAR_DISPATCH_IDLE_POLICY_20261031.md), worker/webhook v45 y administrador v37. Sustituye los límites de 10 minutos/2 minutos descritos en esta entrega histórica.
+
 ## Superficie y contrato
 
 La herramienta sustituye el comparador existente de **Mapa en Vivo → Comparar taxis** (icono de cerebro). La corrección del usuario ubica las pruebas en ese mapa, sin crear una pestaña adicional del bot. El administrador marca origen, destino opcional y posiciones hipotéticas sobre el mismo mapa; también puede introducir coordenadas. El panel permite cambiar disponibilidad, antigüedad de GPS, velocidad, rumbo, conexión y habilitación hipotética para ofertas. Los cambios no se aplican a las unidades reales.
