@@ -37,3 +37,11 @@ Estos casos y ejemplos se utilizaron para ajustar las instrucciones: **son regre
 El evaluador temporal tenía token aleatorio, vencimiento y suites fijas sin payloads de clientes; se eliminó al terminar. La suite se puede repetir con credenciales privadas mediante `evaluate-taxi-intents.ts --suite=prompt`, sin pasar claves por argumentos ni guardar secretos en los informes. La suite de pines usa `evaluate-taxi-compound-turns.ts`.
 
 Los contratos comprueban además que los mensajes del cliente y hechos anteriores se envíen como datos separados de las instrucciones del sistema, y que una interpretación ambigua no modifique los puntos guardados ni despache un taxi. La batería completa aprobó 22,553 pruebas Deno y 163 Node/SQL, tipado estricto y el control estático de 110 archivos. El paquete aislado del despliegue también pasó `deno check`. Los hashes y versiones publicadas se registran al terminar la publicación.
+
+## Publicación comprobada
+
+Implementación `a70bac3`. `process-queue` y `ycloud-webhook` quedaron en **v37 ACTIVE** en el proyecto independiente de Stellar. Se respaldaron las funciones activas v36 antes de publicar. El paquete aislado cambia únicamente los dos archivos de prompts: los 26 archivos runtime de cada función fueron descargados y coinciden byte por byte con el paquete revisado. La dependencia exclusivamente de tipos se elimina al empaquetar. Los contratos evaluados con el modelo coinciden con los activos.
+
+OPTIONS devolvió 200 antes y después en ambos endpoints. `taxi-bot-admin` permanece en v33; no se reinició el worker del VPS ni se publicó otro negocio. No se ejecutaron migraciones ni se cambiaron datos de clientes. El evaluador temporal quedó eliminado. [Evidencia agregada y hashes](STELLAR_BOT_PROMPT_EVIDENCE_20261031.json).
+
+Las pruebas físicas por WhatsApp no forman parte de esta evidencia. Flutter continúa sin compilar por indicación del usuario.

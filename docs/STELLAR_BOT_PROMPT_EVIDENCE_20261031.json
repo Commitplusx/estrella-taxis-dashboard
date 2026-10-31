@@ -1,0 +1,153 @@
+{
+  "implementationCommit": "a70bac3",
+  "project": "izrsxygazsalfhpaualj",
+  "channel": {
+    "base": "Servicio de Taxis Pompeyo Express",
+    "numberEnding": "2491",
+    "model": "deepseek-chat"
+  },
+  "syntheticDevelopmentOnly": true,
+  "blindAccuracyMeasured": false,
+  "totalModelCalls": 121,
+  "evaluations": [
+    {
+      "artifact": "prompt-before-model.json",
+      "sha256": "bbc0cae0ead6a566e9f0872bd2d47cee49b9defefbb4b016767ae79a7e9ad1e4",
+      "model": "deepseek-chat",
+      "suite": "intents",
+      "fixtureHash": "4cd134ba658fef01ae5acea714ed4a4e3a80a064b4974720413ece1ea254afc0",
+      "contractHash": "f520d4f404f93d6c60397f80389597951380fa0a2c4a01cc56fc592c8906690e",
+      "executed": 24,
+      "passed": 23,
+      "failures": [
+        "same-label-both-endpoints"
+      ]
+    },
+    {
+      "artifact": "prompt-after-model.json",
+      "sha256": "a0ba49091a304cbe6305c589b2f08b64e859b891c6121a02a193fb33fb6673f9",
+      "model": "deepseek-chat",
+      "suite": "intents",
+      "fixtureHash": "4cd134ba658fef01ae5acea714ed4a4e3a80a064b4974720413ece1ea254afc0",
+      "contractHash": "976d62398b880f62a6f5f4a31357abaeb3f2a3da92e8964581389353fc3e4e93",
+      "executed": 24,
+      "passed": 23,
+      "failures": [
+        "explicit-pickup-overrides-question"
+      ]
+    },
+    {
+      "artifact": "prompt-final-model.json",
+      "sha256": "014018c874d611bdce62e75cbb525659d220ce7740921cc9e7b0e842e94459c1",
+      "model": "deepseek-chat",
+      "suite": "intents",
+      "fixtureHash": "4cd134ba658fef01ae5acea714ed4a4e3a80a064b4974720413ece1ea254afc0",
+      "contractHash": "6ff6d3b9a5fae17d040c3d56fba0f1a6f80d9197446f2fc982a1b7b0e4124527",
+      "executed": 24,
+      "passed": 24,
+      "failures": []
+    },
+    {
+      "artifact": "prompt-compound-model.json",
+      "sha256": "3fe70e9da0689c89210f7756acc0d6f86736e974519a2f539112777bd71c14bb",
+      "model": "deepseek-chat",
+      "suite": "compound",
+      "fixtureHash": "4b83ceac17cbd564255c4d84d9bf0afbf37efc4a2b07e2d1349c45dc58654481",
+      "contractHash": "6ff6d3b9a5fae17d040c3d56fba0f1a6f80d9197446f2fc982a1b7b0e4124527",
+      "executed": 24,
+      "passed": 24,
+      "failures": []
+    },
+    {
+      "artifact": "prompt-replies-model.json",
+      "sha256": "aac67306c022ba10266c43d1f6de234771715f5154e5e7b8c7728882a63710f9",
+      "model": "deepseek-chat",
+      "suite": "replies",
+      "fixtureHash": "d11d5a8917762ac010210ea6cc2451abb2636f5f1b6948fe656296a4867647bf",
+      "contractHash": "08de4b58cf7f5a9e16c1618d30b2fa915e27c132034812c9e12872f8a59e66fa",
+      "executed": 25,
+      "passed": 25,
+      "failures": []
+    }
+  ],
+  "tests": {
+    "deno": 22553,
+    "nodeSql": 163,
+    "qualityFiles": 110,
+    "strictTypeCheck": true
+  },
+  "deployment": {
+    "verified": [
+      {
+        "name": "process-queue",
+        "runtimeFilesMatched": 26,
+        "typeOnlyOmitted": [
+          "_shared/tracking/fleetTypes.ts"
+        ]
+      },
+      {
+        "name": "ycloud-webhook",
+        "runtimeFilesMatched": 26,
+        "typeOnlyOmitted": [
+          "_shared/tracking/fleetTypes.ts"
+        ]
+      }
+    ],
+    "evaluatedContractsMatch": true,
+    "evaluatorDeleted": true,
+    "functions": [
+      {
+        "name": "ycloud-webhook",
+        "status": "ACTIVE",
+        "version": 37
+      },
+      {
+        "name": "process-queue",
+        "status": "ACTIVE",
+        "version": 37
+      },
+      {
+        "name": "taxi-bot-admin",
+        "status": "ACTIVE",
+        "version": 33
+      }
+    ]
+  },
+  "beforeHealth": [
+    {
+      "name": "process-queue",
+      "options": 200
+    },
+    {
+      "name": "ycloud-webhook",
+      "options": 200
+    }
+  ],
+  "afterHealth": [
+    {
+      "name": "process-queue",
+      "options": 200
+    },
+    {
+      "name": "ycloud-webhook",
+      "options": 200
+    }
+  ],
+  "changedRuntimeSources": [
+    "_shared/bot/taxis/interpreter.ts",
+    "_shared/bot/taxis/conversationReply.ts"
+  ],
+  "sourceHashes": [
+    {
+      "name": "interpreter.ts",
+      "sha256": "967ed4610293b181b7e83b10baac660c95c7687ae66639997765b3e966ceffca"
+    },
+    {
+      "name": "conversationReply.ts",
+      "sha256": "2d66232cb61261ccbab2d86a334ad4370859f6f14a18c2d4f5bdbe758e00e121"
+    }
+  ],
+  "sqlMigrations": 0,
+  "physicalWhatsAppTest": false,
+  "flutterCompiled": false
+}
