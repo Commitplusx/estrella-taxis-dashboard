@@ -95,13 +95,12 @@ Deno.test('natural conversation: an unclear shared point gets a contextual answe
  const result=await coordinateTaxi([shared],s,channel,f,now);
  assertEquals(result.reason,'location_target_unclear');assertEquals(result.action,'draft');assertEquals(result.draft.awaitingLocation,'choice');assertEquals(result.draft.confirmation,null);assertEquals(result.messages[0].text,answer);assertEquals(result.candidates,[]);
 });
-Deno.test('natural conversation: ambiguous text is rewritten from the backend response without altering the draft',async()=>{
+Deno.test('natural conversation: ambiguous text resumes a complete saved route with a protected usable summary',async()=>{
  const s=session(),pickup={text:'Punto confirmado',lat:16.25,lng:-92.13,placeId:null,source:'gps' as const};
  s.draft={...s.draft,name:'Mariana',origin:pickup,pickupMessageId:'native',destinationDeferred:true};s.history=[{role:'assistant',content:'El resumen anterior venció.'},{role:'user',content:'No estoy segura.'}];
- const answer='Claro, no hay prisa. ¿Qué parte del viaje quieres revisar?';
- const f:TaxiServices={...services,interpret:async()=>({intent:'ambiguous',fields:{}}),question:async(kind,current,_channel,_signal,context)=>{assertEquals(kind,'conversation');assertEquals(current,'No sé qué hacer');assertEquals(context?.nextStep,'none');assertStringIncludes(context?.backendReply??'','corregir');assertEquals(context?.recent.length,2);return answer;}};
+ const f:TaxiServices={...services,interpret:async()=>({intent:'ambiguous',fields:{}}),question:async()=>{throw Error('The redactor cannot replace the current confirmation summary.');}};
  const result=await coordinateTaxi([inbound('No sé qué hacer')],s,channel,f,now);
- assertEquals(result.reason,'ambiguous_intent');assertEquals(result.messages[0].text,answer);assertEquals(result.draft.origin,pickup);assertEquals(result.draft.name,'Mariana');assertEquals(result.candidates,[]);
+ assertEquals(result.reason,'ambiguous_intent');assertStringIncludes(result.messages[0].text,'No pude aplicar tu último mensaje');assertStringIncludes(result.messages[0].text,'maps.google.com');assert(result.draft.confirmation);assert(result.messages[0].buttons?.some(button=>button.id==='txc_'+result.draft.confirmation));assertEquals(result.draft.origin,pickup);assertEquals(result.draft.name,'Mariana');assertEquals(result.candidates,[]);
 });
 const pin=()=>({...inbound(''),type:'location' as const,location:{lat:16.25,lng:-92.13}});
 for(const text of ['se lo digo al chofer','Todavía no sé','Prefiero no decirlo ahorita','por ahora no'])Deno.test('optional destination: direct choice is accepted without a magic greeting: '+text,async()=>{

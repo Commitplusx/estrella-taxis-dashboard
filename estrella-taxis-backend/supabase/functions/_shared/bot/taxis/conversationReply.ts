@@ -52,7 +52,7 @@ export function parseTaxiQuestion(raw:unknown,kind:TaxiQuestion,context?:TaxiRep
  if(kind==='service_question'&&context?.phase==='origin'&&!context.hasPickupGps&&(!/\?/.test(question)||! /\b(?:ubicacion|gps|pin|compartir|comparte)\b/.test(n)))throw Error('missing_pickup_follow_up');
  if(kind==='service_question'&&context?.phase==='destination'&&!context.hasDestination&&!context.destinationDeferred&&(!/\?/.test(question)||! /\b(?:donde|destino|vas|llevamos|indicarlo)\b/.test(n)||!optionalDestination))throw Error('missing_destination_follow_up');
  if(kind==='service_question'&&context?.phase==='name'&&!context.hasName&&(!/\?/.test(question)||! /\b(?:nombre|a nombre)\b/.test(n)))throw Error('missing_name_follow_up');
- if(kind==='conversation'&&context){
+ if(context){
   const step=context.nextStep??'none',hasQuestion=/¿[^?]+\?/.test(question);
   if(step==='pickup_gps'&&(!hasQuestion||! /\b(?:ubicacion|gps|pin|compartir|comparte)\b/.test(n)))throw Error('missing_pickup_follow_up');
   if(step==='passenger_name'&&(!hasQuestion||! /\b(?:nombre|pasajero|a nombre)\b/.test(n)))throw Error('missing_name_follow_up');

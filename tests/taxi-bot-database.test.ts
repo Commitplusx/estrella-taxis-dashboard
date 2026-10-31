@@ -224,6 +224,35 @@ test('destination recovery SQL: failed interpretation, replaced choice and repla
   assert.equal((await f.commit(clicked.claim.eventId,clicked.claim,{...clicked.decision})).state,'replay');assert.equal(await f.scalar('SELECT count(*)::int FROM viajes'),1);assert.equal(await f.scalar('SELECT count(*)::int FROM taxi_bot_offers'),1);
  }finally{await f.db.close();}
 });
+for(const cause of ['expired_button','interpreter_failure','empty_proposal','long_review'] as const)test('conversation recovery SQL: '+cause+' persists a usable review and only its current click creates one trip',async()=>{
+ const f=await fixture();try{
+  await f.prepare();await f.db.exec('UPDATE taxi_bot_channels SET base_cents=5500');
+  if(cause==='expired_button')await f.db.query("UPDATE taxi_bot_sessions SET draft=jsonb_set(draft,'{expiresAt}',to_jsonb((clock_timestamp()-interval '1 minute')::text))WHERE customer=$1",[customer]);
+  if(cause==='long_review')await f.db.query('UPDATE taxi_bot_sessions SET draft=draft||$1::jsonb WHERE customer=$2',[{name:('Mariana '.repeat(10)).trim(),pickupText:'Referencia '.repeat(40).slice(0,400),destination:null,destinationText:'Destino '.repeat(50)},customer]);
+  let quotes=0,assignments=0,interpretations=0;
+  const channel:TaxiChannel={tenantId:tenant,waba,enabled:true,name:'Base sintética',city:'Comitán',centerLat:16.25,centerLng:-92.13,radiusKm:20,dispatcher:null,model:'fixture',baseCents:5500,perKmCents:null,pricingMode:'h3_zone_max'};
+  const services:TaxiServices={interpret:async current=>{interpretations++;assert.equal(current,'No entendí');if(cause==='interpreter_failure')throw Error('Declared interpreter outage');return{intent:'provide',fields:{}};},resolve:async()=>{throw Error('Recovery does not invent a new endpoint');},quote:async()=>{quotes++;return cause==='long_review'?5500:6500;},candidates:async()=>{assignments++;return[{deviceId:1,name:'Unidad 1'}];},question:async()=>{throw Error('Declared composition outage');}};
+  const turn=async(event:Record<string,unknown>)=>{
+   const claim=await f.begin(event.eventId);assert.equal(claim.state,'proceed');assert.ok(Array.isArray(claim.messages));const session=parseSession(claim.session),trace=new TaxiTurnTrace(session,Date.now());
+   const d=await coordinateTaxi(claim.messages.map(item=>parseStoredInbound(item,Date.now())),session,channel,trace.services(services),Date.now()),payload={...d,audit:trace.packet(d)};
+   assert.equal(await f.scalar('SELECT taxi_bot_trace_packet_valid($1)',[payload.audit]),true);const result=await f.commit(claim.eventId,claim,payload);assert.equal(result.state,'committed');return{d,claim,payload};
+  };
+  const recovered=await turn(cause==='expired_button'?await f.enqueueButton():await f.enqueue('No entendí'));
+  assert.equal(recovered.d.action,'draft');assert.ok(recovered.d.draft.confirmation);assert.notEqual(recovered.d.draft.confirmation,f.draft.confirmation);assert.deepEqual(recovered.d.draft.origin,f.draft.origin);assert.deepEqual(recovered.d.draft.destination,cause==='long_review'?null:f.draft.destination);assert.equal(recovered.d.draft.pickupMessageId,f.draft.pickupMessageId);assert.equal(quotes,1);assert.equal(assignments,0);assert.equal(interpretations,cause==='expired_button'?0:1);
+  if(cause==='long_review'){
+   assert.equal(recovered.d.messages.length,2);assert.equal(recovered.d.draft.destinationText,'Destino '.repeat(50));
+   const outbox=await f.db.query<{body:unknown}>('SELECT body FROM taxi_bot_outbox WHERE destination=$1 ORDER BY sequence',[customer]);assert.equal(outbox.rows.length,2);
+   assert.equal(f.obj(outbox.rows[0].body).text,recovered.d.messages[0].text);assert.deepEqual(f.obj(outbox.rows[1].body).buttons,recovered.d.messages[1].buttons);
+   assert.equal(await f.scalar("SELECT count(*)::int FROM taxi_bot_outbox WHERE CASE WHEN jsonb_typeof(body->'buttons')='array' THEN jsonb_array_length(body->'buttons')>0 ELSE false END AND length(body->>'text')>1024"),0);
+  }
+  assert.equal(await f.scalar("SELECT draft->>'confirmation' FROM taxi_bot_sessions WHERE customer=$1",[customer]),recovered.d.draft.confirmation);
+  assert.equal(await f.scalar('SELECT count(*)::int FROM viajes'),0);assert.equal(await f.scalar('SELECT count(*)::int FROM taxi_bot_offers'),0);
+  const old=await turn(await f.enqueueButton());assert.equal(old.d.reason,'stale_confirmation');assert.equal(old.d.action,'reply');assert.equal(old.d.draft.confirmation,recovered.d.draft.confirmation);assert.equal(quotes,1);assert.equal(assignments,0);
+  const accepted=await turn(await f.enqueueButton(customer,recovered.d.draft.confirmation));assert.equal(accepted.d.action,'confirm');assert.equal(assignments,1);assert.equal(quotes,2);assert.equal(await f.scalar('SELECT count(*)::int FROM viajes'),1);assert.equal(await f.scalar('SELECT count(*)::int FROM taxi_bot_offers'),1);
+  assert.equal((await f.commit(accepted.claim.eventId,accepted.claim,accepted.payload)).state,'replay');assert.equal(await f.scalar('SELECT count(*)::int FROM viajes'),1);assert.equal(await f.scalar('SELECT count(*)::int FROM taxi_bot_offers'),1);
+ }finally{await f.db.close();}
+});
+
 test('pickup context SQL: fragmented pickup and destination clarification keep one native pin and reject the older summary',async()=>{
  const f=await fixture();try{
   await f.seedH3();let assignments=0;

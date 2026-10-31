@@ -60,7 +60,7 @@ Deno.test('stale buttons and a confirmation beside a correction never dispatch',
   m.button='txc_'+s.draft.confirmation;const mixed=await coordinateTaxi([m,message('Mejor otro destino')],s,channel,f.services,now);equal(mixed.action,'draft');equal(mixed.draft.confirmation,null);equal(f.calls().candidateCalls,0);
 });
 Deno.test('missing confirmation cannot book and expired consent refreshes review without model consent',async()=>{
-  const f=fixture({intent:'confirm',fields:{}});equal((await f.run('Sí')).action,'reply');const s=session(true);s.draft.expiresAt=new Date(now-1).toISOString();const refreshed=await f.run('Sí',s);equal(refreshed.action,'draft');assert(refreshed.draft.confirmation!==s.draft.confirmation);equal(f.calls().candidateCalls,0);equal(f.calls().calls,0);
+  const f=fixture({intent:'confirm',fields:{}}),missing=await f.run('Sí');equal(missing.action,'draft');equal(missing.messages[0].locationRequest,'origin');equal(missing.draft.confirmation,null);const s=session(true);s.draft.expiresAt=new Date(now-1).toISOString();const refreshed=await f.run('Sí',s);equal(refreshed.action,'draft');assert(refreshed.draft.confirmation!==s.draft.confirmation);equal(f.calls().candidateCalls,0);equal(f.calls().calls,0);
 });
 Deno.test('a live ride returns persisted status without requesting a second taxi',async()=>{
   const f=fixture(),s=session(true);s.active={id:crypto.randomUUID(),state:'buscando_conductor',taxiName:null};const d=await f.run('Mándame otro',s);equal(d.action,'reply');assert(d.messages[0].text.includes('Todavía no hay una unidad confirmada'));equal(f.calls().calls,0);
@@ -82,8 +82,8 @@ Deno.test('native location never guesses whether a completed draft means pickup 
   const f=fixture(),m=message('');m.type='location';m.location={lat:16.255,lng:-92.135};const d=await coordinateTaxi([m],session(true),channel,f.services,now);equal(d.reason,'location_target_unclear');equal(d.draft.confirmation,null);
 });
 Deno.test('human ownership suppresses model and automated replies',async()=>{const f=fixture(),s=session(true);s.mode='human';const d=await f.run('Hola',s);equal(d.messages,[]);equal(f.calls().calls,0);});
-Deno.test('model failure preserves fields and invalidates the confirmation',async()=>{
-  const f=fixture();f.services.interpret=async()=>{throw new Error('fixture failure');};const s=session(true),d=await f.run('Mejor recoge en otra calle',s);equal(d.action,'draft');equal(d.draft.origin,s.draft.origin);equal(d.draft.confirmation,null);equal(f.calls().candidateCalls,0);
+Deno.test('model failure preserves fields, explains the unapplied change and requires a new review button',async()=>{
+  const f=fixture();f.services.interpret=async()=>{throw new Error('fixture failure');};const s=session(true),d=await f.run('Mejor recoge en otra calle',s);equal(d.action,'draft');equal(d.draft.origin,s.draft.origin);equal(d.draft.destination,s.draft.destination);equal(d.draft.name,s.draft.name);assert(d.draft.confirmation&&d.draft.confirmation!==s.draft.confirmation);assert(d.messages[0].text.includes('No pude aplicar tu último mensaje'));assert(d.messages[0].buttons?.some(button=>button.id==='txc_'+d.draft.confirmation));equal(f.calls().candidateCalls,0);
 });
 Deno.test('fleet failure is a human review, never a fictitious booking success',async()=>{const f=fixture();f.services.candidates=async()=>{throw new Error('fixture fleet failure');};const s=session(true);const d=await coordinateTaxi([{...message(''),type:'button',button:'txc_'+s.draft.confirmation}],s,channel,f.services,now);equal(d.action,'human');assert(!d.messages[0].text.includes('registrada'));});
 Deno.test('native inbound requires a stable provider identity, valid sender and source timestamp',()=>{

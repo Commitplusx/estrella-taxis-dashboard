@@ -2,6 +2,8 @@
 
 Motor: `taxi-bot-v20-compound-turns`. Proyecto independiente: `izrsxygazsalfhpaualj`.
 
+Esta nota conserva la evidencia de v20. La revisión posterior del flujo y su publicación se documentan en [STELLAR_CONVERSATION_RECOVERY.md](STELLAR_CONVERSATION_RECOVERY.md).
+
 ## Qué se comprobó
 
 Se añadió una suite determinista de 16,326 casos, además de la matriz previa de estados, consentimiento y fallos. Su producto principal cruza dos papeles de ubicación, cuatro formas de indicar cada papel, ocho nombres, ocho lugares/referencias, seis órdenes de texto y cinco formas de recibir el pin. Otras 768 combinaciones cubren dos pines, etiquetas antes/después, orden inverso, posición del nombre y borrador previo. También verifica control humano, viaje activo, fallos del intérprete, negaciones, preguntas, citas y correcciones posteriores al pin.

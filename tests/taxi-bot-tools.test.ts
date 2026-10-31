@@ -527,7 +527,9 @@ Deno.test("taxi tools: correction plus price question changes only pickup and in
   equal(f.resolutions, []);
   equal(f.counts(), { modelCalls: 1, fleetCalls: 0, quoteCalls: 0 });
   const second = await f.run("Sí", { ...before, draft: decision.draft });
-  equal(second.action, "reply");
+  equal(second.action, "draft");
+  equal(second.messages[0].locationRequest,"origin");
+  equal(second.draft.confirmation,null);
   equal(f.counts(), { modelCalls: 1, fleetCalls: 0, quoteCalls: 0 });
 });
 Deno.test("taxi tools: saved-route quote needs no repeated fields or booking", async () => {
@@ -538,7 +540,7 @@ Deno.test("taxi tools: saved-route quote needs no repeated fields or booking", a
   equal(f.resolutions, []);
   equal(f.counts(), { modelCalls: 1, fleetCalls: 0, quoteCalls: 1 });
 });
-Deno.test("taxi tools: malformed update preserves saved data, revokes consent and runs no location or fleet service", async () => {
+Deno.test("taxi tools: malformed update applies no fields; the saved route gets a new verified review and no dispatch", async () => {
   const f = harness(
     completion("actualizar_recorrido", {
       fields: { origin: { value: "Otro lugar", evidence: "Inventado" } },
@@ -547,9 +549,13 @@ Deno.test("taxi tools: malformed update preserves saved data, revokes consent an
   const before = completeSession(), d = await f.run("Cambia el lugar", before);
   equal(d.reason, "interpretation_failed");
   equal(d.draft.origin, before.draft.origin);
-  equal(d.draft.confirmation, null);
+  equal(d.draft.destination,before.draft.destination);
+  equal(d.draft.name,before.draft.name);
+  assert(d.draft.confirmation&&d.draft.confirmation!==before.draft.confirmation);
+  assert(d.messages[0].text.includes('No pude aplicar tu último mensaje'));
+  assert(d.messages[0].buttons?.some(button=>button.id==='txc_'+d.draft.confirmation));
   equal(f.resolutions, []);
-  equal(f.counts(), { modelCalls: 1, fleetCalls: 0, quoteCalls: 0 });
+  equal(f.counts(), { modelCalls: 1, fleetCalls: 0, quoteCalls: 1 });
 });
 Deno.test("taxi tools: parallel proposals execute neither valid nor invalid half", async () => {
   const raw = {
@@ -567,9 +573,11 @@ Deno.test("taxi tools: parallel proposals execute neither valid nor invalid half
       },
     }],
   };
-  const f = harness(raw), d = await f.run("Cotízame");
+  const f = harness(raw), before=completeSession(),d = await f.run("Cotízame",before);
   equal(d.reason, "interpretation_failed");
-  equal(f.counts(), { modelCalls: 1, fleetCalls: 0, quoteCalls: 0 });
+  equal(d.draft.origin,before.draft.origin);equal(d.draft.destination,before.draft.destination);equal(d.draft.name,before.draft.name);equal(f.resolutions,[]);
+  assert(d.draft.confirmation&&d.draft.confirmation!==before.draft.confirmation);assert(d.messages[0].text.includes('No pude aplicar tu último mensaje'));
+  equal(f.counts(), { modelCalls: 1, fleetCalls: 0, quoteCalls: 1 });
 });
 Deno.test("taxi tools: quoting without H3 coverage delegates to the base, never invents a price", async () => {
   const f = harness(completion("cotizar_viaje", { fields: {} }));

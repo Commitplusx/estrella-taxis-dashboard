@@ -1,6 +1,6 @@
 import {assertTaxiTransition,conversationPhase,hasDestination,pendingLocalityContext}from'./stateMachine.ts';
 import type{ModelMetadata}from'./trace.ts';
-import { emptyDraft, type Candidate, type Draft, type Interpretation, type Place, type TaxiChannel, type TaxiDecision, type TaxiInbound, type TaxiSession,type TaxiTurnContext,type FieldValue } from './contracts.ts';
+import { emptyDraft, type Candidate, type Draft, type Interpretation, type Place, type TaxiChannel, type TaxiDecision, type TaxiInbound, type TaxiSession,type TaxiTurnContext,type FieldValue,type TaxiMessage } from './contracts.ts';
 import { activeRideChange, cancellationQuestion, cancelsTaxi, confirmsTaxi, courtesyOnly, declinesTaxi, locationRole, locationRoleOnly, locationRoleConflict, refersToSharedLocation, needsHuman, normalize, unsupportedRide,resetCommand,cancelDraftCommand,draftLocationRequest,defersDestination } from './policy.ts';
 import { getDistanceFromLatLonInKm } from '../../algorithms/headingMatcher.ts';
 import { taxiH3Scope } from './h3.ts';
@@ -32,6 +32,14 @@ export function taxiSummary(d:Draft,includeFare=false):string {
       :`💵 *Tarifa estimada del recorrido:* $${(d.quoteCents/100).toFixed(2)} MXN.`):null;
   const review=name?`¿Todo está correcto, ${name}? 😊`:'¿Todo está correcto? 😊';
   return `${greeting}\n\n${pickup}\n\n${destination}${price?`\n\n${price}`:''}\n\n${review}\nSi es así, toca *Confirmar viaje* aquí abajo y enseguida buscamos un taxi para ti. 🚕`;
+}
+/** Persist separate outbox messages instead of submitting an oversized interactive body. */
+function summaryMessages(to:string,draft:Draft,includeFare=false,preamble=''):TaxiMessage[]{
+  const text=preamble+taxiSummary(draft,includeFare),buttons=[{id:'txc_'+draft.confirmation,title:'Confirmar viaje'}];
+  return text.length<=1024?[{to,text,buttons}]:[
+    {to,text},
+    {to,text:'¿Todo está correcto? 😊 Revisa los datos de arriba y toca *Confirmar viaje* para que busquemos un taxi para ti. 🚕',buttons},
+  ];
 }
 function live(t:TaxiSession['active']):boolean{return t?.state==='buscando_conductor'||t?.state==='en_camino';}
 function within(p:Place,c:TaxiChannel):boolean{return getDistanceFromLatLonInKm(p.lat,p.lng,c.centerLat,c.centerLng)<=c.radiusKm;}
@@ -104,12 +112,17 @@ export async function coordinateTaxi(messages:TaxiInbound[],session:TaxiSession,
     let question:string|null=null;try{question=await services.question(kind,current,channel,signal,context);}catch{/* The server's validated decision and response remain authoritative if composition fails. */}
     if(question){if(hasConfirmationSummary)decision.messages.unshift({to:outbound.to,text:question});else decision.messages[0]={...outbound,text:question};}
   }
+  if(messages.some(message=>message.type==='unsupported')&&decision.messages.length){
+    const note='Todavía no puedo leer audios, fotos o archivos; escríbeme lo que contienen. ',first=decision.messages[0];
+    if(note.length+first.text.length<=1024)first.text=note+first.text;
+    else decision.messages.push({to:first.to,text:note.trim()});
+  }
   assertTaxiTransition(session,messages,decision,now);
   return decision;
 }
 async function decideTaxi(messages:TaxiInbound[],session:TaxiSession,channel:TaxiChannel,services:TaxiServices,now:number,signal?:AbortSignal):Promise<TaxiDecision> {
   if(messages.length<1||messages.length>20)throw new Error('Invalid taxi turn size.');
-  const latest=messages[messages.length-1],current=messages.map((m)=>m.text).filter(Boolean).join('\n');
+  const latest=messages[messages.length-1],current=messages.filter(m=>m.type!=='unsupported').map((m)=>m.text).filter(Boolean).join('\n');
   const base:TaxiDecision={action:'reply',draft:{...session.draft},confirmation:null,tripId:null,offerId:null,candidates:[],messages:[],reason:'reply'};
   const reply=(s:string,reason='reply'):TaxiDecision=>({...base,reason,messages:[{to:latest.from,text:s}]});
   const human=(reason:string,s='Voy a pasar tu mensaje a la base para que te ayuden.',draft:Draft=session.draft):TaxiDecision=>({...reply(s,reason),action:'human',draft:{...draft,confirmation:null,expiresAt:null,destinationPrompt:null}});
@@ -120,7 +133,7 @@ async function decideTaxi(messages:TaxiInbound[],session:TaxiSession,channel:Tax
   const askDestination=(d:Draft,reason='missing_destination'):TaxiDecision=>{
     const token=crypto.randomUUID();return{...base,action:'draft',reason,draft:{...d,fareMode:'unquoted',confirmation:null,expiresAt:new Date(now+10*60000).toISOString(),quoteCents:null,quoteH3:null,awaitingLocation:'destination',pendingLocation:null,destinationDeferred:false,destinationPrompt:token},messages:[{to:latest.from,text:'¿A dónde te llevamos? Puedes escribir el destino, compartir su ubicación o decirlo después al chofer. 🚕',buttons:[{id:'txd_'+token,title:'Se lo digo al chofer'}]}]};
   };
-  const clarifyPending=(reason:string,draft:Draft=session.draft):TaxiDecision=>{
+  const clarifyPending=async(reason:string,draft:Draft=session.draft):Promise<TaxiDecision>=>{
     const d:Draft={...draft,confirmation:null,expiresAt:null,destinationPrompt:null};
     const phase=conversationPhase({...session,draft:d},now);
     if(reason==='unclear_name'||reason==='pickup_reference_too_long')return {...reply(reason==='unclear_name'?'¿Ese es el nombre del pasajero? ¿A nombre de quién queda el viaje?':'La referencia quedó muy larga. ¿Me la dices más breve para que el conductor pueda identificarte?',reason),action:'draft',draft:d};
@@ -132,8 +145,10 @@ async function decideTaxi(messages:TaxiInbound[],session:TaxiSession,channel:Tax
         :phase==='origin'?'Necesito el pin GPS donde te recogemos. Usa el botón; conservo la dirección escrita como referencia.':'El destino es opcional. Si quieres precisarlo, dime a qué colonia o dirección vas; su pin es opcional.';
       return requestLocation(d,phase,reason,body);
     }
-    const body=phase==='name'?'¿A nombre de quién queda el viaje? 😊':phase==='location_role'?'¿El pin es donde te recogemos o a dónde vas? 🚕':'¿Qué dato del recorrido quieres corregir: la recogida, el destino o el nombre? 😊';
-    return {...reply(body,reason),action:'draft',draft:d};
+    if(phase==='name'||phase==='location_role')return {...reply(phase==='name'?'¿A nombre de quién queda el viaje? 😊':'¿El pin es donde te recogemos o a dónde vas? 🚕',reason),action:'draft',draft:d};
+    // A fully collected route needs a usable review, not an open-ended correction loop.
+    // Re-quote before issuing a new button; this is never permission to dispatch.
+    return prepareSummary(d,reason);
   };
   const prepareSummary=async(draft:Draft,reason:string,verifiedQuote?:{cents:number|null}):Promise<TaxiDecision>=>{
     const d:Draft={...draft,fareMode:'quoted',confirmation:null,expiresAt:null,quoteCents:null,quoteH3:null};
@@ -154,7 +169,8 @@ async function decideTaxi(messages:TaxiInbound[],session:TaxiSession,channel:Tax
       return {...reply(price+'¿A nombre de quién pedimos el taxi? 😊',reason==='service_question'?'service_question':'missing_name'),action:'draft',draft:{...d,quoteCents,quoteBasis,quoteH3:channel.pricingMode==='h3_zone_max'?taxiH3Scope(d.origin,d.destination??d.origin):null}};
     }
     const summary:Draft={...d,quoteCents,quoteBasis,quoteH3:channel.pricingMode==='h3_zone_max'?taxiH3Scope(d.origin,d.destination??d.origin):null,confirmation:crypto.randomUUID(),expiresAt:new Date(now+10*60000).toISOString(),awaitingLocation:null,pendingLocation:null};
-    return {...base,action:'draft',draft:summary,reason,messages:[{to:latest.from,text:taxiSummary(summary,reason==='quote_only'),buttons:[{id:'txc_'+summary.confirmation,title:'Confirmar viaje'}]}]};
+    const preamble=['ambiguous_intent','interpretation_failed'].includes(reason)?'No pude aplicar tu último mensaje con certeza. Estos son los datos que siguen guardados; revísalos antes de confirmar.\n\n':'';
+    return {...base,action:'draft',draft:summary,reason,messages:summaryMessages(latest.from,summary,reason==='quote_only',preamble)};
   };
   const tariffReview=async(d:Draft):Promise<TaxiDecision|null>=>{
     if(!d.origin||d.origin.source!=='gps'||!d.pickupMessageId||d.fareMode!=='quoted'||d.quoteCents===null)return prepareSummary(d,'new_booking_requirements');
@@ -194,8 +210,13 @@ async function decideTaxi(messages:TaxiInbound[],session:TaxiSession,channel:Tax
     const driver=/^tx([arf])_([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/.exec(id);
     if(driver)return {...base,action:driver[1]==='a'?'driver_accept':driver[1]==='r'?'driver_reject':'driver_finish',offerId:driver[2],reason:'driver_button'};
     const confirm=/^txc_([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/.exec(id);
-    if(!confirm||confirm[1]!==session.draft.confirmation||!session.draft.expiresAt||Date.parse(session.draft.expiresAt)<=now)return reply('Ese botón ya no corresponde al viaje actual. Revisa el resumen más reciente.','stale_confirmation');
-    if(live(session.active))return reply('Ya tienes una solicitud activa. La base sigue pendiente de ese viaje.','active_trip');
+    if(confirm&&live(session.active))return reply('Ya tienes una solicitud activa. La base sigue pendiente de ese viaje.','active_trip');
+    if(!confirm)return reply('Ese botón ya no corresponde al viaje actual. Revisa el resumen más reciente.','stale_confirmation');
+    if(confirm[1]!==session.draft.confirmation||!session.draft.expiresAt||Date.parse(session.draft.expiresAt)<=now){
+      // Replaying an old button must not invalidate another still-current button.
+      if(conversationPhase(session,now)==='review')return {...base,reason:'stale_confirmation',messages:summaryMessages(latest.from,session.draft)};
+      return clarifyPending('stale_confirmation');
+    }
     if(!hasDestination(session.draft)&&session.draft.destinationDeferred!==true)return prepareSummary(session.draft,'destination_required');
     if(!session.draft.name||!session.draft.origin||session.draft.awaitingLocation||session.draft.pendingLocation)return reply('Faltan datos del viaje. Revisemos el punto de recogida y el nombre.','incomplete_draft');
     const review=await tariffReview(session.draft);if(review)return review;
@@ -203,7 +224,6 @@ async function decideTaxi(messages:TaxiInbound[],session:TaxiSession,channel:Tax
     try{candidates=await services.candidates(session.draft.origin,channel,signal);}catch{return human('fleet_unavailable','No pude consultar las unidades. Voy a pasar el viaje a la base para que lo revisen.');}
     return {...base,action:'confirm',confirmation:confirm[1],candidates,reason:'button_confirmation'};
   }
-  if(messages.some((m)=>m.type==='unsupported'))return reply('Por ahora mándame la dirección por texto o comparte tu ubicación desde WhatsApp.','unsupported_media');
   if(unsupportedRide(current))return human('special_ride','Ese servicio necesita revisión de la base. Les paso tu mensaje para que te confirmen si pueden atenderlo.');
   if(cancelsTaxi(current))return live(session.active)?{...base,action:'cancel',tripId:session.active?.id??null,reason:'explicit_cancellation'}:{...reply('No tienes un viaje activo para cancelar.','no_active_trip'),action:'draft',draft:emptyDraft()};
   if(messages.every(m=>m.type==='text')&&cancelDraftCommand(current))return live(session.active)?reply('Para cancelar tu viaje actual, escribe «Cancela mi taxi».','cancellation_question'):{...reply('Descarté el borrador. No se solicitó ningún taxi. Cuando quieras empezar de nuevo, aquí estoy. 🙂','draft_cancelled'),action:'draft',draft:emptyDraft()};
@@ -212,12 +232,13 @@ async function decideTaxi(messages:TaxiInbound[],session:TaxiSession,channel:Tax
     if(activeRideChange(current)||messages.some((m)=>m.location!==null))return human('active_trip_change','Tu viaje ya está solicitado. Paso el cambio a la base para que lo revisen antes de mover la unidad.');
     return reply(session.active?.state==='en_camino'?`🚕 La unidad ${session.active.taxiName??'asignada'} ya aceptó tu viaje. Aún no tengo una llegada confirmada.`:'🚕 Tu solicitud sigue en búsqueda. Todavía no hay una unidad confirmada.','active_status');
   }
+  if(messages.every((m)=>m.type==='unsupported'))return clarifyPending('unsupported_media');
   const requestedLocation=messages.every(m=>m.type==='text')&&!session.draft.pendingLocation?draftLocationRequest(current):null;
   if(requestedLocation)return requestedLocation==='destination'?askDestination({...session.draft,destination:null,destinationText:null,destinationArea:null}):requestLocation(session.draft,'origin','edit_location_requested','¿Me compartes tu nueva ubicación con el botón para pasar por ti?');
   if(messages.every(m=>m.type==='text')&&session.draft.awaitingLocation==='destination'&&session.draft.destinationPrompt&&session.draft.expiresAt&&Date.parse(session.draft.expiresAt)>now&&defersDestination(current))return prepareSummary({...session.draft,destinationDeferred:true,destinationPrompt:null,awaitingLocation:null,expiresAt:null},'destination_deferred');
   if(messages.every((m)=>m.type==='text'&&(confirmsTaxi(m.text)||courtesyOnly(m.text)))&&messages.some((m)=>confirmsTaxi(m.text))) {
     const d=session.draft;
-    if(!d.name||!d.origin||d.pendingLocation||d.awaitingLocation)return reply('Todavía faltan datos por aclarar. Necesito el pin de recogida y el nombre; después toca «Confirmar viaje».','no_current_confirmation');
+    if(!d.name||!d.origin||d.pendingLocation||d.awaitingLocation)return clarifyPending('no_current_confirmation');
     return prepareSummary(d,'button_confirmation_required');
   }
   if(messages.every((m)=>m.type==='text'&&courtesyOnly(m.text)))return reply('¡Con gusto! 😊 Aquí sigo por si necesitas algo más.','courtesy');
@@ -269,7 +290,7 @@ async function decideTaxi(messages:TaxiInbound[],session:TaxiSession,channel:Tax
   for(const field of ['origin','destination'] as const){const proposed=interpretation.fields[field];if(proposed)textPositions[field]=evidencedMessageIndex(messages,proposed);}
   for(const field of ['origin','destination'] as const){
     const proposed=interpretation.fields[field];if(proposed?.refines===undefined)continue;
-    if(!pendingLocality||pendingLocality.field!==field||pendingLocality.query!==proposed.refines)return clarifyPending('ambiguous_intent');
+    if(!pendingLocality||pendingLocality.field!==field||pendingLocality.query!==proposed.refines)return requestLocation(session.draft,pendingLocality?.field??field,'ambiguous_intent','No pude relacionar esa referencia con el lugar pendiente. ¿Me confirmas el lugar y una referencia?');
     const query=pendingLocality.query,answer=proposed.value,combined=normalize(query)===normalize(answer)?query:`${query}, ${answer}`;
     if(combined.length>400)return clarifyPending('ambiguous_intent');
     localityAnswer={field,query,answer,combined};
@@ -361,16 +382,17 @@ async function decideTaxi(messages:TaxiInbound[],session:TaxiSession,channel:Tax
   if(interpretation.intent==='question'){
     if(changed)return prepareSummary(d,'service_question');
     if(!d.origin||d.origin.source!=='gps')return requestLocation(d,'origin','service_question');
-    if(!hasDestination(d)&&d.destinationDeferred!==true&&!d.destinationPrompt)return askDestination(d,'service_question');
+    if(!hasDestination(d)&&d.destinationDeferred!==true&&(!d.destinationPrompt||!d.expiresAt||Date.parse(d.expiresAt)<=now))return askDestination(d,'service_question');
+    if(!['review','destination'].includes(conversationPhase({...session,draft:d},now)))return clarifyPending('service_question',d);
     const buttons=d.destinationPrompt?[{id:'txd_'+d.destinationPrompt,title:'Se lo digo al chofer'}]:undefined;
     return {...reply('No tengo esa información confirmada. La base puede ayudarte a consultarla; tus datos del viaje siguen guardados.','service_question'),messages:[{to:latest.from,text:'No tengo esa información confirmada. La base puede ayudarte a consultarla; tus datos del viaje siguen guardados.',...(buttons?{buttons}:{})}]};
   }
   if(interpretation.intent==='request')return prepareSummary(d,'taxi_requested');
   if(interpretation.intent==='smalltalk'&&!changed&&!d.origin&&!d.pendingLocation&&d.awaitingLocation!=='choice')return requestLocation(d,'origin','greeting',`¡Hola! 😊 Somos ${channel.name}. ¿Me compartes tu ubicación con el botón para que pasemos por ti? Puedes agregar una referencia para encontrarte más fácil.`);
-  if(!changed&&interpretation.intent==='smalltalk')return reply('Aquí sigo 😊. Si quieres cambiar algo del viaje, dime qué dato revisamos.','smalltalk');
+  if(!changed&&interpretation.intent==='smalltalk')return clarifyPending('smalltalk',d);
   if(!changed&&interpretation.intent!=='quote'){
     if(!d.pendingLocation&&d.awaitingLocation!=='choice'&&(!d.origin||d.origin.source!=='gps'))return requestLocation(d,'origin','no_new_fields');
-    return reply('Dime dónde te recogemos o qué dato del viaje quieres cambiar.','no_new_fields');
+    return clarifyPending('no_new_fields',d);
   }
   return prepareSummary(d,interpretation.intent==='quote'?'quote_only':'summary');
 }
