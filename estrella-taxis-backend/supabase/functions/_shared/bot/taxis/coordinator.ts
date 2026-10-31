@@ -12,7 +12,7 @@ export interface TaxiServices {
   interpret:(text:string,session:TaxiSession,channel:TaxiChannel,signal?:AbortSignal,observe?:(metadata:ModelMetadata)=>void,turn?:TaxiTurnContext)=>Promise<Interpretation>;
   resolve:(text:string,channel:TaxiChannel,signal?:AbortSignal,area?:NeighborhoodArea|null,observe?:(metadata:ModelMetadata)=>void)=>Promise<LocationResult>;
   quote:(origin:Place,destination:Place,channel:TaxiChannel,signal?:AbortSignal,destinationArea?:NeighborhoodArea|null)=>Promise<number|null>;
-  candidates:(origin:Place,channel:TaxiChannel,signal?:AbortSignal)=>Promise<Candidate[]>;
+  candidates:(origin:Place,channel:TaxiChannel,signal?:AbortSignal,excluded?:readonly number[])=>Promise<Candidate[]>;
   question?:(kind:TaxiQuestion,current:string,channel:TaxiChannel,signal?:AbortSignal,context?:TaxiReplyContext)=>Promise<string|null>;
 }
 export function taxiSummary(d:Draft,includeFare=false):string {
@@ -221,7 +221,7 @@ async function decideTaxi(messages:TaxiInbound[],session:TaxiSession,channel:Tax
     if(!session.draft.name||!session.draft.origin||session.draft.awaitingLocation||session.draft.pendingLocation)return reply('Faltan datos del viaje. Revisemos el punto de recogida y el nombre.','incomplete_draft');
     const review=await tariffReview(session.draft);if(review)return review;
     let candidates:Candidate[]=[];
-    try{candidates=await services.candidates(session.draft.origin,channel,signal);}catch{return human('fleet_unavailable','No pude consultar las unidades. Voy a pasar el viaje a la base para que lo revisen.');}
+    try{candidates=await services.candidates(session.draft.origin,channel,signal);}catch{return {...base,action:'confirm',confirmation:confirm[1],candidates:[],reason:'fleet_lookup_deferred'};}
     return {...base,action:'confirm',confirmation:confirm[1],candidates,reason:'button_confirmation'};
   }
   if(unsupportedRide(current))return human('special_ride','Ese servicio necesita revisión de la base. Les paso tu mensaje para que te confirmen si pueden atenderlo.');
@@ -230,7 +230,7 @@ async function decideTaxi(messages:TaxiInbound[],session:TaxiSession,channel:Tax
   if(cancellationQuestion(current))return reply(live(session.active)?'¿Quieres cancelar tu solicitud actual? Si es así, escribe «Cancela mi taxi».':'Todavía no tienes un taxi solicitado para cancelar.','cancellation_question');
   if(live(session.active)) {
     if(activeRideChange(current)||messages.some((m)=>m.location!==null))return human('active_trip_change','Tu viaje ya está solicitado. Paso el cambio a la base para que lo revisen antes de mover la unidad.');
-    return reply(session.active?.state==='en_camino'?`🚕 La unidad ${session.active.taxiName??'asignada'} ya aceptó tu viaje. Aún no tengo una llegada confirmada.`:'🚕 Tu solicitud sigue en búsqueda. Todavía no hay una unidad confirmada.','active_status');
+    return reply(session.active?.state==='en_camino'?`🚕 La unidad ${session.active.taxiName??'asignada'} ya aceptó tu viaje. Aún no tengo una llegada confirmada.`:session.active?.dispatchAttention?'🚕 Tu solicitud sigue registrada y necesita revisión de la base. Todavía no hay una unidad confirmada.':'🚕 Tu solicitud sigue en búsqueda. Todavía no hay una unidad confirmada.','active_status');
   }
   if(messages.every((m)=>m.type==='unsupported'))return clarifyPending('unsupported_media');
   const requestedLocation=messages.every(m=>m.type==='text')&&!session.draft.pendingLocation?draftLocationRequest(current):null;

@@ -2,7 +2,7 @@ import { record, TrackingError, positiveId } from '../../tracking/contracts.ts';
 import { taxiH3Cell, type H3QuoteScope } from './h3.ts';
 import { parseNeighborhoodArea, streetReference, type NeighborhoodArea } from './neighborhoodContracts.ts';
 export { record };
-export const TAXI_BOT_VERSION='taxi-bot-v21-state-recovery';
+export const TAXI_BOT_VERSION='taxi-bot-v22-dispatch-rounds';
 export interface TaxiChannel {
   tenantId:string; waba:string; enabled:boolean; name:string; city:string;
   centerLat:number; centerLng:number; radiusKm:number; dispatcher:string|null;
@@ -19,7 +19,7 @@ export interface Draft {
   pickupText?:string|null;pickupMessageId?:string|null;destinationText?:string|null;quoteBasis?:'pickup'|'route'|null;
   destinationDeferred?:boolean;destinationPrompt?:string|null;
 }
-export interface Trip {id:string;state:'buscando_conductor'|'en_camino'|'completado'|'cancelado'|'cancelado_timeout';taxiName:string|null}
+export interface Trip {id:string;state:'buscando_conductor'|'en_camino'|'completado'|'cancelado'|'cancelado_timeout';taxiName:string|null;dispatchAttention?:boolean}
 export interface TaxiSession {revision:number;mode:'bot'|'human';draft:Draft;active:Trip|null;history:History[]}
 export interface History {role:'user'|'assistant';content:string}
 export interface TaxiInbound {
@@ -109,7 +109,8 @@ export function parseSession(value:unknown):TaxiSession {
   }
   let active:Trip|null=null;
   if(value.active!==null) {const a=value.active;if(!record(a)||!text(a.id,40)||!['buscando_conductor','en_camino','completado','cancelado','cancelado_timeout'].includes(String(a.state))||!(a.taxiName===null||text(a.taxiName,120)))throw new TrackingError(502,'invalid_taxi_trip','El viaje guardado no es válido.');
-    const state=a.state;if(state==='buscando_conductor'||state==='en_camino'||state==='completado'||state==='cancelado'||state==='cancelado_timeout')active={id:String(a.id),state,taxiName:a.taxiName===null?null:String(a.taxiName)};
+    if(a.dispatchAttention!==undefined&&typeof a.dispatchAttention!=='boolean')throw new TrackingError(502,'invalid_taxi_trip','El estado de asignación no es válido.');
+    const state=a.state;if(state==='buscando_conductor'||state==='en_camino'||state==='completado'||state==='cancelado'||state==='cancelado_timeout')active={id:String(a.id),state,taxiName:a.taxiName===null?null:String(a.taxiName),...(a.dispatchAttention!==undefined?{dispatchAttention:a.dispatchAttention}:{})};
   }
   const originArea=parseNeighborhoodArea(d.originArea),destinationArea=parseNeighborhoodArea(d.destinationArea);
   if(d.destinationDeferred!==undefined&&typeof d.destinationDeferred!=='boolean'||d.destinationPrompt!==undefined&&d.destinationPrompt!==null&&(typeof d.destinationPrompt!=='string'||!/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(d.destinationPrompt)||awaitingLocation!=='destination'||d.confirmation!==null))throw new TrackingError(502,'invalid_taxi_destination_choice','La elección de destino no es válida.');

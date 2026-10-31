@@ -151,11 +151,11 @@ export class TaxiTurnTrace {
           () => base.quote(origin, destination, channel, signal, destinationArea),
           (value) => ({ amountCents: value }),
         ),
-      candidates: (origin, channel, signal) =>
+      candidates: (origin, channel, signal, excluded) =>
         this.run(
           "candidates",
           { origin },
-          () => base.candidates(origin, channel, signal),
+            () => base.candidates(origin, channel, signal, excluded),
           (value) => ({ candidateCount: value.length }),
         ),
     };

@@ -4,7 +4,8 @@ import { json, mapLimit, type Fetcher } from '../../tracking/http.ts';
 import type { TrackingStore } from '../../tracking/store.ts';
 import { coord, phone, record, text, parseInbound, parseSession, parseStoredInbound, type TaxiChannel } from './contracts.ts';
 import { coordinateTaxi, type TaxiServices } from './coordinator.ts';
-import { parseOutgoing, sendTaxiMessage, verifyYCloud } from './transport.ts';
+import { parseOutgoing, sendTaxiMessage, verifyYCloud,type TaxiOutgoing } from './transport.ts';
+import {parseDispatchClaims}from './dispatchContracts.ts';
 export interface TaxiEngineConfig {webhookSecret:string;workerSecret:string;ycloudKey:string;now:()=>number}
 export class TaxiEngine {
   private readonly store:TrackingStore;private readonly services:TaxiServices;private readonly config:TaxiEngineConfig;private readonly fetcher:Fetcher;
@@ -86,14 +87,38 @@ export class TaxiEngine {
     const claimed=await this.store.rpc('taxi_bot_outbox_claim',{p_tenant:tenant,p_waba:waba});
     if(!Array.isArray(claimed)||claimed.length>10)throw new TrackingError(502,'invalid_taxi_send_claim','La tanda de mensajes no es válida.');
     await mapLimit(claimed,3,async(raw)=>{
-      const out=parseOutgoing(raw);if(out.tenantId!==tenant||out.waba!==waba)throw new TrackingError(502,'taxi_outbox_scope','La salida pertenece a otro canal.');
-      const permitted=await this.store.rpc('taxi_bot_outbox_permitted',{p_id:out.id,p_lease:out.lease});
-      if(typeof permitted!=='boolean')throw new TrackingError(502,'taxi_access_unknown','No se pudo comprobar el permiso del destinatario.');
-      const result=permitted?await sendTaxiMessage(out,this.config.ycloudKey,this.fetcher):{state:'failed' as const,code:'outbox_no_longer_permitted'};
+      let out:TaxiOutgoing;
+      try{out=parseOutgoing(raw);}catch(error:unknown){
+        if(!record(raw)||raw.tenant_id!==tenant||raw.waba!==waba)throw new TrackingError(502,'taxi_outbox_scope','La salida no pertenece al canal.');
+        const saved=await this.store.rpc('taxi_bot_outbox_complete',{p_id:uuid(raw.id),p_lease:uuid(raw.lease),p_state:'failed',p_provider:null,p_error:safeErrorCode(error)});
+        console.error(JSON.stringify({event:'taxi_invalid_outbox_message',saved:saved===true,code:safeErrorCode(error)}));return;
+      }
+      if(out.tenantId!==tenant||out.waba!==waba)throw new TrackingError(502,'taxi_outbox_scope','La salida pertenece a otro canal.');
+      const permitted=await this.store.rpc('taxi_bot_dispatch_send_check',{p_id:out.id,p_lease:out.lease});
+      if(permitted==='paused'||permitted==='stale')return;
+      if(permitted!=='ready'&&permitted!=='denied')throw new TrackingError(502,'taxi_access_unknown','No se pudo comprobar el permiso del destinatario.');
+      const result=permitted==='ready'?await sendTaxiMessage(out,this.config.ycloudKey,this.fetcher):{state:'failed' as const,code:'outbox_no_longer_permitted'};
       const saved=await this.store.rpc('taxi_bot_outbox_complete',{p_id:out.id,p_lease:out.lease,p_state:result.state,p_provider:result.state==='accepted'?result.providerId:null,p_error:result.state==='accepted'?null:result.code});
       // A verified callback can win this race. No resend is attempted on a lost write response.
       if(saved!==true)console.warn(JSON.stringify({event:'taxi_send_result_unconfirmed',outbox:out.id}));
     });
+  }
+  async dispatch(signal?:AbortSignal):Promise<number>{
+    const claims=parseDispatchClaims(await this.store.rpc('taxi_bot_dispatch_claim',{}));let failed=0;
+    await mapLimit(claims,2,async claim=>{
+      let candidates:Awaited<ReturnType<TaxiServices['candidates']>>=[],error:string|null=null;
+      const deadline=AbortSignal.any([...(signal?[signal]:[]),AbortSignal.timeout(20000)]);
+      try{
+        const channel=await this.channel(claim.waba);
+        if(!channel||channel.tenantId!==claim.tenantId||!channel.enabled)error='channel_unavailable';
+        else{await this.permitted(channel);candidates=await this.services.candidates(claim.origin,channel,deadline,claim.excluded);}
+      }catch{error='fleet_unavailable';}
+      try{
+        const result=await this.store.rpc('taxi_bot_dispatch_complete',{p_trip:claim.tripId,p_lease:claim.lease,p_candidates:candidates,p_error:error});
+        if(!record(result)||!['stale','done','paused','offered','waiting','attention'].includes(String(result.state)))throw Error('invalid_dispatch_result');
+        console.info(JSON.stringify({event:'taxi_dispatch_round',state:result.state,offers:result.offers??0,round:result.round??null}));
+      }catch{failed++;console.error(JSON.stringify({event:'taxi_dispatch_result_unconfirmed',code:'dispatch_commit_unavailable'}));}
+    });return failed;
   }
   async tick(signal?:AbortSignal):Promise<{processed:number;deferred:number;failed:number}>{
     await this.store.rpc('taxi_bot_maintain',{});
@@ -105,6 +130,7 @@ export class TaxiEngine {
       try{const result=await this.process(e.id,signal);if(result==='deferred')deferred++;else processed++;}
       catch(error:unknown){failed++;console.error(JSON.stringify({event:'taxi_turn_failed',eventId:e.id,code:error instanceof TrackingError?error.code:'unexpected'}));}
     });
+    try{failed+=await this.dispatch(signal);}catch{failed++;console.error(JSON.stringify({event:'taxi_dispatch_claim_failed',code:'dispatch_queue_unavailable'}));}
     const outgoing=await this.store.read('taxi_bot_outbox',new URLSearchParams({select:'tenant_id,waba',state:'in.(pending,sending)',order:'created_at.asc',limit:'100'}));
     const channels=new Map<string,{tenant:string;waba:string}>();for(const o of outgoing){if(!record(o)||typeof o.tenant_id!=='string'||typeof o.waba!=='string')throw new TrackingError(502,'invalid_taxi_pending','Canal pendiente no válido.');channels.set(o.tenant_id+o.waba,{tenant:o.tenant_id,waba:o.waba});}
     await mapLimit([...channels.values()].slice(0,2),2,async(c)=>{

@@ -1,4 +1,5 @@
 import {taxiQualityRequest}from"./quality.ts";
+import {dispatchRequest}from './dispatch.ts';
 import { driverRequest } from './drivers.ts';
 import { accountRequest } from './accounts.ts';
 import { neighborhoodRequest } from './neighborhoods.ts';
@@ -388,6 +389,10 @@ export function createTaxiAdminHandler(
         }),
       );
       const channel = rows.length ? channelFromRow(rows[0]) : null;
+      if(raw.action==='dispatch_status'||raw.action==='dispatch_resume'){
+        if(!channel)throw new TrackingError(404,'channel_not_found','Primero guarda el WhatsApp de la base.');
+        return json(await dispatchRequest(raw,tenant,waba,identity.userId,scope.configure,deps.store));
+      }
       if(['neighborhoods','neighborhood_search','neighborhood_save','neighborhood_create'].includes(raw.action)){
         if(!channel)throw new TrackingError(404,'channel_not_found','Primero guarda el WhatsApp de la base.');
         return json(await neighborhoodRequest(raw,tenant,identity.userId,scope.configure,deps.store,record(rows[0])&&typeof rows[0].model==='string'?rows[0].model:'deepseek-chat',deps.neighborhoodModelKey??'',deps.neighborhoodFetcher??fetch,AbortSignal.any([req.signal,AbortSignal.timeout(15000)])));

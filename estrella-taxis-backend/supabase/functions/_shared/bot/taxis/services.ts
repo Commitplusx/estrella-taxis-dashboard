@@ -95,8 +95,9 @@ export function createTaxiServices(store:TrackingStore,fetcher:Fetcher,config:{m
       const meters=data.routes[0].legs[0].distance.value;if(typeof meters!=='number'||!Number.isFinite(meters)||meters<=0||meters>500000)return null;
       return Math.round(c.baseCents+c.perKmCents*meters/1000);
     },
-    candidates:async(origin,c,signal)=>{
-      const rows=await store.read('conductores',new URLSearchParams({select:'device_id,nombre,telefono_whatsapp',tenant_id:'eq.'+c.tenantId,activo:'eq.true',limit:'501'}));
+    candidates:async(origin,c,signal,excluded=[])=>{
+      const rows=await store.rpc('taxi_bot_dispatch_eligible',{p_tenant:c.tenantId,p_waba:c.waba,p_excluded:excluded});
+      if(!Array.isArray(rows))throw new TrackingError(502,'taxi_bad_driver','No se pudo validar la disponibilidad de la base.');
       if(rows.length>500)throw new TrackingError(413,'taxi_fleet_limit','La flota supera el límite del selector actual.');
       const allowed=new Set<number>();for(const r of rows){if(!record(r)||!positiveId(r.device_id))throw new TrackingError(502,'taxi_bad_driver','La base tiene una unidad no válida.');allowed.add(r.device_id);}
       if(!allowed.size)return [];

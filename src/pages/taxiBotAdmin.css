@@ -12,6 +12,31 @@
   line-height: 1.5;
   padding-bottom: 110px;
 }
+.taxi-admin .taxi-dispatch { grid-column:1/-1; padding:24px; background:#fff; border:1px solid var(--ta-line); border-radius:14px; min-width:0; }
+.taxi-admin .taxi-dispatch-header { display:flex; align-items:flex-start; justify-content:space-between; gap:24px; margin-bottom:20px; }
+.taxi-admin .taxi-dispatch-header h2 { display:flex; align-items:center; gap:10px; }
+.taxi-admin .taxi-dispatch-header p { margin-top:8px; max-width:70ch; font-size:16px; }
+.taxi-admin .taxi-dispatch-warning { display:flex; align-items:flex-start; gap:14px; padding:20px; background:#fff4e5; border:1px solid #e8bc82; border-radius:12px; color:#773a0c; margin:16px 0; }
+.taxi-admin .taxi-dispatch-warning>svg { flex-shrink:0; }
+.taxi-admin .taxi-dispatch-warning p,.taxi-admin .taxi-dispatch-warning small { color:#773a0c; max-width:70ch; }
+.taxi-admin .taxi-dispatch-warning p { margin:8px 0 14px; font-size:16px; }
+.taxi-admin .taxi-dispatch-warning small { display:block; margin-top:12px; }
+.taxi-admin .taxi-dispatch-error { display:flex; align-items:flex-start; gap:10px; color:#a42620; padding:14px 0; overflow-wrap:anywhere; }
+.taxi-admin .taxi-dispatch-list { list-style:none; padding:0; margin:20px 0 0; }
+.taxi-admin .taxi-dispatch-list li { display:flex; justify-content:space-between; align-items:center; gap:24px; padding:20px 0; border-top:1px solid var(--ta-line); }
+.taxi-admin .taxi-dispatch-list li>div { min-width:0; overflow-wrap:anywhere; }
+.taxi-admin .taxi-dispatch-list p { margin-top:5px; font-size:16px; }
+.taxi-admin .taxi-dispatch-list strong { font-size:17px; }
+.taxi-admin .taxi-dispatch-state { display:block; color:var(--ta-ink); font-weight:650; margin-top:12px; font-variant-numeric:tabular-nums; }
+.taxi-admin .taxi-dispatch-state.needs-attention { color:#a42620; }
+.taxi-admin .taxi-dispatch-caption { margin-top:14px; font-size:14px; color:var(--ta-muted); }
+.taxi-admin .taxi-dispatch-empty { margin:22px 0; font-size:16px; }
+@media(max-width:700px){
+ .taxi-admin .taxi-dispatch { padding:20px; }
+ .taxi-admin .taxi-dispatch-header { flex-wrap:wrap; gap:14px; }
+ .taxi-admin .taxi-dispatch-list li { align-items:flex-start; flex-direction:column; gap:16px; }
+ .taxi-admin .taxi-dispatch-list button { width:100%; justify-content:center; }
+}
 .taxi-admin * {
   box-sizing: border-box;
 }

@@ -43,6 +43,7 @@ import TaxiZoneMap, {
 } from "../components/TaxiZoneMap";
 import TaxiChannelForm from "../components/TaxiChannelForm";
 import TaxiQualityPanel from "../components/TaxiQualityPanel";
+import TaxiDispatchPanel from '../components/TaxiDispatchPanel';
 import "./taxiBotAdmin.css";
 const money = (cents: number | null) =>
   cents === null ? "Sin tarifa" : "$" +
@@ -946,6 +947,7 @@ export default function TaxiBotAdminPage(
       )}
       {channel && tab === "operations" && (
         <section className="taxi-operations">
+          <TaxiDispatchPanel tenantId={tenantId} waba={waba} canConfigure={canConfigure} preview={preview} onSelect={setCustomer}/>
           <div className="taxi-conversation-list">
             <h2>Conversaciones</h2>
             <p>Últimos 30 días, hasta 50 contactos por consulta.</p>

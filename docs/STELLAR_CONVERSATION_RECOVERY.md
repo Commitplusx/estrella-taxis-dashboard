@@ -1,5 +1,7 @@
 # Recuperación del flujo de atención
 
+Estado posterior de asignación y publicación: [rondas y recuperación de WhatsApp](STELLAR_DISPATCH_ROUNDS.md). Las versiones y hashes de este documento corresponden a la publicación v21 descrita aquí.
+
 Motor `taxi-bot-v21-state-recovery`. Proyecto independiente `izrsxygazsalfhpaualj`.
 
 ## Problemas reproducidos
