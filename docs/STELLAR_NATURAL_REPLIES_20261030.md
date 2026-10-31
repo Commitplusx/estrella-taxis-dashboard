@@ -40,4 +40,6 @@ Verificación local de esta corrección: 5,906 pruebas Deno y 124 pruebas Node/S
 
 El resumen de confirmación ya no muestra el precio por defecto. El servidor conserva la cotización verificada y la vuelve a comprobar al confirmar; cuando el pasajero pregunta cuánto cuesta, la respuesta incluye la tarifa y el resumen de esa consulta sí la muestra. La operación y el botón de confirmación no dependen de que se enseñe el precio en el resumen ordinario.
 
-Motor local: `taxi-bot-v15-asked-fare-summary`. Suite completa y estado de publicación se anotarán después de verificarlos.
+Motor: `taxi-bot-v15-asked-fare-summary`. Verificación local: 5,907 pruebas Deno, 124 pruebas Node/SQL/integración, control de calidad del bot y tipos aprobados.
+
+Publicado el 31-10-2026 en `izrsxygazsalfhpaualj`: `process-queue` v29 y `ycloud-webhook` v29, ambos conservan `verify_jwt=false`. Después del despliegue, descargué el código activo a una carpeta temporal y comprobé SHA-256 de los cuatro archivos compartidos modificados: `contracts.ts` `4E4935443FE8625098B569B783FA36BE7EC244FCFC62DF2328AC607D1F2E39FA`, `coordinator.ts` `0F2F71436407AAD8B25A2EAB6C143944C1970661E679A97706669E06E9D06A17`, `interpreter.ts` `56482B4F85DD1A6EF1AE3E4679622A27372CD162890327FACF0F25292FCBF5E5` y `neighborhoods.ts` `DAEF9445359CDC779F361D17CF1DDCBB818BAE532C8E437D432FB5248A95A5A0`; coinciden con el candidato. OPTIONS respondió 200 en ambos endpoints. No se envió una conversación de prueba por WhatsApp.
