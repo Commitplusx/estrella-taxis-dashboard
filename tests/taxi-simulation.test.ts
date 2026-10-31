@@ -18,13 +18,18 @@ Deno.test('simulation uses the live selector, projects bounded nonrepeated round
  assertEquals(result.baseline.rounds[0],live.data.map(d=>d.deviceId));assertEquals(result.baseline.rounds,[[1,2,3],[4,5,6],[7,8,9],[10,11,12]]);
  assertEquals(new Set(result.baseline.rounds.flat()).size,12);assertEquals(JSON.stringify({input,fleet,positions,devices}),before);assertEquals(parseSimulationResult(result),result);
 });
-for(const [change,reason]of [[{availability:'occupied'},'occupied'],[{availability:'unknown'},'occupancy_unknown'],[{gpsAgeSeconds:901},'stale_gps'],[{gpsAgeSeconds:-60},'future_gps'],[{eligible:false},'not_available'],[{status:'unknown'},'offline'],[{status:'offline',gpsAgeSeconds:180},'offline'],[{point:{lat:17,lng:-92.13}},'outside_radius']] as const)Deno.test('scenario exclusion is explained by the actual selector: '+reason,()=>{
+for(const [change,reason]of [[{availability:'occupied'},'occupied'],[{availability:'unknown'},'occupancy_unknown'],[{gpsAgeSeconds:1801},'stale_gps'],[{gpsAgeSeconds:-60},'future_gps'],[{eligible:false},'not_available'],[{status:'unknown'},'offline'],[{status:'offline',gpsAgeSeconds:1801},'stale_gps'],[{point:{lat:17,lng:-92.13}},'outside_radius']] as const)Deno.test('scenario exclusion is explained by the actual selector: '+reason,()=>{
  const request=parseSimulationInput({...input,overrides:[{deviceId:1,...change}]}),result=run(request);
  assertEquals(result.baseline.rounds[0],[1,2,3]);assertEquals(result.scenario.rounds[0],[2,3,4]);assertEquals(result.scenario.units[0].reason,reason);
  assertEquals(result.baseline.units[0].changed,false);assertEquals(result.scenario.units[0].changed,true);
 });
 Deno.test('a recent offline taxi and a parked free taxi preserve the production availability policy',()=>{
  const result=run({...input,overrides:[{deviceId:1,status:'offline',gpsAgeSeconds:60,speedKmh:0}]});assertEquals(result.scenario.rounds[0],[1,2,3]);
+});
+Deno.test('thirty-minute policy: twenty-minute GPS is eligible, but fresh GPS never resets a thirty-minute stop',()=>{
+ const parked=run({...input,overrides:[{deviceId:1,status:'offline',gpsAgeSeconds:1200,speedKmh:0}]});assertEquals(parked.scenario.rounds[0],[1,2,3]);
+ const idle=run({...input,overrides:[{deviceId:1,gpsAgeSeconds:0,stationarySeconds:1801,speedKmh:0}]});assertEquals(idle.scenario.rounds[0],[2,3,4]);assertEquals(idle.scenario.units[0].reason,'idle_timeout');assertEquals(idle.scenario.units[0].stationarySeconds,1801);assertEquals(idle.scenario.units[0].gpsAgeSeconds,0);
+ const boundary=run({...input,overrides:[{deviceId:1,gpsAgeSeconds:0,stationarySeconds:1800,speedKmh:0}]});assertEquals(boundary.scenario.units[0].reason,'selected');
 });
 Deno.test('heading adjustment changes priority while changing only destination does not',()=>{
  const result=run({...input,overrides:[{deviceId:1,speedKmh:30,course:0}]});assertEquals(result.scenario.rounds[0],[2,3,4]);assertEquals(result.scenario.units[0].penaltyKm,2);

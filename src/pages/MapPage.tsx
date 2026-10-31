@@ -21,6 +21,7 @@ import { useAuth } from '../context/AuthContext';
 import FleetSimulationPanel from '../components/FleetSimulationPanel';
 import type {SimulationMapTool} from '../components/TaxiSimulationMap';
 import type {TaxiSimulationResult} from '../../estrella-taxis-backend/supabase/functions/_shared/bot/taxis/simulationContracts.ts';
+import {taxiMotion,taxiTelemetryIssue} from '../../estrella-taxis-backend/supabase/functions/_shared/bot/taxis/dispatchPolicy.ts';
 import{gpsOccupancy}from'../../estrella-taxis-backend/supabase/functions/_shared/bot/taxis/gpsOccupancy.ts';
 import { loadFleetActivity } from '../lib/fleetActivity';
 import { distanceKm } from '../../estrella-taxis-backend/supabase/functions/_shared/tracking/scoring.ts';
@@ -78,8 +79,10 @@ export function generateInfoWindowContent(device: TraccarDevice, pos: TraccarPos
   }
 
   const finalAddress = escapeHtml(liveAddress || (pos.address ? pos.address.split(',')[0] : ''));
-  const timeText = formatRelativeTime(pos.serverTime, nowMs);
+  const timeText = formatRelativeTime(pos.fixTime, nowMs);
   const occupation = gpsOccupancy(pos.attributes);
+  const telemetryIssue=taxiTelemetryIssue(pos.fixTime,pos.attributes,pos.speed,nowMs),motion=taxiMotion(pos.attributes,Date.parse(pos.fixTime),pos.speed);
+  const idleMinutes=motion.stationarySinceMs===null?null:Math.max(0,Math.floor((nowMs-motion.stationarySinceMs)/60000));
 
   let occupiedStatusHtml = '';
   if (occupation===true) {
@@ -110,11 +113,13 @@ export function generateInfoWindowContent(device: TraccarDevice, pos: TraccarPos
 
       ${engineStatusHtml}
       ${occupiedStatusHtml}
+      ${telemetryIssue?`<div style="margin-top:8px;color:#92400e;font-size:12px">${telemetryIssue==='idle_timeout'?'Sin ofertas: detenido más de 30 minutos':telemetryIssue==='stale_gps'?'Sin ofertas: GPS con más de 30 minutos':'GPS no utilizable para asignar viajes'}</div>`:''}
+      ${idleMinutes!==null?`<div style="margin-top:8px;color:#475569;font-size:11px">Detenido al menos: ${idleMinutes} min</div>`:''}
 
-      ${finalAddress ? `<div style="margin-top:10px;font-size:11px;color:#64748b;line-height:1.4"><div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:2px;"><strong style="color:#475569">📍 Dirección:</strong> ${device.status === 'online' ? `<span style="display:flex;align-items:center;color:#059669;font-weight:700;font-size:9px;background:#ecfdf5;padding:2px 6px;border-radius:4px;border:1px solid #a7f3d0;">${isMoving ? '<svg class="animate-spin" style="width:10px;height:10px;margin-right:4px;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"></path></svg>' : '<span style="width:6px;height:6px;background:#10b981;border-radius:50%;margin-right:4px;"></span>'} EN VIVO</span>` : ''}</div>${finalAddress}</div>` : ''}
+      ${finalAddress ? `<div style="margin-top:10px;font-size:11px;color:#64748b;line-height:1.4"><div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:2px;"><strong style="color:#475569">📍 Dirección:</strong> ${device.status === 'online' && !telemetryIssue ? `<span style="display:flex;align-items:center;color:#059669;font-weight:700;font-size:9px;background:#ecfdf5;padding:2px 6px;border-radius:4px;border:1px solid #a7f3d0;">${isMoving ? '<svg class="animate-spin" style="width:10px;height:10px;margin-right:4px;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"></path></svg>' : '<span style="width:6px;height:6px;background:#10b981;border-radius:50%;margin-right:4px;"></span>'} EN VIVO</span>` : ''}</div>${finalAddress}</div>` : ''}
 
       <div style="margin-top:10px;padding-top:8px;border-top:1px solid #f1f5f9;font-size:10px;color:#94a3b8;display:flex;justify-content:space-between;">
-        <span>Última señal:</span>
+        <span>Último punto GPS:</span>
         <strong style="color:#475569">${timeText}</strong>
       </div>
 
@@ -456,7 +461,7 @@ export default function MapPage() {
     devices.forEach((device) => {
       const p = positions.get(device.id);
       if (!p || !validFleetPoint(p.latitude, p.longitude)) return;
-      const icon = L.divIcon({ className: 'fleet-vehicle-marker', html: fleetMarkerHtml({ name: device.name, category: device.category, status: device.status, speed: p.speed || 0, course: p.course || 0, occupied: gpsOccupancy(p.attributes) }), iconSize: [36, 36], iconAnchor: [18, 18] });
+      const icon = L.divIcon({ className: 'fleet-vehicle-marker', html: fleetMarkerHtml({ name: device.name, category: device.category, status: device.status, speed: p.speed || 0, course: p.course || 0, occupied: gpsOccupancy(p.attributes),fixTime:p.fixTime,attributes:p.attributes,nowMs:nowTick }), iconSize: [36, 36], iconAnchor: [18, 18] });
       const existing = markersRef.current.get(device.id);
       if (existing) { existing.setLatLng([p.latitude, p.longitude]).setIcon(icon); return; }
       const marker = L.marker([p.latitude, p.longitude], { icon, title: device.name, keyboard: true }).addTo(map);
@@ -471,7 +476,7 @@ export default function MapPage() {
       });
       markersRef.current.set(device.id, marker);
     });
-  }, [devices, positions, mapsLoaded, isReadonly]);
+  }, [devices, positions, mapsLoaded, isReadonly, Math.floor(nowTick/30000)]);
 
   // Derived state: siempre usar la versión más fresca del dispositivo para evitar closures viejos
   const currentSelectedDevice = selectedDevice
@@ -542,7 +547,7 @@ export default function MapPage() {
     const marker = markersRef.current.get(device.id);
     if (!marker) return;
     marker.setLatLng([pos.latitude, pos.longitude]);
-    marker.setIcon(L.divIcon({ className: 'fleet-vehicle-marker', html: fleetMarkerHtml({ name: device.name, category: device.category, status: device.status, speed: pos.speed || 0, course: pos.course || 0, occupied: gpsOccupancy(pos.attributes) }), iconSize: [36, 36], iconAnchor: [18, 18] }));
+    marker.setIcon(L.divIcon({ className: 'fleet-vehicle-marker', html: fleetMarkerHtml({ name: device.name, category: device.category, status: device.status, speed: pos.speed || 0, course: pos.course || 0, occupied: gpsOccupancy(pos.attributes),fixTime:pos.fixTime,attributes:pos.attributes }), iconSize: [36, 36], iconAnchor: [18, 18] }));
   }, []);
 
   const handleWsDevices = useCallback((updated: TraccarDevice[]) => {

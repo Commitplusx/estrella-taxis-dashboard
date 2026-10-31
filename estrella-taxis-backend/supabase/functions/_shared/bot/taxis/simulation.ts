@@ -3,6 +3,7 @@ import type {TraccarPosition} from '../../tracking/fleetTypes.ts';
 import {positiveId,record,TrackingError} from '../../tracking/contracts.ts';
 import {normalizeTaxiPositions,selectTaxiCandidates} from './selection.ts';
 import {gpsOccupancy} from './gpsOccupancy.ts';
+import {taxiMotion,TAXI_MOVING_KMH} from './dispatchPolicy.ts';
 import type {TaxiSelectionDecision} from '../../algorithms/headingMatcher.ts';
 import {getDistanceFromLatLonInKm} from '../../algorithms/headingMatcher.ts';
 import type {SimulationReason,TaxiSimulationInput,TaxiSimulationChange,TaxiSimulationRun,TaxiSimulationUnit,TaxiSimulationResult} from './simulationContracts.ts';
@@ -25,11 +26,22 @@ function applyChanges(raw:readonly unknown[],changes:readonly TaxiSimulationChan
   const previous=matches[0];
   const base:Record<string,unknown>=previous?{...previous}:{id:change.deviceId,deviceId:change.deviceId,valid:false,latitude:null,longitude:null,fixTime:new Date(now).toISOString(),speed:0};
   const attributes:Record<string,unknown>=record(base.attributes)?{...base.attributes}:{};
+  const originalMotion=taxiMotion(attributes,Date.parse(String(base.fixTime)),base.speed);
   if(change.availability){attributes.taxiAvailability=change.availability;attributes.occupied=change.availability==='free'?false:change.availability==='occupied'?true:'unknown';}
   if(change.point){base.latitude=change.point.lat;base.longitude=change.point.lng;base.valid=true;}
   if(change.gpsAgeSeconds!==undefined){base.fixTime=new Date(now-change.gpsAgeSeconds*1000).toISOString();base.outdated=false;}
   if(change.speedKmh!==undefined)base.speed=change.speedKmh/1.852;
   if(change.course!==undefined)base.course=change.course;
+  if(change.stationarySeconds!==undefined&&change.speedKmh===undefined)base.speed=0;
+  if(change.gpsAgeSeconds!==undefined||change.stationarySeconds!==undefined||change.speedKmh!==undefined||change.point){
+   const fix=Date.parse(String(base.fixTime))/1000,moving=typeof base.speed==='number'&&base.speed*1.852>TAXI_MOVING_KMH;
+   if(Number.isFinite(fix)&&fix>0){
+    const since=change.stationarySeconds!==undefined?(now-change.stationarySeconds*1000)/1000:change.point?fix:Math.min(fix,(originalMotion.stationarySinceMs??fix*1000)/1000);
+    if(!moving&&since>fix)throw new TrackingError(400,'simulation_motion_conflict','El tiempo detenido no puede ser menor que la antigüedad del GPS.');
+    attributes.taxiMotionVersion=1;attributes.taxiMotionFixTime=fix;attributes.taxiMotionState=moving?'moving':'stationary';
+    if(moving)delete attributes.taxiStationarySince;else attributes.taxiStationarySince=since;
+   }
+  }
   base.attributes=attributes;
   for(let i=result.length-1;i>=0;i--){const p=result[i];if(record(p)&&p.deviceId===change.deviceId)result.splice(i,1);}
   result.push(base);
@@ -56,7 +68,8 @@ export function evaluateSimulation(input:TaxiSimulationInput,fleet:SimulationFle
    const age=p?.fixTime?Math.round((now-Date.parse(p.fixTime))/1000):null;
    const reason:SimulationReason=globalReason??(!allowed.has(u.deviceId)?change?.eligible===false?'not_available':!u.inTurn?'not_in_turn':!u.hasPhone?'no_whatsapp':u.busy?'active_trip':'not_available':!device?'no_tracking_access':decision?.reason??'no_gps');
    const speed=p?.speed!==undefined&&p.speed>=0&&p.speed*1.852<=1000?p.speed*1.852:null,course=p?.course!==undefined&&p.course>=0&&p.course<360?p.course:null;
-   return{deviceId:u.deviceId,name:device?.name??u.name,point:p?{lat:p.latitude,lng:p.longitude}:null,availability,eligible:allowed.has(u.deviceId),status:device?.status??'unknown',gpsAgeSeconds:age!==null&&Number.isFinite(age)?age:null,speedKmh:speed,course,changed:Boolean(change),reason,rank:decision?.rank??null,distanceKm:decision?.distanceKm??(p?getDistanceFromLatLonInKm(p.latitude,p.longitude,input.origin.lat,input.origin.lng):null),penaltyKm:decision?.penaltyKm??null,effectiveDistanceKm:decision?.effectiveDistanceKm??null};
+   const since=p?.attributes?.taxiStationarySinceMs,stationarySeconds=typeof since==='number'?Math.max(0,Math.floor((now-since)/1000)):null;
+   return{deviceId:u.deviceId,name:device?.name??u.name,point:p?{lat:p.latitude,lng:p.longitude}:null,availability,eligible:allowed.has(u.deviceId),status:device?.status??'unknown',gpsAgeSeconds:age!==null&&Number.isFinite(age)?age:null,stationarySeconds,speedKmh:speed,course,changed:Boolean(change),reason,rank:decision?.rank??null,distanceKm:decision?.distanceKm??(p?getDistanceFromLatLonInKm(p.latitude,p.longitude,input.origin.lat,input.origin.lng):null),penaltyKm:decision?.penaltyKm??null,effectiveDistanceKm:decision?.effectiveDistanceKm??null};
   });
   const rounds:number[][]=[];let result=ranked;const remaining=new Set(allowed);
   for(let round=0;round<4;round++){

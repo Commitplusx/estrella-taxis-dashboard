@@ -72,10 +72,14 @@ export interface TaxiSelectionOptions {
   allowIgnitionOff?: boolean;
   /** Permit an offline Traccar device only when its last valid fix is this recent. */
   allowOfflineFixAgeMs?: number;
+  /** Explicit taxi policy; generic tracking callers retain their existing ten-minute limit. */
+  maxPositionAgeMs?: number;
+  maxStationaryMs?: number;
+  maxHeadingAgeMs?: number;
   /** Optional read-only explanation of the exact production decisions. */
   onDecision?: (decision: TaxiSelectionDecision) => void;
 }
-export type TaxiSelectionReason = 'invalid_gps'|'outside_radius'|'stale_gps'|'future_gps'|'outdated_gps'|'ignition_off'|'occupied'|'occupancy_unknown'|'offline'|'selected'|'ranked';
+export type TaxiSelectionReason = 'invalid_gps'|'outside_radius'|'stale_gps'|'idle_timeout'|'future_gps'|'outdated_gps'|'ignition_off'|'occupied'|'occupancy_unknown'|'offline'|'selected'|'ranked';
 export interface TaxiSelectionDecision {
   deviceId:number;reason:TaxiSelectionReason;rank:number|null;distanceKm:number|null;penaltyKm:number|null;effectiveDistanceKm:number|null;
 }
@@ -98,7 +102,9 @@ export function findOptimalTaxi(
     return { success: false, error: "Invalid dispatch limits" };
   }
   const allowOfflineFixAgeMs = options.allowOfflineFixAgeMs ?? 0;
-  if (!Number.isSafeInteger(allowOfflineFixAgeMs) || allowOfflineFixAgeMs < 0 || allowOfflineFixAgeMs > 10 * 60 * 1000) {
+  const maxPositionAgeMs=options.maxPositionAgeMs??10*60*1000;
+  const maxStationaryMs=options.maxStationaryMs??null,maxHeadingAgeMs=options.maxHeadingAgeMs??maxPositionAgeMs;
+  if (!Number.isSafeInteger(maxPositionAgeMs)||maxPositionAgeMs<=0||maxPositionAgeMs>30*60*1000||!Number.isSafeInteger(allowOfflineFixAgeMs) || allowOfflineFixAgeMs < 0 || allowOfflineFixAgeMs > maxPositionAgeMs||maxStationaryMs!==null&&(!Number.isSafeInteger(maxStationaryMs)||maxStationaryMs<=0||maxStationaryMs>30*60*1000)||!Number.isSafeInteger(maxHeadingAgeMs)||maxHeadingAgeMs<0||maxHeadingAgeMs>maxPositionAgeMs) {
     return { success: false, error: "Invalid dispatch availability policy" };
   }
 
@@ -122,12 +128,14 @@ export function findOptimalTaxi(
     }
 
     // Filtrar taxis apagados o sin señal (GPS > 10 mins de antigüedad)
-    const MAX_AGE_MS = 10 * 60 * 1000;
     const fixTime = Date.parse(pos.fixTime ?? '');
     const fixAgeMs = nowMs - fixTime;
-    if (!Number.isFinite(fixTime) || fixAgeMs > MAX_AGE_MS || fixAgeMs < -30000) {
+    if (!Number.isFinite(fixTime) || fixAgeMs > maxPositionAgeMs || fixAgeMs < -30000) {
       report(pos.deviceId,fixAgeMs < -30000?'future_gps':'stale_gps');continue;
     }
+
+    const stationarySince=pos.attributes?.taxiStationarySinceMs;
+    if(maxStationaryMs!==null&&typeof stationarySince==='number'&&nowMs-stationarySince>maxStationaryMs){report(pos.deviceId,'idle_timeout');continue;}
 
     if (pos.outdated === true && !(allowOfflineFixAgeMs > 0 && fixAgeMs <= allowOfflineFixAgeMs)) {report(pos.deviceId,'outdated_gps');continue;}
 
@@ -162,7 +170,7 @@ export function findOptimalTaxi(
     // La penalización NO debe crecer con la distancia, ya que hacer una vuelta en U toma el mismo tiempo a 1km que a 10km.
     let penaltyKm = 0;
 
-    if (taxiSpeedKmh > 5 && courseKnown) {
+    if (taxiSpeedKmh > 5 && courseKnown && fixAgeMs<=maxHeadingAgeMs) {
       if (angleDiff <= 45) {
         penaltyKm = 0; // Va en dirección correcta
       } else if (angleDiff <= 90) {

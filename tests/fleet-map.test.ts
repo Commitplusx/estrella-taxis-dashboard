@@ -36,6 +36,12 @@ test('unknown taxi occupancy never uses the confirmed free marker color',()=>{
  const free=fleetMarkerHtml({name:'Synthetic taxi',status:'online',speed:0,course:0,occupied:false});
  assert.ok(unknown.includes('#b45309'));assert.ok(!unknown.includes('#16a34a'));assert.ok(free.includes('#16a34a'));
 });
+test('a connected bridge cannot paint stale or long-stationary free telemetry as available',()=>{
+ const now=Date.parse('2026-10-31T22:00:00Z'),base={name:'Synthetic taxi',status:'online',speed:0,course:0,occupied:false,nowMs:now};
+ const stale=fleetMarkerHtml({...base,fixTime:new Date(now-1801000).toISOString()});assert.ok(stale.includes('#94a3b8'));assert.ok(stale.includes('GPS con más de 30 minutos'));
+ const fresh=fleetMarkerHtml({...base,fixTime:new Date(now-1200000).toISOString()});assert.ok(fresh.includes('#16a34a'));
+ const stopped=fleetMarkerHtml({...base,fixTime:new Date(now).toISOString(),attributes:{taxiMotionVersion:1,taxiMotionFixTime:now/1000,taxiMotionState:'stationary',taxiStationarySince:now/1000-1801}});assert.ok(stopped.includes('#94a3b8'));assert.ok(stopped.includes('Detenido más de 30 minutos'));
+});
 test('dashboard quote uses only the selected base and the server cents', async () => {
   const f = fixture([channel('base-A', '+529630000001'), channel('base-B', '+529630000002')]);
   assert.match(await fleetMapQuote(f.client, 'base-B', origin, destination), /\$65\.00/);
