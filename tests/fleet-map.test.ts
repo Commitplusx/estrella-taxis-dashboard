@@ -31,6 +31,11 @@ test('vehicle labels cannot inject HTML and numeric rotation stays bounded', () 
   assert.ok(html.includes('rotate(270deg)'));
   assert.ok(fleetMarkerHtml({ name: 'Taxi', status: 'offline', speed: 0, course: NaN }).includes('rotate(0deg)'));
 });
+test('unknown taxi occupancy never uses the confirmed free marker color',()=>{
+ const unknown=fleetMarkerHtml({name:'Synthetic taxi',status:'online',speed:0,course:0,occupied:null});
+ const free=fleetMarkerHtml({name:'Synthetic taxi',status:'online',speed:0,course:0,occupied:false});
+ assert.ok(unknown.includes('#b45309'));assert.ok(!unknown.includes('#16a34a'));assert.ok(free.includes('#16a34a'));
+});
 test('dashboard quote uses only the selected base and the server cents', async () => {
   const f = fixture([channel('base-A', '+529630000001'), channel('base-B', '+529630000002')]);
   assert.match(await fleetMapQuote(f.client, 'base-B', origin, destination), /\$65\.00/);

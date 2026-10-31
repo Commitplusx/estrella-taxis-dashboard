@@ -205,16 +205,17 @@ export default function MapPage() {
   const [simulationPoint,setSimulationPoint]=useState<FleetMapPoint|null>(null);
   const simulationTool=useRef<SimulationMapTool>('origin');
   const simElementsRef = useRef<L.LayerGroup | null>(null);
-  const clearSimElements = useCallback(() => { simElementsRef.current?.clearLayers(); }, []);
+  const simRendererRef=useRef<L.SVG|null>(null);
+  const clearSimElements = useCallback(() => { simElementsRef.current?.clearLayers();simRendererRef.current?.remove();simRendererRef.current=null; }, []);
   const runAiSimulator=useCallback((point:FleetMapPoint)=>{setSimulationPoint(point);const group=simElementsRef.current;if(group)L.circleMarker(point,{radius:9,color:'#fff',weight:3,fillColor:simulationTool.current==='destination'?'#a42620':'#1d4ed8',fillOpacity:1}).bindTooltip(simulationTool.current==='destination'?'Destino de prueba':simulationTool.current==='taxi'?'Posición simulada':'Origen de prueba').addTo(group);},[]);
   const simulationResult=useCallback((result:TaxiSimulationResult|null)=>{
-    clearSimElements();const group=simElementsRef.current;if(!group||!result)return;
+    clearSimElements();const group=simElementsRef.current;if(!group||!result)return;const renderer=L.svg();simRendererRef.current=renderer;
     L.circleMarker(result.origin,{radius:9,color:'#fff',weight:3,fillColor:'#1d4ed8',fillOpacity:1}).bindTooltip('Origen',{permanent:true}).addTo(group);
     if(result.destination)L.circleMarker(result.destination,{radius:9,color:'#fff',weight:3,fillColor:'#a42620',fillOpacity:1}).bindTooltip('Destino',{permanent:true}).addTo(group);
     for(const unit of result.scenario.units){if(!unit.point)continue;
       const label=document.createElement('span');label.textContent=unit.name+(unit.changed?' · Simulada':'');
       if(unit.changed)L.circleMarker(unit.point,{radius:10,color:'#172337',weight:3,fillColor:'#dbeafe',fillOpacity:1}).bindTooltip(label).addTo(group);
-      if(unit.reason==='selected')L.polyline([[unit.point.lat,unit.point.lng],[result.origin.lat,result.origin.lng]],{color:'#2563eb',weight:3,opacity:.8,dashArray:'6 6',interactive:false,className:'fleet-sim-offer-line'}).addTo(group);
+      if(unit.reason==='selected')L.polyline([[unit.point.lat,unit.point.lng],[result.origin.lat,result.origin.lng]],{color:'#2563eb',weight:3,opacity:.8,dashArray:'6 6',interactive:false,className:'fleet-sim-offer-line',renderer}).addTo(group);
     }
   },[clearSimElements]);
   const simulationToolChanged=useCallback((tool:SimulationMapTool)=>{simulationTool.current=tool;},[]);
@@ -376,6 +377,7 @@ export default function MapPage() {
       leafletMapRef.current = null;
       infoWindowRef.current = null;
       simElementsRef.current = null;
+      simRendererRef.current=null;
       measureLayerRef.current = null;
     };
   }, []);
