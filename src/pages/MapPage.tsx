@@ -207,7 +207,8 @@ export default function MapPage() {
   const simElementsRef = useRef<L.LayerGroup | null>(null);
   const simDraftRef=useRef<L.LayerGroup|null>(null);
   const simRendererRef=useRef<L.SVG|null>(null);
-  const clearSimElements = useCallback(() => { simElementsRef.current?.clearLayers();simRendererRef.current?.remove();simRendererRef.current=null; }, []);
+  const simFitRef=useRef<(()=>void)|null>(null);
+  const clearSimElements = useCallback(() => { simElementsRef.current?.clearLayers();simRendererRef.current?.remove();simRendererRef.current=null;simFitRef.current=null; }, []);
   const runAiSimulator=useCallback((point:FleetMapPoint)=>{setSimulationPoint(point);const group=simDraftRef.current;group?.clearLayers();if(group)L.circleMarker(point,{radius:9,color:'#fff',weight:3,fillColor:simulationTool.current==='destination'?'#a42620':'#1d4ed8',fillOpacity:1}).bindTooltip(simulationTool.current==='destination'?'Destino de prueba':simulationTool.current==='taxi'?'Posición simulada':'Origen de prueba',{permanent:true}).addTo(group);},[]);
   const simulationResult=useCallback((result:TaxiSimulationResult|null)=>{
     clearSimElements();const group=simElementsRef.current;if(!group||!result)return;simDraftRef.current?.clearLayers();const renderer=L.svg();simRendererRef.current=renderer;
@@ -218,7 +219,7 @@ export default function MapPage() {
       if(unit.changed)L.circleMarker(unit.point,{radius:10,color:'#172337',weight:3,fillColor:'#dbeafe',fillOpacity:1}).bindTooltip(label).addTo(group);
       if(unit.reason==='selected')L.polyline([[unit.point.lat,unit.point.lng],[result.origin.lat,result.origin.lng]],{color:'#2563eb',weight:3,opacity:.8,dashArray:'6 6',interactive:false,className:'fleet-sim-offer-line',renderer}).addTo(group);
     }
-    const map=leafletMapRef.current;if(map){const points:L.LatLngTuple[]=[[result.origin.lat,result.origin.lng],...result.scenario.units.flatMap(u=>u.reason==='selected'&&u.point?[[u.point.lat,u.point.lng] as L.LatLngTuple]:[])];if(result.destination)points.push([result.destination.lat,result.destination.lng]);const sheet=window.innerWidth<=1100;map.fitBounds(L.latLngBounds(points),{paddingTopLeft:[40,40],paddingBottomRight:sheet?[40,map.getSize().y*.6]:[Math.min(570,map.getSize().x*.45)+100,50],maxZoom:16,animate:!window.matchMedia('(prefers-reduced-motion: reduce)').matches,duration:.35});}
+    const map=leafletMapRef.current;if(map){const points:L.LatLngTuple[]=[[result.origin.lat,result.origin.lng],...result.scenario.units.flatMap(u=>u.reason==='selected'&&u.point?[[u.point.lat,u.point.lng] as L.LatLngTuple]:[])];if(result.destination)points.push([result.destination.lat,result.destination.lng]);const fit=()=>{const sheet=window.innerWidth<=1100;map.fitBounds(L.latLngBounds(points),{paddingTopLeft:[40,40],paddingBottomRight:sheet?[40,map.getSize().y*.6]:[Math.min(570,map.getSize().x*.45)+100,50],maxZoom:16,animate:!window.matchMedia('(prefers-reduced-motion: reduce)').matches,duration:.35});};simFitRef.current=fit;fit();}
   },[clearSimElements]);
   const simulationToolChanged=useCallback((tool:SimulationMapTool)=>{simulationTool.current=tool;},[]);
   useEffect(()=>{setIsSimulatorActive(false);setSimulationPoint(null);clearSimElements();simDraftRef.current?.clearLayers();},[canSimulate,empresaId,clearSimElements]);
@@ -367,7 +368,7 @@ export default function MapPage() {
     const zoom = () => mapRef.current?.classList.toggle('hide-marker-labels', map.getZoom() < 14);
     map.on('zoomend', zoom);
     zoom();
-    const resize = new ResizeObserver(() => map.invalidateSize({ pan: false }));
+    const resize = new ResizeObserver(() => {map.invalidateSize({ pan: false });simFitRef.current?.();});
     resize.observe(mapRef.current);
     setMapsLoaded(true);
     return () => {
@@ -527,7 +528,7 @@ export default function MapPage() {
 
   // Manejar visibilidad del BottomNav en móviles cuando se abre/cierra una tarjeta
   useEffect(() => {
-    if (currentSelectedDevice && window.innerWidth < 640) {
+    if ((currentSelectedDevice || isSimulatorActive) && window.innerWidth < 640) {
       window.dispatchEvent(new CustomEvent('hideBottomNav'));
     } else {
       window.dispatchEvent(new CustomEvent('showBottomNav'));
@@ -535,7 +536,7 @@ export default function MapPage() {
     return () => {
       window.dispatchEvent(new CustomEvent('showBottomNav'));
     };
-  }, [currentSelectedDevice]);
+  }, [currentSelectedDevice,isSimulatorActive]);
 
   // Move live markers without recreating the map or waiting for a full data reload.
   const updateMarkerImperative = useCallback((device: TraccarDevice, pos: TraccarPosition) => {
