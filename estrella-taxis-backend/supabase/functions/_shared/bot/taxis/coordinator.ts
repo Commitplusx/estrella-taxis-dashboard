@@ -35,6 +35,15 @@ export function taxiSummary(d:Draft,includeFare=false):string {
 }
 function live(t:TaxiSession['active']):boolean{return t?.state==='buscando_conductor'||t?.state==='en_camino';}
 function within(p:Place,c:TaxiChannel):boolean{return getDistanceFromLatLonInKm(p.lat,p.lng,c.centerLat,c.centerLng)<=c.radiusKm;}
+function pickupDescriptionKey(value:string):string{return normalize(value).replace(/^(?:(?:yo|aqui|aca|estoy|estamos|sigo|en|a|al|el|la|los|las)\s+)+/,'').replace(/[.!]+$/,'');}
+function containsPickupDescription(known:string|null|undefined,value:string):boolean{
+  const key=pickupDescriptionKey(value);return Boolean(key&&known?.split(/[.;\n]/).some(part=>pickupDescriptionKey(part)===key));
+}
+function restatesKnownPickup(d:Draft,value:string,evidence:string):boolean{
+  if(d.origin?.source!=='gps'||!d.pickupMessageId||d.awaitingLocation==='origin')return false;
+  if(/\b(?:ya no (?:estoy|estamos|sigo)|(?:me|nos) (?:movi|movimos|cambie|cambiamos)|ahora (?:estoy|recogeme|me recoges|te espero)|otra (?:entrada|direccion|calle|puerta|ubicacion)|nuevo (?:punto|origen)|(?:cambia|corrige) (?:el |mi )?(?:origen|recogida|punto))\b/.test(normalize(evidence)))return false;
+  return containsPickupDescription(d.pickupText,value)||containsPickupDescription(d.origin.text,value);
+}
 function nativeLocationSegments(messages:TaxiInbound[]):{message:TaxiInbound;context:string}[]{
   const indexes=messages.flatMap((message,index)=>message.location?[index]:[]);
   return indexes.map((index,position)=>{
@@ -250,12 +259,15 @@ async function decideTaxi(messages:TaxiInbound[],session:TaxiSession,channel:Tax
       interpretationIssue='unclear_name';interpretation={intent:'provide',fields:{}};
     }
   }
+  const repeatedPickup=interpretation.fields.origin?restatesKnownPickup(d,interpretation.fields.origin.value,interpretation.fields.origin.evidence):false;
+  let pickupNote:string|null=null;
   if(interpretation.fields.pickupReference){
-    const note=interpretation.fields.pickupReference.value,combined=d.pickupText&&!d.pickupText.includes(note)?d.pickupText+'. '+note:note;
+    const note=interpretation.fields.pickupReference.value,prior=interpretation.fields.origin&&!repeatedPickup?interpretation.fields.origin.value:d.pickupText;
+    const combined=prior?containsPickupDescription(prior,note)?prior:prior+'. '+note:note;
     if(combined.length>400){
       if(!native.length)return clarifyPending('pickup_reference_too_long',d);
       interpretationIssue='pickup_reference_too_long';interpretation={intent:'provide',fields:{}};
-    }else{d.pickupText=combined;changed=true;}
+    }else pickupNote=combined;
   }
   if(interpretation.fields.name){
     d.name=interpretation.fields.name.value;changed=true;
@@ -266,6 +278,7 @@ async function decideTaxi(messages:TaxiInbound[],session:TaxiSession,channel:Tax
   for(const field of ['origin','destination'] as const) {
     const requested=interpretation.fields[field];if(!requested)continue;
     if(native.length&&refersToSharedLocation(requested.value))continue;
+    if(field==='origin'&&repeatedPickup){changed=true;continue;}
     changed=true;d.confirmation=null;d.expiresAt=null;d.quoteCents=null;d.quoteH3=null;d.destinationPrompt=null;
     const areaKey=field==='origin'?'originArea':'destinationArea';
     if(field==='origin'){
@@ -277,6 +290,7 @@ async function decideTaxi(messages:TaxiInbound[],session:TaxiSession,channel:Tax
     if(resolved.kind==='resolved'&&within(resolved.place,channel)){d[field]=resolved.place;if(d.awaitingLocation===field)d.awaitingLocation=null;}
     else {d[field]=null;if(resolved.kind==='reference_conflict')referenceConflicts[field]=resolved.label;if(resolved.kind==='ambiguous'&&resolved.neighborhoods?.length){recognized[field]=resolved.neighborhoods;if(resolved.neighborhoods.length===1)d[areaKey]=resolved.neighborhoods[0];else unresolved.push(field);}if(localityAnswer?.field===field&&!unresolved.includes(field))unresolved.push(field);if(d.awaitingLocation===field)d.awaitingLocation=null;}
   }
+  if(pickupNote!==null){d.pickupText=pickupNote;changed=true;}
   if(d.awaitingLocation==='choice'&&!d.pendingLocation&&!unresolved.length&&(interpretation.fields.origin||interpretation.fields.destination))d.awaitingLocation=!d.origin?'origin':!d.destination?'destination':null;
   if(native.length){
     const preview:Draft={...d},planned:{target:'origin'|'destination';place:Place;messageId:string}[]=[];

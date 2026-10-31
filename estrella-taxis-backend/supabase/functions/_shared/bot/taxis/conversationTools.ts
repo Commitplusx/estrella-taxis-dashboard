@@ -31,7 +31,7 @@ const field = (max: number) => ({
 const fields = {
   type: "object",
   additionalProperties: false,
-  properties: { name: field(80), origin: field(400), destination: field(400), pickupReference: {...field(400),description:'Referencia visual o instrucciones para reconocer al pasajero donde ya compartió su pin GPS: «es el portón azul» o «estoy frente a la cancha». Úsalo también si la última pregunta pedía su nombre. Conserva el pin; no es un nuevo origen.'} },
+  properties: { name: field(80), origin: field(400), destination: field(400), pickupReference: {...field(400),description:'Detalle del lugar donde espera: «es el portón azul», «estoy frente a la cancha», o «yo estoy en el centro» al reafirmar el punto ya descrito mientras corrige su destino. Conserva el pin existente. También complementa origin en la misma llamada antes de recibir GPS: origin centro y pickupReference la fuente. Si se movió o pide otra puerta/dirección, usa origin para exigir pin nuevo.'} },
 };
 const withFields = {
   type: "object",

@@ -223,6 +223,28 @@ test('destination recovery SQL: failed interpretation, replaced choice and repla
   assert.equal((await f.commit(clicked.claim.eventId,clicked.claim,{...clicked.decision})).state,'replay');assert.equal(await f.scalar('SELECT count(*)::int FROM viajes'),1);assert.equal(await f.scalar('SELECT count(*)::int FROM taxi_bot_offers'),1);
  }finally{await f.db.close();}
 });
+test('pickup context SQL: fragmented pickup and destination clarification keep one native pin and reject the older summary',async()=>{
+ const f=await fixture();try{
+  await f.seedH3();let assignments=0;
+  const channel:TaxiChannel={tenantId:tenant,waba,enabled:true,name:'Base sintética',city:'Comitán',centerLat:16.25,centerLng:-92.13,radiusKm:20,dispatcher:null,model:'fixture',baseCents:null,perKmCents:null,pricingMode:'h3_zone_max'};
+  const proposals:Record<string,unknown>={
+   ['Hola, deseo un servicio de taxi\nVendrían por mi\nAl centro\nEstoy en la fuente']:{intent:'provide',fields:{origin:{value:'centro',evidence:'Al centro'},pickupReference:{value:'la fuente',evidence:'Estoy en la fuente'}}},
+   ['Soy Mariana']:{intent:'provide',fields:{name:{value:'Mariana',evidence:'Soy Mariana'}}},
+   ['Voy a plaza']:{intent:'provide',fields:{destination:{value:'plaza',evidence:'Voy a plaza'}}},
+   ['No, me llevarían a Terminal, yo estoy en el centro']:{intent:'provide',fields:{origin:{value:'el centro',evidence:'yo estoy en el centro'},destination:{value:'Terminal',evidence:'me llevarían a Terminal'}}},
+  };
+  const services:TaxiServices={interpret:async text=>{assert.ok(Object.hasOwn(proposals,text),'Every interpreter decision must be declared.');return parseInterpretation(proposals[text],text);},resolve:async()=>({kind:'unavailable'}),quote:async()=>4500,candidates:async()=>{assignments++;return[{deviceId:1,name:'Unidad 1'}];}};
+  const turn=async(event:Record<string,unknown>)=>{const claim=await f.begin(event.eventId);assert.equal(claim.state,'proceed');assert.ok(Array.isArray(claim.messages));const decision=await coordinateTaxi(claim.messages.map(item=>parseStoredInbound(item,Date.now())),parseSession(claim.session),channel,services,Date.now());await f.commit(claim.eventId,claim,{...decision});return decision;};
+  const first=await f.enqueue('Hola, deseo un servicio de taxi');await f.enqueue('Vendrían por mi');await f.enqueue('Al centro');await f.enqueue('Estoy en la fuente');
+  const requested=await turn(first);assert.equal(requested.draft.pickupText,'centro. la fuente');assert.equal(requested.draft.destination,null);
+  const pinId=crypto.randomUUID(),pickup=await turn(await f.enqueue('',customer,pinId,null,{lat:16.25,lng:-92.13}));assert.equal(pickup.reason,'missing_destination');assert.equal(pickup.draft.pickupMessageId,pinId);
+  await turn(await f.enqueue('Soy Mariana'));const review=await turn(await f.enqueue('Voy a plaza'));assert.ok(review.draft.confirmation);
+  const corrected=await turn(await f.enqueue('No, me llevarían a Terminal, yo estoy en el centro'));assert.equal(corrected.draft.pickupMessageId,pinId);assert.deepEqual(corrected.draft.origin,pickup.draft.origin);assert.equal(corrected.draft.pickupText,'centro. la fuente');assert.equal(corrected.draft.destinationText,'Terminal');assert.ok(corrected.draft.confirmation);assert.notEqual(corrected.draft.confirmation,review.draft.confirmation);assert.equal(corrected.messages[0].locationRequest,undefined);
+  assert.equal(await f.scalar("SELECT draft->>'pickupMessageId' FROM taxi_bot_sessions WHERE customer=$1",[customer]),pinId);assert.equal(await f.scalar('SELECT count(*)::int FROM viajes'),0);assert.equal(assignments,0);
+  const stale=await turn(await f.enqueue('',customer,crypto.randomUUID(),'txc_'+review.draft.confirmation));assert.equal(stale.reason,'stale_confirmation');assert.equal(assignments,0);
+  const accepted=await turn(await f.enqueue('',customer,crypto.randomUUID(),'txc_'+corrected.draft.confirmation));assert.equal(accepted.action,'confirm');assert.equal(assignments,1);assert.equal(await f.scalar('SELECT count(*)::int FROM viajes'),1);assert.equal(await f.scalar('SELECT count(*)::int FROM taxi_bot_offers'),1);
+ }finally{await f.db.close();}
+});
 test('GPS button consent SQL: typed assent cannot create trips, offers or notifications; the current click works once without a destination',async()=>{
  const f=await fixture();try{
   await f.prepare();const scope=taxiH3Scope(f.draft.origin,f.draft.origin),token=crypto.randomUUID(),pending={...f.draft,destination:null,destinationText:null,fareMode:'unquoted',quoteBasis:null,quoteCents:null,quoteH3:null,confirmation:null,awaitingLocation:'destination',destinationPrompt:token,destinationDeferred:false};

@@ -3,6 +3,7 @@ import { coordinateTaxi, type TaxiServices } from '../estrella-taxis-backend/sup
 import { emptyDraft, type Interpretation, type TaxiChannel, type TaxiInbound, type TaxiSession } from '../estrella-taxis-backend/supabase/functions/_shared/bot/taxis/contracts.ts';
 import { locationRole, parseInterpretation } from '../estrella-taxis-backend/supabase/functions/_shared/bot/taxis/policy.ts';
 import { TAXI_LANGUAGE_CASES } from './fixtures/taxi-language-hardening.ts';
+import { TAXI_PICKUP_CASES } from './fixtures/taxi-pickup-context.ts';
 
 const now=Date.parse('2026-10-30T21:00:00Z');
 const channel:TaxiChannel={tenantId:'11111111-1111-4111-8111-111111111111',waba:'+529630000001',enabled:true,name:'Base sintética',city:'Comitán',centerLat:16.25,centerLng:-92.13,radiusKm:20,dispatcher:null,model:'fixture',baseCents:null,perKmCents:null,pricingMode:'h3_zone_max'};
@@ -17,6 +18,50 @@ for(const item of TAXI_LANGUAGE_CASES.filter(item=>item.expected.intent==='provi
 });
 for(const item of TAXI_LANGUAGE_CASES.filter(item=>item.expected.intent==='ambiguous'))Deno.test('non-mutating language fixture contract: '+item.id,()=>{
  assertEquals(parseInterpretation({intent:'ambiguous',fields:{}},item.message),{intent:'ambiguous',fields:{}});
+});
+for(const item of TAXI_PICKUP_CASES)Deno.test('pickup context fixture has literal current evidence: '+item.id,()=>{
+ const fields:Interpretation['fields']={};
+ for(const key of ['name','origin','destination','pickupReference'] as const){const value=item.expected.fields[key]?.[0];if(value)fields[key]={value,evidence:item.message};}
+ assertEquals(parseInterpretation({intent:item.expected.intent,fields},item.message),{intent:item.expected.intent,fields});
+});
+Deno.test('pickup context: a fragmented pickup keeps both its area and fountain reference, then asks the destination after the pin',async()=>{
+ const input=TAXI_PICKUP_CASES[0],s=state();
+ const f=services({intent:'provide',fields:{origin:{value:'centro',evidence:'Al centro'},pickupReference:{value:'la fuente',evidence:'Estoy en la fuente'}}});
+ const first=await coordinateTaxi(input.message.split('\n').map(message),s,channel,f,now);
+ assertEquals(first.draft.pickupText,'centro. la fuente');assertEquals(first.draft.destination,null);assertEquals(first.draft.destinationText,undefined);assertEquals(first.messages[0].locationRequest,'origin');
+ const second=await coordinateTaxi([{...message(''),type:'location',location:{lat:16.25,lng:-92.13}}],{...s,draft:first.draft},channel,f,now);
+ assertEquals(second.draft.pickupText,'centro. la fuente');assertEquals(second.reason,'missing_destination');assert(second.draft.destinationPrompt);assertEquals(second.draft.confirmation,null);
+});
+Deno.test('pickup context: a repeated known area cannot erase the native pickup during a destination correction',async()=>{
+ const s=TAXI_PICKUP_CASES[1].session,text=TAXI_PICKUP_CASES[1].message;
+ const f=services({intent:'provide',fields:{origin:{value:'centro',evidence:'yo estoy en el centro'},destination:{value:'plaza',evidence:'me llevarían a plaza'}}});
+ const d=await coordinateTaxi([message(text)],s,channel,f,now);
+ assertEquals(d.draft.origin,s.draft.origin);assertEquals(d.draft.pickupMessageId,s.draft.pickupMessageId);assertEquals(d.draft.pickupText,s.draft.pickupText);assertEquals(d.draft.destinationText,'plaza');assert(d.draft.confirmation);assertEquals(d.messages[0].locationRequest,undefined);assertEquals(d.candidates,[]);
+});
+Deno.test('pickup context: a natural reference and destination correction preserve GPS without duplicating a known area',async()=>{
+ const s=TAXI_PICKUP_CASES[1].session,text=TAXI_PICKUP_CASES[1].message;
+ const f=services({intent:'provide',fields:{pickupReference:{value:'el centro',evidence:'yo estoy en el centro'},destination:{value:'plaza',evidence:'me llevarían a plaza'}}});
+ const d=await coordinateTaxi([message(text)],s,channel,f,now);
+ assertEquals(d.draft.origin,s.draft.origin);assertEquals(d.draft.pickupText,'centro. la fuente');assertEquals(d.draft.pickupMessageId,s.draft.pickupMessageId);assertEquals(d.draft.destinationText,'plaza');assert(d.draft.confirmation);assertEquals(d.candidates,[]);
+});
+for(const item of [
+ {text:'Ahora recógeme en el centro',value:'el centro'},
+ {text:'Recógeme en Centrosur',value:'Centrosur'},
+ {text:'Ahora recógeme en otra entrada del Centro',value:'otra entrada del Centro'},
+] as const)Deno.test('pickup context: a real new pickup still requires a fresh pin: '+item.text,async()=>{
+ const s=TAXI_PICKUP_CASES[1].session;
+ const d=await coordinateTaxi([message(item.text)],s,channel,services({intent:'provide',fields:{origin:{value:item.value,evidence:item.text}}}),now);
+ assertEquals(d.draft.origin,null);assertEquals(d.draft.pickupMessageId,null);assertEquals(d.messages[0].locationRequest,'origin');assertEquals(d.draft.confirmation,null);assertEquals(d.draft.name,s.draft.name);assertEquals(d.draft.destination,s.draft.destination);
+});
+Deno.test('pickup context: repeating an area does not revive an outstanding request for a replacement pin',async()=>{
+ const s=TAXI_PICKUP_CASES[1].session;s.draft={...s.draft,awaitingLocation:'origin'};
+ const d=await coordinateTaxi([message('Estoy en el centro')],s,channel,services({intent:'provide',fields:{origin:{value:'el centro',evidence:'Estoy en el centro'}}}),now);
+ assertEquals(d.draft.origin,null);assertEquals(d.draft.confirmation,null);assertEquals(d.messages[0].locationRequest,'origin');
+});
+Deno.test('pickup context: a new area and reference cannot exceed the combined note bound or save a partial update',async()=>{
+ const s=state(),area='a'.repeat(395),text='Estoy en '+area+', es la puerta azul';
+ const d=await coordinateTaxi([message(text)],s,channel,services({intent:'provide',fields:{origin:{value:area,evidence:'Estoy en '+area},pickupReference:{value:'la puerta azul',evidence:'es la puerta azul'}}}),now);
+ assertEquals(d.reason,'pickup_reference_too_long');assertEquals(d.draft.pickupText,undefined);assertEquals(d.draft.origin,null);assertEquals(d.draft.confirmation,null);assertEquals(d.candidates,[]);
 });
 
 for(const item of [
