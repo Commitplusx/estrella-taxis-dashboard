@@ -35,3 +35,9 @@ Si el servidor mostró opciones para un lugar y el pasajero responde con un come
 El redactor natural no reescribe las listas de colonias/tarifas, para conservar sus categorías exactas. El nombre de categoría «Cash A» mantiene sus mayúsculas. Las pruebas reproducen tanto un «Liverpool» resoluble como uno que sigue ambiguo, y verifican que una corrección reemplace el destino.
 
 Verificación local de esta corrección: 5,906 pruebas Deno y 124 pruebas Node/SQL/integración aprobadas; control de tipos y calidad aprobados. La resolución de mapas real depende de los servicios y datos configurados para la base; no se envió un WhatsApp real.
+
+## Tarifa sólo cuando se solicita, 31-10-2026
+
+El resumen de confirmación ya no muestra el precio por defecto. El servidor conserva la cotización verificada y la vuelve a comprobar al confirmar; cuando el pasajero pregunta cuánto cuesta, la respuesta incluye la tarifa y el resumen de esa consulta sí la muestra. La operación y el botón de confirmación no dependen de que se enseñe el precio en el resumen ordinario.
+
+Motor local: `taxi-bot-v15-asked-fare-summary`. Suite completa y estado de publicación se anotarán después de verificarlos.

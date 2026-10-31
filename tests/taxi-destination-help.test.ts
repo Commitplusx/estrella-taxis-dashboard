@@ -18,24 +18,34 @@ Deno.test('destination dialogue: a pickup pin asks where the passenger is going 
  assertEquals(result.draft.confirmation,null);assertEquals(result.draft.awaitingLocation,'destination');
  assert(result.messages[0].buttons?.some(button=>button.id.startsWith('txd_')));assertStringIncludes(result.messages[0].text,'dónde');
 });
-Deno.test('friendly summary: personalized pickup and destination links are tappable WhatsApp URLs, with the server fare and explicit button cue',()=>{
+Deno.test('friendly summary: personalized pickup and destination links are tappable, without unsolicited fare, and with explicit button cue',()=>{
  const draft={...emptyDraft(),name:'Jorge',origin:{text:'Ubicación compartida (16.23533, -92.12439)',lat:16.23533,lng:-92.12439,placeId:null,source:'gps' as const},destination:{text:'Ubicación compartida (16.23554, -92.12495)',lat:16.23554,lng:-92.12495,placeId:null,source:'gps' as const},quoteCents:6500,quoteBasis:'route' as const};
  const text=taxiSummary(draft);
  assertStringIncludes(text,'🚕 ¡Listo, Jorge! Ya tenemos los datos de tu viaje.');
  assertStringIncludes(text,'📍 *Pasamos por ti aquí:*\nhttps://maps.google.com/?q=16.23533,-92.12439');
  assertStringIncludes(text,'🏁 *Y te llevamos aquí:*\nhttps://maps.google.com/?q=16.23554,-92.12495');
- assertStringIncludes(text,'💵 *Tarifa estimada del recorrido:* $65.00 MXN.');
+ assertEquals(text.includes('💵'),false);assertEquals(text.includes('$65.00'),false);
  assertStringIncludes(text,'¿Todo está correcto, Jorge? 😊');
  assertStringIncludes(text,'toca *Confirmar viaje* aquí abajo y enseguida buscamos un taxi');
  assertEquals(text.includes('**'),false);assertEquals(text.includes('[Ver punto de recogida]'),false);
 });
-Deno.test('friendly summary: an optional destination and pickup-only fare are stated without implying a route quote',()=>{
+Deno.test('friendly summary: optional destination and pickup reference omit the fare unless requested',()=>{
  const draft={...emptyDraft(),name:'Jorge',origin:{text:'Ubicación compartida (16.23533, -92.12439)',lat:16.23533,lng:-92.12439,placeId:null,source:'gps' as const},destinationDeferred:true,quoteCents:5500,quoteBasis:'pickup' as const,pickupText:'Frente a la tienda azul'};
  const text=taxiSummary(draft);
  assertStringIncludes(text,'🏁 El destino puedes indicárselo al conductor.');
  assertStringIncludes(text,'📝 *Referencia para encontrarte:* Frente a la tienda azul');
- assertStringIncludes(text,'*Tarifa estimada desde tu ubicación:* $55.00 MXN. El importe final se confirma cuando indiques el destino.');
+ assertEquals(text.includes('💵'),false);assertEquals(text.includes('$55.00'),false);
  assertEquals(text.includes('https://maps.google.com/?q='),true);
+});
+Deno.test('taxi summary: shows the verified fare only when the client explicitly asks for it',async()=>{
+ const askFare=async(intent:'request'|'quote')=>{
+  const s=session();s.draft={...s.draft,origin:{text:'Pin de recogida',lat:16.25,lng:-92.13,placeId:null,source:'gps'},pickupMessageId:'native-pickup',destination:{text:'Terminal',lat:16.26,lng:-92.14,placeId:null,source:'gps'},name:'Jorge'};
+  const configured={...services,interpret:async()=>({intent,fields:{}}),quote:async()=>6500};
+  return await coordinateTaxi([inbound(intent==='quote'?'¿Cuánto cuesta?':'Mándame el taxi, por favor')],s,channel,configured,now);
+ };
+ const requested=await askFare('request'),asked=await askFare('quote');
+ assertEquals(requested.draft.confirmation!==null,true);assertEquals(requested.messages[0].text.includes('💵'),false);
+ assertEquals(asked.draft.confirmation!==null,true);assertStringIncludes(asked.messages[0].text,'💵 *Tarifa estimada del recorrido:* $65.00 MXN.');
 });
 Deno.test('service questions: the interpreter can propose a question while retaining an explicit route update',()=>{
  const current='Voy al Centro, ¿me mostrarás un resumen antes?';
@@ -103,7 +113,7 @@ Deno.test('natural conversation: the server keeps ownership of fare, map links a
  const s=session(),ask=await coordinateTaxi([pin()],s,channel,services,now);s.draft=ask.draft;let composerCalls=0;
  const f:TaxiServices={...services,question:async()=>{composerCalls++;return'Confirma aquí y ya te mandamos un taxi.';}};
  const result=await coordinateTaxi([inbound('se lo digo al chofer')],s,channel,f,now);
- assertEquals(composerCalls,0);assert(result.messages[0].buttons?.[0].id.startsWith('txc_'));assertStringIncludes(result.messages[0].text,'https://maps.google.com/?q=16.25000,-92.13000');assertStringIncludes(result.messages[0].text,'$55.00 MXN');assertStringIncludes(result.messages[0].text,'toca *Confirmar viaje*');assertEquals(result.candidates,[]);
+ assertEquals(composerCalls,0);assert(result.messages[0].buttons?.[0].id.startsWith('txc_'));assertStringIncludes(result.messages[0].text,'https://maps.google.com/?q=16.25000,-92.13000');assertEquals(result.messages[0].text.includes('$55.00 MXN'),false);assertStringIncludes(result.messages[0].text,'toca *Confirmar viaje*');assertEquals(result.candidates,[]);
 });
 for(const text of ['¿Puedo decirlo al chofer?','No sé si voy al Centro','Mi amigo dijo se lo digo al chofer','no se lo digo al chofer','se lo digo al chofer, mejor voy al Centro'])Deno.test('optional destination: question, third-party or later correction does not authorize deferral: '+text,()=>assertEquals(defersDestination(text),false));
 Deno.test('optional destination: a superseded choice and a mixed batch cannot skip the current question',async()=>{

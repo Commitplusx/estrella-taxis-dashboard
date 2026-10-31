@@ -15,7 +15,7 @@ export interface TaxiServices {
   candidates:(origin:Place,channel:TaxiChannel,signal?:AbortSignal)=>Promise<Candidate[]>;
   question?:(kind:TaxiQuestion,current:string,channel:TaxiChannel,signal?:AbortSignal,context?:TaxiReplyContext)=>Promise<string|null>;
 }
-export function taxiSummary(d:Draft):string {
+export function taxiSummary(d:Draft,includeFare=false):string {
   const name=d.name?.trim();
   const greeting=name?`🚕 ¡Listo, ${name}! Ya tenemos los datos de tu viaje.`:'🚕 ¡Listo! Ya tenemos los datos de tu viaje.';
   const mapsLink=(place:Place)=>`https://maps.google.com/?q=${place.lat.toFixed(5)},${place.lng.toFixed(5)}`;
@@ -25,13 +25,13 @@ export function taxiSummary(d:Draft):string {
     :d.destinationText||d.destinationArea
       ?`🏁 *Destino:* ${d.destinationText??d.destinationArea?.label}`
       :'🏁 El destino puedes indicárselo al conductor.';
-  const price=d.quoteCents===null
+  const price=includeFare?(d.quoteCents===null
     ?'💵 La base necesita confirmar la tarifa antes de solicitar el taxi.'
     :d.quoteBasis==='pickup'
       ?`💵 *Tarifa estimada desde tu ubicación:* $${(d.quoteCents/100).toFixed(2)} MXN. El importe final se confirma cuando indiques el destino.`
-      :`💵 *Tarifa estimada del recorrido:* $${(d.quoteCents/100).toFixed(2)} MXN.`;
+      :`💵 *Tarifa estimada del recorrido:* $${(d.quoteCents/100).toFixed(2)} MXN.`):null;
   const review=name?`¿Todo está correcto, ${name}? 😊`:'¿Todo está correcto? 😊';
-  return `${greeting}\n\n${pickup}\n\n${destination}\n\n${price}\n\n${review}\nSi es así, toca *Confirmar viaje* aquí abajo y enseguida buscamos un taxi para ti. 🚕`;
+  return `${greeting}\n\n${pickup}\n\n${destination}${price?`\n\n${price}`:''}\n\n${review}\nSi es así, toca *Confirmar viaje* aquí abajo y enseguida buscamos un taxi para ti. 🚕`;
 }
 function live(t:TaxiSession['active']):boolean{return t?.state==='buscando_conductor'||t?.state==='en_camino';}
 function within(p:Place,c:TaxiChannel):boolean{return getDistanceFromLatLonInKm(p.lat,p.lng,c.centerLat,c.centerLng)<=c.radiusKm;}
@@ -143,7 +143,7 @@ async function decideTaxi(messages:TaxiInbound[],session:TaxiSession,channel:Tax
       return {...reply(price+'¿A nombre de quién pedimos el taxi? 😊',reason==='service_question'?'service_question':'missing_name'),action:'draft',draft:{...d,quoteCents,quoteBasis,quoteH3:channel.pricingMode==='h3_zone_max'?taxiH3Scope(d.origin,d.destination??d.origin):null}};
     }
     const summary:Draft={...d,quoteCents,quoteBasis,quoteH3:channel.pricingMode==='h3_zone_max'?taxiH3Scope(d.origin,d.destination??d.origin):null,confirmation:crypto.randomUUID(),expiresAt:new Date(now+10*60000).toISOString(),awaitingLocation:null,pendingLocation:null};
-    return {...base,action:'draft',draft:summary,reason,messages:[{to:latest.from,text:taxiSummary(summary),buttons:[{id:'txc_'+summary.confirmation,title:'Confirmar viaje'}]}]};
+    return {...base,action:'draft',draft:summary,reason,messages:[{to:latest.from,text:taxiSummary(summary,reason==='quote_only'),buttons:[{id:'txc_'+summary.confirmation,title:'Confirmar viaje'}]}]};
   };
   const tariffReview=async(d:Draft):Promise<TaxiDecision|null>=>{
     if(!d.origin||d.origin.source!=='gps'||!d.pickupMessageId||d.fareMode!=='quoted'||d.quoteCents===null)return prepareSummary(d,'new_booking_requirements');
