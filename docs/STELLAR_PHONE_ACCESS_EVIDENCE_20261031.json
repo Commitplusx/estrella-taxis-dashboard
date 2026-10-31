@@ -1,0 +1,389 @@
+{
+  "implementationCommit": "fb6ec2a3637bd77fb2bb70b2182b80f7ce4b8441",
+  "githubBranch": "main",
+  "validation": {
+    "deno": 22583,
+    "nodeSql": 186,
+    "flutter": 13,
+    "staticFiles": 121,
+    "dart": {
+      "errors": 0,
+      "warnings": 0,
+      "information": 45
+    }
+  },
+  "supabase": {
+    "project": "izrsxygazsalfhpaualj",
+    "function": {
+      "name": "taxi-bot-admin",
+      "version": 34,
+      "status": "ACTIVE"
+    },
+    "workerVersion": 39,
+    "webhookVersion": 39,
+    "runtime": {
+      "matched": 31,
+      "omitted": 8,
+      "files": [
+        "taxi-bot-admin/accounts.ts",
+        "taxi-bot-admin/deno.json",
+        "taxi-bot-admin/dispatch.ts",
+        "taxi-bot-admin/drivers.ts",
+        "taxi-bot-admin/handler.ts",
+        "taxi-bot-admin/index.ts",
+        "taxi-bot-admin/neighborhoods.ts",
+        "taxi-bot-admin/owners.ts",
+        "taxi-bot-admin/phoneLogin.ts",
+        "taxi-bot-admin/quality.ts",
+        "taxi-bot-admin/sharedDrivers.ts",
+        "_shared/algorithms/headingMatcher.ts",
+        "_shared/bot/taxis/adminContracts.ts",
+        "_shared/bot/taxis/channelPhone.ts",
+        "_shared/bot/taxis/contactAdmin.ts",
+        "_shared/bot/taxis/contracts.ts",
+        "_shared/bot/taxis/customerAccess.ts",
+        "_shared/bot/taxis/dispatchContracts.ts",
+        "_shared/bot/taxis/driverAdmin.ts",
+        "_shared/bot/taxis/h3.ts",
+        "_shared/bot/taxis/neighborhoodContracts.ts",
+        "_shared/bot/taxis/neighborhoods.ts",
+        "_shared/bot/taxis/ownerContracts.ts",
+        "_shared/bot/taxis/policy.ts",
+        "_shared/tracking/auth.ts",
+        "_shared/tracking/companies.ts",
+        "_shared/tracking/contracts.ts",
+        "_shared/tracking/http.ts",
+        "_shared/tracking/packages.ts",
+        "_shared/tracking/phoneLogin.ts",
+        "_shared/tracking/store.ts"
+      ]
+    },
+    "manifest": {
+      "function": "taxi-bot-admin",
+      "files": [
+        {
+          "name": "taxi-bot-admin/index.ts",
+          "sha256": "5a76cd980c5db76c6c4a23b195845ede7b9b256994943d3035bba9486a28ea1a"
+        },
+        {
+          "name": "_shared/tracking/auth.ts",
+          "sha256": "2516055bf13d793f952607ee4fb8fbba06f66de0e06d2fab23ba275ef0dce49e"
+        },
+        {
+          "name": "_shared/tracking/contracts.ts",
+          "sha256": "87955c6254674f049d9046d48b1be8f5c4d6226f454b334fa09abf870e2f750c"
+        },
+        {
+          "name": "_shared/tracking/http.ts",
+          "sha256": "85764359443be35e8dfbe22dd3e535564bf969444f12292b4e9eff568afe9075"
+        },
+        {
+          "name": "_shared/tracking/store.ts",
+          "sha256": "0f7fc549903a0439751d37d1e6be96a80a9203858297e7445f14892b2072c069"
+        },
+        {
+          "name": "_shared/tracking/packages.ts",
+          "sha256": "0104cedfa30982a0b38da8e5a75a1120e3311f5ee7e197cf7a8a4f7595e55979"
+        },
+        {
+          "name": "_shared/tracking/companies.ts",
+          "sha256": "e2fffb9d345c2c70c40ee92900cb5fa8d76922d9574861a135060c820d9f5853"
+        },
+        {
+          "name": "taxi-bot-admin/handler.ts",
+          "sha256": "acf1638bb0c61c6f7d30d505f3bf01e170a51f61b47e3d98803c193dcd2e18e9"
+        },
+        {
+          "name": "taxi-bot-admin/quality.ts",
+          "sha256": "6a28459309549ddfd85287cd2c93d9c2a5feba0cbdd57681126794befbe36a84"
+        },
+        {
+          "name": "_shared/bot/taxis/adminContracts.ts",
+          "sha256": "fd3806c16f9a59bfaf85a8f181af74e20148596152819093243e03763216a0f9"
+        },
+        {
+          "name": "_shared/bot/taxis/contracts.ts",
+          "sha256": "304f05dd7f9f6090d0a76f36ce66f01bbf101efe9740849fa1d8ad41b8830cdc"
+        },
+        {
+          "name": "_shared/bot/taxis/h3.ts",
+          "sha256": "b85bd35b94323634e1a9a74e2c3fe8ecac941a290e2eb8acf2fc91b9a8517e68"
+        },
+        {
+          "name": "_shared/bot/taxis/neighborhoodContracts.ts",
+          "sha256": "be92dcab9565bd1d8708fc45ee81424d26a28eee367f6106a559c5ee2ca77d12"
+        },
+        {
+          "name": "_shared/bot/taxis/channelPhone.ts",
+          "sha256": "f9ce5e4299f49b6a256be722f180392cd78857765565449f50ada0ec51f896bd"
+        },
+        {
+          "name": "_shared/bot/taxis/customerAccess.ts",
+          "sha256": "8a71c90d103264815b6601e5fd58cdce46241f0576bc44ca6244f9c7e6f09c3a"
+        },
+        {
+          "name": "_shared/bot/taxis/policy.ts",
+          "sha256": "7e05a4ee8a4f165b705ad1023c753584b67d289bc3253b3765be1816311a53ee"
+        },
+        {
+          "name": "taxi-bot-admin/dispatch.ts",
+          "sha256": "29cf6c2823203d2fdcca6aba2f240ac4a0a4493ce87283f7f8494115592a348c"
+        },
+        {
+          "name": "_shared/bot/taxis/dispatchContracts.ts",
+          "sha256": "dbea89c59dfb11ad2492a0c94d9d3f95ba7fb9200044fbe3bc99340f659ce64d"
+        },
+        {
+          "name": "taxi-bot-admin/drivers.ts",
+          "sha256": "71ae7c16aa4828db2ce274710e13e4820bd9ea2200f6441facfd6823c25595a6"
+        },
+        {
+          "name": "_shared/bot/taxis/driverAdmin.ts",
+          "sha256": "6ba13b29b2b3525722efd4d9beaf00671817cb3fc771bf984d9ee6de890379e6"
+        },
+        {
+          "name": "_shared/bot/taxis/contactAdmin.ts",
+          "sha256": "8fb9a752defa59c8a0f0ff2ea7273ab70f745f4bc31bb5d93a157a4e558eba54"
+        },
+        {
+          "name": "taxi-bot-admin/accounts.ts",
+          "sha256": "89cf440ac080ea667c864e5e4b0f00b3213d059203be7599d1b0dc4949ddbfde"
+        },
+        {
+          "name": "_shared/tracking/phoneLogin.ts",
+          "sha256": "ea7796f46e054c1bd0889cbde009b89a1387b7c1c64c19deab91ae51520e1019"
+        },
+        {
+          "name": "taxi-bot-admin/phoneLogin.ts",
+          "sha256": "d98dcc5be05a26bb7a47b13fc9e88b07f3b7c0d6419dfa73510ed75b2b189286"
+        },
+        {
+          "name": "taxi-bot-admin/owners.ts",
+          "sha256": "ebd9cf0eabcc269eebeb20f5fff2fe726406e4b7a63f288d9ab8cc69ad7d100f"
+        },
+        {
+          "name": "_shared/bot/taxis/ownerContracts.ts",
+          "sha256": "20948ec5dffe9b21b191f04ab7d06b0bea0788b7c9766220cc4110414a71589c"
+        },
+        {
+          "name": "taxi-bot-admin/sharedDrivers.ts",
+          "sha256": "4eaff083e3479a62a0323767c19e1c8266029066533c62446bc806c48f9d8e88"
+        },
+        {
+          "name": "taxi-bot-admin/neighborhoods.ts",
+          "sha256": "674ec54e99f060268a949954c517766c477dac34ea94afe2049f984f3436985a"
+        },
+        {
+          "name": "_shared/bot/taxis/neighborhoods.ts",
+          "sha256": "daef9445359cdc779f361d17cf1ddcbb818bae532c8e437d432fb5248a95a5a0"
+        },
+        {
+          "name": "_shared/bot/taxis/trace.ts",
+          "sha256": "3938edb3f093ccba7457d37e95846f4508eb1d60d741f9e350115e996e18c0a6"
+        },
+        {
+          "name": "_shared/bot/taxis/coordinator.ts",
+          "sha256": "6e1bef2d77ca02975e847404c553fad10b0614050d254171a9fb6a8154f06d60"
+        },
+        {
+          "name": "_shared/bot/taxis/stateMachine.ts",
+          "sha256": "41a0a60f59cc375d3a8c01b8a5a184cbf7b79a8b8d8b21e29b2d39081ce20364"
+        },
+        {
+          "name": "_shared/algorithms/headingMatcher.ts",
+          "sha256": "9cd8c8770886e78a0f32687bed3ccdbd883bf61a198a868280c1888eb8db8ed2"
+        },
+        {
+          "name": "_shared/tracking/fleetTypes.ts",
+          "sha256": "516467f5ce77487e45362a1be606d367b31ce23b79199e433034fe730e00da8d"
+        },
+        {
+          "name": "_shared/bot/taxis/conversationReply.ts",
+          "sha256": "459cad763216f7b17978bf28846adc46999f532d2e3e9a61a6fbf3d807e1da40"
+        },
+        {
+          "name": "_shared/bot/taxis/messageBudget.ts",
+          "sha256": "8c14c80def4bc6d8ca39ce21e5db28f7ac675addc837fcfe8b34c331d1e3d195"
+        },
+        {
+          "name": "_shared/bot/taxis/interpreter.ts",
+          "sha256": "e4837430575cd764ccd52b97df18857db967bf263c98ea0fc43d69357cb5d464"
+        },
+        {
+          "name": "_shared/bot/taxis/conversationTools.ts",
+          "sha256": "d9c83adab42195500e26bfa39f30479f55c87a5269ed6f7037df29e5bd86fd0e"
+        },
+        {
+          "name": "taxi-bot-admin/deno.json",
+          "sha256": "c2e6865101c767d010391f27380d33f4c55e137e5e27f56e937040d07d8d3a53"
+        }
+      ]
+    },
+    "sql": {
+      "matchedFunctions": 12,
+      "privateTables": 2,
+      "history": [
+        "20261031235100",
+        "20261031235000",
+        "20261031234000"
+      ],
+      "counts": {
+        "accounts": 3,
+        "contacts": 35,
+        "drivers": 13,
+        "ownerOps": 0,
+        "units": 19
+      },
+      "functions": [
+        {
+          "signature": "taxi_account_begin(uuid,bigint,uuid,uuid,text,text,integer,jsonb)",
+          "sourceSha256": "33e57a960309e4f424785371d139833d9cfa84aeae6fadad88a16519ad805d98"
+        },
+        {
+          "signature": "taxi_account_finish(bigint,uuid,uuid,integer)",
+          "sourceSha256": "d389cfdd362852d590e8563bab533429a6d13c5d7664bfa5094ccaeb800b908f"
+        },
+        {
+          "signature": "taxi_bot_contact_apply_core(uuid,bigint,uuid,text,uuid,jsonb)",
+          "sourceSha256": "61a480a7454353178965fb985b0aec3bee4e16a5dff63c749b2e86117c81fb29"
+        },
+        {
+          "signature": "taxi_bot_driver_apply(uuid,bigint,uuid,integer,text,text,boolean,text)",
+          "sourceSha256": "400aba41921fa87267cad0b337b06ccd1ba6ebaf31842a47db761fc4fba1bfad"
+        },
+        {
+          "signature": "taxi_bot_guard_contact_driver()",
+          "sourceSha256": "3daea6fec5c1c228aa215d443acad74f7fa571ef55584ac26b590c4b3c550396"
+        },
+        {
+          "signature": "taxi_owner_contact_save(integer,uuid,uuid,text,text,text)",
+          "sourceSha256": "ce697fd9e52fda5e81db7d258fbedb57418f4725f5f0e3b2bfe6ea2bd5ecceaf"
+        },
+        {
+          "signature": "taxi_owner_driver_link_allowed(integer,uuid)",
+          "sourceSha256": "cdba2cf3e9e0f619411925b8cf2aae88ac37527b6dd16860c6cd26539be63c89"
+        },
+        {
+          "signature": "taxi_owner_read(integer)",
+          "sourceSha256": "39db37736c7c3f059f41465402119e610a891bb1529481df571c4833fb846785"
+        },
+        {
+          "signature": "taxi_owner_shift_apply(integer,uuid,uuid,text)",
+          "sourceSha256": "72ffdd9f4702aba6b707172c9753bc3f1c13e2f8042cfc454386dd3e6abe7bd1"
+        },
+        {
+          "signature": "taxi_person_devices(uuid,integer)",
+          "sourceSha256": "039b29959888944408f50697e1a175eacb6b2c746b1bd2905d9ee58d14232d7b"
+        },
+        {
+          "signature": "taxi_phone_login_begin(text)",
+          "sourceSha256": "3a2d8e7f4fcc4d45acdc5f5006f2ffee747351832de9d4fca42326bad956232d"
+        },
+        {
+          "signature": "taxi_phone_login_scope(text)",
+          "sourceSha256": "763a2c6b2e43ffa8fdabbfc2515a96ed4c03f70c56cf4608c26e892677810b16"
+        }
+      ]
+    },
+    "http": [
+      {
+        "name": "options",
+        "status": 200,
+        "code": null
+      },
+      {
+        "name": "owner_requires_session",
+        "status": 401,
+        "code": "missing_session"
+      },
+      {
+        "name": "phone_unknown",
+        "status": 401,
+        "code": "invalid_credentials"
+      }
+    ]
+  },
+  "web": {
+    "deployment": {
+      "commit": "fb6ec2a3637bd77fb2bb70b2182b80f7ce4b8441",
+      "state": "success",
+      "statuses": [
+        {
+          "context": "Vercel",
+          "state": "success",
+          "description": "Deployment has completed",
+          "url": "https://vercel.com/deiffs-projects/estrella-taxis-dashboard/AFi9RfP1QersYiAKdcc3BWDf94aN"
+        }
+      ]
+    },
+    "url": "https://stellar.estrella-eats.mx/login",
+    "status": 200,
+    "asset": "/assets/index-IxWCtk7X.js",
+    "sha256": "9ad163fb35864887a96e7e2d95e0fd6dacee96c4cc74f817730772df44a5eaae",
+    "localSha256": "182706c9e644afaf67ebb7fb8ed6e356412e2539b3550ff3e85cd46dc851d135",
+    "byteMatch": false,
+    "checks": [
+      {
+        "text": "phone_login",
+        "found": true
+      },
+      {
+        "text": "Número de WhatsApp o correo",
+        "found": true
+      },
+      {
+        "text": "Número y acceso",
+        "found": true
+      },
+      {
+        "text": "Si este número ya tiene cuenta en la base",
+        "found": true
+      }
+    ],
+    "byteIdenticalRebuild": false
+  },
+  "apk": {
+    "path": "C:\\Users\\Kaleb\\Desktop\\StellarTracking\\flutter_app\\build\\app\\outputs\\flutter-apk\\app-debug.apk",
+    "bytes": 161374745,
+    "sha256": "2d7cd62012279c99ce2b4811a02bc81925c87d22aba3c68fe21676909e869df1",
+    "package": "com.stellar.tracking",
+    "version": "1.0.0",
+    "build": 2,
+    "minSdk": 24,
+    "signatureV2": true,
+    "installed": false,
+    "installationPending": "User will connect the phone later"
+  },
+  "native": [
+    {
+      "name": "lib/services/phone_auth_client.dart",
+      "sha256": "5859f8d8c2b041190eb28e5be588dc3aec3f22f4ea2aa49e57b473bc79b83559"
+    },
+    {
+      "name": "lib/services/traccar_service.dart",
+      "sha256": "e0484d98b5c20fd751f02bb3bc4adf70aaf88b55793469a077f20b2c949127c4"
+    },
+    {
+      "name": "lib/services/taxi_owner_client.dart",
+      "sha256": "afb3e8dfc5b850325f78518996393d618a21eac71fdd652767b4fa7bb25c7ba3"
+    },
+    {
+      "name": "lib/screens/taxi_owner_screen.dart",
+      "sha256": "0e0f4f53fc4a181dcbff6f74316c6c0321e0888e962ef59e9e6d0542bfe844fe"
+    },
+    {
+      "name": "lib/screens/login_screen.dart",
+      "sha256": "812d5ba6f8f374cbffbc0678d21a1e51c800e0d3fd268b04d858d5516d6f957b"
+    },
+    {
+      "name": "lib/screens/profile_screen.dart",
+      "sha256": "10014270b8dd11dc52cbb86d4d954dcbb74fdd3b381d08069ea9ac4bd8490568"
+    },
+    {
+      "name": "test/phone_auth_client_test.dart",
+      "sha256": "5536b29d6a714d7c757b17e9a62d1269946a6b39e8d1ee5c3f4385d420b3225e"
+    }
+  ],
+  "physicalWhatsAppTest": false,
+  "realAccountMutationsForTesting": false
+}
