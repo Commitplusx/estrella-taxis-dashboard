@@ -117,13 +117,15 @@ export default function Layout() {
   React.useEffect(() => {
     setMounted(true);
 
-    const hide = () => setBottomNavHidden(true);
-    const show = () => setBottomNavHidden(false);
+    let navigationLocked=false;
+    const hide = () => {navigationLocked=true;setBottomNavHidden(true);};
+    const show = () => {navigationLocked=false;setBottomNavHidden(false);};
     window.addEventListener('hideBottomNav', hide);
     window.addEventListener('showBottomNav', show);
 
     let lastScrollY = 0;
     const handleScroll = (e: Event) => {
+      if(navigationLocked)return;
       const target = e.target as HTMLElement;
       if (!target || typeof target.scrollTop !== 'number') return;
 

@@ -121,12 +121,21 @@
 .taxi-sim-external .taxi-sim-comparison ol{display:block}
 .taxi-sim-external .taxi-sim-comparison li+li{margin-top:10px}
 .taxi-sim-external .taxi-sim-table-tools,.taxi-sim-external .taxi-sim-result-heading{flex-wrap:wrap}
+.fleet-simulation-drawer.taxi-admin{padding:0}
+.fleet-simulation-toolbar{position:sticky;top:0;z-index:5;background:#fff;padding:10px 16px;margin:0;border-bottom:1px solid var(--ta-line)}
+.fleet-simulation-drawer>.taxi-sim{padding:0 16px 18px}
+.taxi-sim-external .taxi-sim-header{position:sticky;top:65px;z-index:4;background:#fff;padding:8px 0 12px;margin:0 0 12px}
+.taxi-sim-external .taxi-sim-header>div{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+.taxi-sim-external .taxi-sim-header .taxi-primary{margin-top:0}
+.taxi-sim .taxi-sim-search{flex-direction:row}
+.taxi-sim .taxi-sim-search>svg{top:50%;transform:translateY(-50%)}
+.taxi-sim .taxi-sim-search input{padding-left:37px}
 .fleet-sim-offer-line{animation:fleet-sim-direction 1.2s linear 8}
 @keyframes fleet-sim-direction{to{stroke-dashoffset:-24}}
 .fleet-simulation-drawer{animation:fleet-sim-panel-in .22s cubic-bezier(.16,1,.3,1)}
 @keyframes fleet-sim-panel-in{from{clip-path:inset(0 0 10% 0)}to{clip-path:inset(0)}}
 @media(prefers-reduced-motion:reduce){.fleet-sim-offer-line,.fleet-simulation-drawer{animation:none}}
-@media(max-width:1100px){.fleet-simulation-drawer.taxi-admin{top:auto;bottom:0;right:0;width:100%;max-height:58%;border-radius:14px 14px 0 0;padding:14px}.taxi-sim-external .taxi-sim-header h2{font-size:18px}}
+@media(max-width:1100px){.fleet-simulation-drawer.taxi-admin{top:auto;bottom:0;right:0;width:100%;max-height:58%;border-radius:14px 14px 0 0;padding:0}.taxi-sim-external .taxi-sim-header h2{font-size:18px}}
 @keyframes taxi-sim-reveal{from{opacity:.7;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
 @keyframes taxi-sim-pulse{50%{opacity:.4}}
 @media(max-width:1050px){.taxi-sim-workspace{grid-template-columns:minmax(0,1.3fr) minmax(290px,1fr);gap:16px}.taxi-sim-editor{padding:18px}.taxi-sim-map{height:430px}.taxi-sim-points{flex-wrap:wrap;gap:12px}.taxi-sim-points>svg{display:none}.taxi-sim-points>div{flex-basis:100%}}
