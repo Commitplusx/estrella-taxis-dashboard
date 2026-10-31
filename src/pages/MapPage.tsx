@@ -531,9 +531,6 @@ export default function MapPage() {
     const update=()=>window.dispatchEvent(new CustomEvent((currentSelectedDevice||isSimulatorActive)&&window.innerWidth<640?'hideBottomNav':'showBottomNav'));
     update();window.addEventListener('resize',update);
     return()=>{window.removeEventListener('resize',update);window.dispatchEvent(new CustomEvent('showBottomNav'));};
-    return () => {
-      window.dispatchEvent(new CustomEvent('showBottomNav'));
-    };
   }, [currentSelectedDevice,isSimulatorActive]);
 
   // Move live markers without recreating the map or waiting for a full data reload.
