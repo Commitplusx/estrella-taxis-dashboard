@@ -34,7 +34,9 @@ for (const role of ['origin','destination'] as const) {
     if(role==='origin')s.draft.destination=destination;else s.draft.origin=origin;
     s.draft.name='Mariana';
     const d=await coordinateTaxi([inbound('Pilita seca')],s,channel,services(failed?new Error('fixture failure'):{intent:'ambiguous',fields:{}}),now);
-    assertEquals(d.action,'draft');assertEquals(d.draft.awaitingLocation,role);assertEquals(d.messages[0].locationRequest,role);
+    assertEquals(d.action,'draft');assertEquals(d.draft.awaitingLocation,role);
+    if(role==='origin')assertEquals(d.messages[0].locationRequest,'origin');
+    else{assertEquals(d.messages[0].locationRequest,undefined);assert(d.draft.destinationPrompt);assert(d.messages[0].buttons?.some(button=>button.id==='txd_'+d.draft.destinationPrompt));}
     assertEquals(d.draft.name,s.draft.name);assertEquals(d.draft[role==='origin'?'destination':'origin'],s.draft[role==='origin'?'destination':'origin']);
     assert(!/cambiar|cancelar|el cambio/.test(d.messages[0].text));assertEquals(d.draft.confirmation,null);
   });

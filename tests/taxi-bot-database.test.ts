@@ -203,6 +203,26 @@ test('native pin persistence: a failed model turn survives SQL commit, role clar
  }finally{await f.db.close();}
 });
 
+test('destination recovery SQL: failed interpretation, replaced choice and replay preserve the GPS until one current confirmation creates the trip',async()=>{
+ const f=await fixture();try{
+  await f.seedH3();let dispatches=0;
+  const channel:TaxiChannel={tenantId:tenant,waba,enabled:true,name:'Base sintética',city:'Comitán',centerLat:16.25,centerLng:-92.13,radiusKm:20,dispatcher:null,model:'fixture',baseCents:null,perKmCents:null,pricingMode:'h3_zone_max'};
+  const services:TaxiServices={interpret:async text=>{if(text==='No entendí')throw Error('Declared interpretation outage');assert.equal(text,'Soy Mariana');return parseInterpretation({intent:'provide',fields:{name:{value:'Mariana',evidence:text}}},text);},resolve:async()=>{throw Error('No written destination in this scenario');},quote:async()=>4500,candidates:async()=>{dispatches++;return[{deviceId:1,name:'Unidad 1'}];}};
+  const turn=async(event:Record<string,unknown>)=>{const claim=await f.begin(event.eventId);assert.equal(claim.state,'proceed');assert.ok(Array.isArray(claim.messages));const decision=await coordinateTaxi(claim.messages.map(item=>parseStoredInbound(item,Date.now())),parseSession(claim.session),channel,services,Date.now());const result=await f.commit(claim.eventId,claim,{...decision});return{claim,decision,result};};
+  const pinId=crypto.randomUUID(),initial=await turn(await f.enqueue('',customer,pinId,null,{lat:16.25,lng:-92.13}));
+  assert.ok(initial.decision.draft.destinationPrompt);
+  const recovered=await turn(await f.enqueue('No entendí'));assert.equal(recovered.decision.draft.pickupMessageId,pinId);assert.notEqual(recovered.decision.draft.destinationPrompt,initial.decision.draft.destinationPrompt);
+  const stale=await turn(await f.enqueue('',customer,crypto.randomUUID(),'txd_'+initial.decision.draft.destinationPrompt));
+  assert.equal(stale.decision.reason,'stale_destination_choice');assert.equal(stale.decision.draft.destinationDeferred,false);assert.ok(stale.decision.draft.destinationPrompt);assert.notEqual(stale.decision.draft.destinationPrompt,recovered.decision.draft.destinationPrompt);
+  assert.equal(await f.scalar("SELECT draft->>'pickupMessageId' FROM taxi_bot_sessions WHERE customer=$1",[customer]),pinId);
+  await turn(await f.enqueue('',customer,crypto.randomUUID(),'txd_'+stale.decision.draft.destinationPrompt));
+  const named=await turn(await f.enqueue('Soy Mariana'));assert.ok(named.decision.draft.confirmation);
+  const assent=await turn(await f.enqueue('Sí, mándalo'));assert.ok(assent.decision.draft.confirmation);assert.equal(assent.decision.action,'draft');assert.equal(dispatches,0);
+  assert.equal(await f.scalar('SELECT count(*)::int FROM viajes'),0);assert.equal(await f.scalar('SELECT count(*)::int FROM taxi_bot_offers'),0);
+  const clicked=await turn(await f.enqueue('',customer,crypto.randomUUID(),'txc_'+assent.decision.draft.confirmation));assert.equal(clicked.result.state,'committed');assert.equal(clicked.decision.action,'confirm');assert.equal(dispatches,1);
+  assert.equal((await f.commit(clicked.claim.eventId,clicked.claim,{...clicked.decision})).state,'replay');assert.equal(await f.scalar('SELECT count(*)::int FROM viajes'),1);assert.equal(await f.scalar('SELECT count(*)::int FROM taxi_bot_offers'),1);
+ }finally{await f.db.close();}
+});
 test('GPS button consent SQL: typed assent cannot create trips, offers or notifications; the current click works once without a destination',async()=>{
  const f=await fixture();try{
   await f.prepare();const scope=taxiH3Scope(f.draft.origin,f.draft.origin),token=crypto.randomUUID(),pending={...f.draft,destination:null,destinationText:null,fareMode:'unquoted',quoteBasis:null,quoteCents:null,quoteH3:null,confirmation:null,awaitingLocation:'destination',destinationPrompt:token,destinationDeferred:false};

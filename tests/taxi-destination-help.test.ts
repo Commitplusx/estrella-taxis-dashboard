@@ -1,6 +1,6 @@
 import{assert,assertEquals,assertStringIncludes}from'https://deno.land/std@0.177.0/testing/asserts.ts';
 import{coordinateTaxi,taxiSummary,type TaxiServices}from'../estrella-taxis-backend/supabase/functions/_shared/bot/taxis/coordinator.ts';
-import{emptyDraft,type TaxiChannel,type TaxiInbound,type TaxiSession}from'../estrella-taxis-backend/supabase/functions/_shared/bot/taxis/contracts.ts';
+import{emptyDraft,parseSession,type TaxiChannel,type TaxiInbound,type TaxiSession}from'../estrella-taxis-backend/supabase/functions/_shared/bot/taxis/contracts.ts';
 import{parseTaxiToolCompletion}from'../estrella-taxis-backend/supabase/functions/_shared/bot/taxis/conversationTools.ts';
 import{parseTaxiQuestion}from'../estrella-taxis-backend/supabase/functions/_shared/bot/taxis/conversationReply.ts';
 import{taxiH3Scope}from'../estrella-taxis-backend/supabase/functions/_shared/bot/taxis/h3.ts';
@@ -123,6 +123,40 @@ Deno.test('optional destination: a superseded choice and a mixed batch cannot sk
  const choice={...wrong,button:'txd_'+s.draft.destinationPrompt};
  const mixed=await coordinateTaxi([choice,inbound('Mejor voy al Centro')],s,channel,services,now);assertEquals(mixed.draft.destinationDeferred,false);assertEquals(mixed.draft.confirmation,null);
 });
+for(const failure of ['ambiguous','provider_error'] as const)Deno.test('destination recovery: '+failure+' renews the optional choice and survives a restored session',async()=>{
+ const s=session(),ask=await coordinateTaxi([pin()],s,channel,services,now);s.draft=ask.draft;
+ let quotes=0,dispatches=0;
+ const f:TaxiServices={...services,interpret:async()=>{if(failure==='provider_error')throw Error('Declared interpreter outage');return{intent:'ambiguous',fields:{}};},quote:async()=>{quotes++;return 5500;},candidates:async()=>{dispatches++;return[];}};
+ const recovered=await coordinateTaxi([inbound('No entendí lo que me preguntaste')],s,channel,f,now);
+ assertEquals(recovered.draft.origin,s.draft.origin);assertEquals(recovered.draft.pickupMessageId,s.draft.pickupMessageId);assertEquals(recovered.draft.name,s.draft.name);
+ assert(recovered.draft.destinationPrompt);assert(recovered.draft.destinationPrompt!==s.draft.destinationPrompt);assert(recovered.messages[0].buttons?.some(button=>button.id==='txd_'+recovered.draft.destinationPrompt));
+ assertEquals(recovered.draft.confirmation,null);assertEquals(quotes,0);assertEquals(dispatches,0);
+ const restored=parseSession(JSON.parse(JSON.stringify({...s,draft:recovered.draft})));
+ const review=await coordinateTaxi([inbound('se lo digo al chofer')],restored,channel,f,now);
+ assertEquals(review.draft.destinationDeferred,true);assert(review.draft.confirmation);assertEquals(quotes,1);assertEquals(dispatches,0);
+});
+for(const stale of ['expired','replaced'] as const)Deno.test('destination recovery: '+stale+' choice returns a new live button without accepting the old one',async()=>{
+ const s=session(),ask=await coordinateTaxi([pin()],s,channel,services,now);s.draft=ask.draft;
+ if(stale==='expired')s.draft.expiresAt=new Date(now-1).toISOString();
+ const oldToken=stale==='replaced'?crypto.randomUUID():s.draft.destinationPrompt;
+ const f:TaxiServices={...services,interpret:never,quote:never,candidates:never};
+ const renewed=await coordinateTaxi([{...inbound(''),type:'button',button:'txd_'+oldToken}],s,channel,f,now);
+ assertEquals(renewed.reason,'stale_destination_choice');assertEquals(renewed.action,'draft');assertEquals(renewed.draft.origin,s.draft.origin);assertEquals(renewed.draft.name,s.draft.name);assertEquals(renewed.draft.destinationDeferred,false);assertEquals(renewed.draft.confirmation,null);
+ assert(renewed.draft.destinationPrompt!==s.draft.destinationPrompt);assert(renewed.draft.expiresAt&&Date.parse(renewed.draft.expiresAt)>now);assert(renewed.messages[0].buttons?.some(button=>button.id==='txd_'+renewed.draft.destinationPrompt));
+});
+for(const active of [false,true])Deno.test('destination recovery: an old choice cannot erase '+(active?'an active trip':'a destination already supplied'),async()=>{
+ const s=session();s.draft={...s.draft,origin:{text:'Pin',lat:16.25,lng:-92.13,placeId:null,source:'gps'},pickupMessageId:'native',destinationText:'Terminal'};
+ if(active)s.active={id:crypto.randomUUID(),state:'buscando_conductor',taxiName:null};
+ const result=await coordinateTaxi([{...inbound(''),type:'button',button:'txd_'+crypto.randomUUID()}],s,channel,{...services,interpret:never,quote:never,candidates:never},now);
+ assertEquals(result.reason,'stale_destination_choice');assertEquals(result.action,'reply');assertEquals(result.draft,s.draft);assertEquals(result.candidates,[]);
+});
+Deno.test('natural fare response: asking before giving a name preserves the server amount and does not let the redactor erase it',async()=>{
+ const s=session();s.draft={...s.draft,name:null,origin:{text:'Pin',lat:16.25,lng:-92.13,placeId:null,source:'gps'},pickupMessageId:'native',destinationDeferred:true};
+ let compositions=0,quotes=0;
+ const f:TaxiServices={...services,interpret:async()=>({intent:'quote',fields:{}}),quote:async()=>{quotes++;return 6500;},question:async()=>{compositions++;return'Claro, ya casi terminamos. ¿A nombre de quién dejamos el viaje?';}};
+ const result=await coordinateTaxi([inbound('¿Cuánto me sale?')],s,channel,f,now);
+ assertEquals(result.reason,'missing_name');assertStringIncludes(result.messages[0].text,'$65.00 MXN');assertStringIncludes(result.messages[0].text,'nombre');assertEquals(compositions,0);assertEquals(quotes,1);assertEquals(result.draft.confirmation,null);assertEquals(result.candidates,[]);
+});
 Deno.test('service doubt: a question preserves an existing summary, price and current confirmation instead of restarting',async()=>{
  const s=session(),pickup={text:'Pin',lat:16.25,lng:-92.13,placeId:null,source:'gps' as const};s.draft={...s.draft,origin:pickup,pickupMessageId:'native',destinationDeferred:true,fareMode:'quoted',quoteCents:5500,quoteH3:taxiH3Scope(pickup,pickup),confirmation:crypto.randomUUID(),expiresAt:new Date(now+600000).toISOString()};
  const answer='No tengo confirmado ese método de pago. La base puede ayudarte a consultarlo.';
@@ -147,9 +181,17 @@ Deno.test('service doubt: when the name is missing, the natural answer resumes w
  const result=await coordinateTaxi([inbound('¿Me dices el precio antes?')],s,channel,f,now);assertEquals(result.messages[0].text,answer);assertEquals(result.draft.name,null);assertEquals(result.draft.confirmation,null);
 });
 Deno.test('natural service answer validation requires the missing next step',()=>{
- const answer='Sí, aquí puedes pedir el taxi. ¿A dónde te llevamos?';let rejected=false;
+ const answer='Sí, aquí puedes pedir el taxi. ¿A dónde te llevamos? Puedes decírselo al conductor después.';let rejected=false;
  try{parseTaxiQuestion({choices:[{finish_reason:'stop',message:{content:JSON.stringify({question:'Sí, aquí puedes pedir el taxi.'})}}]},'service_question',{baseName:'Base',city:'Comitán',hasPickupGps:true,hasName:true,hasDestination:false,destinationDeferred:false,phase:'destination',activeState:null,recent:[]});}catch{rejected=true;}
  assert(rejected);assertEquals(parseTaxiQuestion({choices:[{finish_reason:'stop',message:{content:JSON.stringify({question:answer})}}]},'service_question',{baseName:'Base',city:'Comitán',hasPickupGps:true,hasName:true,hasDestination:false,destinationDeferred:false,phase:'destination',activeState:null,recent:[]}),answer);
+});
+for(const question of ['Para seguir, necesito saber el destino. ¿A dónde vas?','Debes indicar el destino. ¿A dónde te llevamos?'])Deno.test('natural destination validation: a service answer cannot make an optional destination mandatory: '+question,()=>{
+ const context={baseName:'Base',city:'Comitán',hasPickupGps:true,hasName:true,hasDestination:false,destinationDeferred:false,phase:'destination',activeState:null,recent:[],nextStep:'destination_optional' as const};
+ let rejected=false;try{parseTaxiQuestion({choices:[{finish_reason:'stop',message:{content:JSON.stringify({question})}}]},'service_question',context);}catch{rejected=true;}assert(rejected);
+});
+for(const question of ['¿A dónde te llevamos? Si todavía no decides, puedes decírselo al conductor.','El destino es opcional. ¿A dónde vas?'])Deno.test('natural destination validation: a service answer keeps the optional choice: '+question,()=>{
+ const context={baseName:'Base',city:'Comitán',hasPickupGps:true,hasName:true,hasDestination:false,destinationDeferred:false,phase:'destination',activeState:null,recent:[],nextStep:'destination_optional' as const};
+ assertEquals(parseTaxiQuestion({choices:[{finish_reason:'stop',message:{content:JSON.stringify({question})}}]},'service_question',context),question);
 });
 Deno.test('service doubt: a question with a new destination keeps the change and answers before the authoritative summary',async()=>{
  const s=session();s.draft={...s.draft,origin:{text:'Pin',lat:16.25,lng:-92.13,placeId:null,source:'gps'},pickupMessageId:'native'};

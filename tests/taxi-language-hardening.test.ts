@@ -52,7 +52,7 @@ for(const fails of [true,false])Deno.test('native pickup survives '+(fails?'inte
  const s=state();s.draft.awaitingLocation='origin';s.draft.name='Mariana';
  const pin:TaxiInbound={...message(''),type:'location',location:{lat:16.25,lng:-92.13}};
  const decision=await coordinateTaxi([pin,message('y la otra cosa')],s,channel,services(fails?Error('Declared outage'):{intent:'ambiguous',fields:{}}),now);
- assertEquals(decision.action,'draft');assertEquals(decision.draft.origin?.source,'gps');assertEquals(decision.draft.pickupMessageId,pin.id);assertEquals(decision.draft.confirmation,null);assert(!decision.messages.some(m=>m.buttons?.length));
+ assertEquals(decision.action,'draft');assertEquals(decision.draft.origin?.source,'gps');assertEquals(decision.draft.pickupMessageId,pin.id);assertEquals(decision.draft.confirmation,null);assert(!decision.messages.some(m=>m.buttons?.some(button=>button.id.startsWith('txc_'))));assert(decision.messages.some(m=>m.buttons?.some(button=>button.id==='txd_'+decision.draft.destinationPrompt)));
 });
 for(const issue of ['unclear_name','pickup_reference_too_long'] as const)Deno.test('native pickup survives a rejected field: '+issue,async()=>{
  const s=state();s.draft.awaitingLocation='origin';s.draft.name='Mariana';
