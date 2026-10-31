@@ -217,6 +217,7 @@ export default function MapPage() {
       if(unit.changed)L.circleMarker(unit.point,{radius:10,color:'#172337',weight:3,fillColor:'#dbeafe',fillOpacity:1}).bindTooltip(label).addTo(group);
       if(unit.reason==='selected')L.polyline([[unit.point.lat,unit.point.lng],[result.origin.lat,result.origin.lng]],{color:'#2563eb',weight:3,opacity:.8,dashArray:'6 6',interactive:false,className:'fleet-sim-offer-line',renderer}).addTo(group);
     }
+    const map=leafletMapRef.current;if(map){const points:L.LatLngTuple[]=[[result.origin.lat,result.origin.lng],...result.scenario.units.flatMap(u=>u.reason==='selected'&&u.point?[[u.point.lat,u.point.lng] as L.LatLngTuple]:[])];if(result.destination)points.push([result.destination.lat,result.destination.lng]);const sheet=window.innerWidth<=1100;map.fitBounds(L.latLngBounds(points),{paddingTopLeft:[40,40],paddingBottomRight:sheet?[40,map.getSize().y*.6]:[Math.min(570,map.getSize().x*.45)+100,50],maxZoom:16,animate:!window.matchMedia('(prefers-reduced-motion: reduce)').matches,duration:.35});}
   },[clearSimElements]);
   const simulationToolChanged=useCallback((tool:SimulationMapTool)=>{simulationTool.current=tool;},[]);
   useEffect(()=>{if(!canSimulate){setIsSimulatorActive(false);setSimulationPoint(null);clearSimElements();}},[canSimulate,empresaId,clearSimElements]);
