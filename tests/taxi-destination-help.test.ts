@@ -52,6 +52,10 @@ Deno.test('native location language: request, pickup pin, deictic destination an
 });
 for(const [text,role] of [['Y voy para esta','destination'],['Voy para esta dirección','destination'],['Me mandas un taxi a esta dirección','origin']] as const)Deno.test('native location language: route cue '+text,()=>assertEquals(locationRole(text),role));
 Deno.test('native location language: a text with both route endpoints is not used to label a single pin',()=>assert(locationRoleConflict('Me recoges aquí y voy para esta')));
+Deno.test('native location language: endpoint cues on separate batched messages remain distinct',()=>{
+ const batch='Buenas tardes\nMe puede enviar un taxi\nAquí estoy\nY voy para esta\nSoy Jorge';
+ assert(locationRoleConflict(batch));assertEquals(locationRole(batch),null);
+});
 Deno.test('native location language: a deictic pointer is not a literal address',()=>{assert(refersToSharedLocation('a esta dirección'));assert(refersToSharedLocation('esta ubicación'));assertEquals(refersToSharedLocation('Pilita Seca'),false);});
 Deno.test('friendly phrasing: a grounded short explanation can precede the pickup question',()=>{
  const question='Así el chofer puede ubicarte mejor. ¿Me compartes tu ubicación con el botón?';

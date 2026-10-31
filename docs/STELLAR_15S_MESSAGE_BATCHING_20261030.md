@@ -16,16 +16,18 @@ La IA puede reconocer una petición directa como «me puede enviar un taxi» y a
 
 ## Verificación local
 
-- `scripts/test-taxi-bot.ps1`: 5,861 pruebas Deno aprobadas y 124 pruebas Node/SQL aprobadas.
+- `scripts/test-taxi-bot.ps1`: 5,863 pruebas Deno aprobadas y 124 pruebas Node/SQL aprobadas.
 - El control estático del bot pasó para 93 archivos.
 - Pasaron las comprobaciones de tipos de los puntos de entrada y las pruebas estrictas afectadas.
+- Una prueba integrada entrega juntos cinco textos y dos pines al coordinador; verifica que conserva el nombre, prepara un único resumen y no busca unidad antes del botón.
+- La prueba encontró y corrigió un caso donde normalizar el lote borraba los saltos de línea y ocultaba que contenía señales de recogida y destino distintas.
 
 ## Publicación
 
 - Migración `20261031200000_taxi_15s_message_batching.sql` aplicada y registrada en el proyecto `izrsxygazsalfhpaualj`.
-- Se publicaron `ycloud-webhook`, `process-queue` y `taxi-bot-admin`.
-- La descarga de producción coincide con los archivos revisados; las respuestas OPTIONS fueron 200 y el endpoint administrativo sin sesión devolvió 401.
-- Tras la publicación, el worker `stellar-taxi-bot` quedó en estado `online`, PID 52853, sin reinicios reportados en la comprobación.
+- Se publicaron `ycloud-webhook`, `process-queue` y `taxi-bot-admin`; después se desplegó la corrección de interpretación de mensajes agrupados.
+- Las versiones activas son 25, 25 y 31, respectivamente. La descarga de producción coincide con los archivos revisados; las respuestas OPTIONS fueron 200 y el endpoint administrativo sin sesión devolvió 401.
+- Tras la publicación, el worker `stellar-taxi-bot` quedó en estado `online`, sin reinicios reportados en la comprobación.
 - La configuración del canal Pompeyo Express permaneció habilitada y sin cambios.
 
 No se envió un mensaje real ni se creó un viaje para esta verificación; una prueba de código no sustituye una prueba conversacional con el número conectado.

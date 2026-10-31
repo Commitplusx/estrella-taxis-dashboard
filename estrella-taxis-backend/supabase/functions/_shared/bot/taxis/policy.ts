@@ -29,7 +29,7 @@ export function cancellationQuestion(s:string):boolean {
 }
 /** Role selection is deliberately anchored: an address or a conditional cannot choose a stored pin. */
 function locationRoleSignals(s:string):{origin:boolean;destination:boolean} {
-  const clauses=normalize(s).split(/[\n.!¡?;]+/).map((part)=>part.trim()).filter((part)=>Boolean(part)&&! /\b(?:si|o|u|manana|tal vez|quizas)\b/.test(part));
+  const clauses=s.split(/[\n.!¡?;]+/).map(normalize).filter((part)=>Boolean(part)&&! /\b(?:si|o|u|manana|tal vez|quizas)\b/.test(part));
   const origin=clauses.some((n)=>
     /^(?:(?:es|ese es|este es|el pin es|la ubicacion es) (?:el |mi )?)?(?:origen|punto de recogida|recogida)$/.test(n)||
     /^(?:ahi me recoges|aqui me recoges|es donde estoy|(?:ese|este) es donde me vas a recoger|es donde me recoges|aqui estoy|aca estoy|me esperas aqui|pasas por mi aqui)$/.test(n)||

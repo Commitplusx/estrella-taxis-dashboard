@@ -13,6 +13,32 @@ function fixture(proposal:Interpretation={intent:'smalltalk',fields:{}}){
  const services:TaxiServices={interpret:async()=>proposal,resolve:async()=>({kind:'unavailable'}),quote:async()=>{quotes++;return 6500;},candidates:async()=>{assignments++;return[];}};
  return{services,counts:()=>({assignments,quotes}),run:(s=session(),m=message())=>coordinateTaxi([m],s,channel,services,now)};
 }
+Deno.test('native location: one debounced natural-language turn joins texts and both GPS pins before showing one confirmation',async()=>{
+ const texts=['Buenas tardes','Me puede enviar un taxi','Aquí estoy','Y voy para esta','Soy Jorge'];
+ const events:TaxiInbound[]=[
+  {...message(texts[0]),id:'burst-1'},
+  {...message(texts[1]),id:'burst-2'},
+  {...message(texts[2]),id:'burst-3'},
+  {...message(''),id:'burst-pickup',type:'location',location:{lat:origin.lat,lng:origin.lng}},
+  {...message(texts[3]),id:'burst-4'},
+  {...message(''),id:'burst-destination',type:'location',location:{lat:destination.lat,lng:destination.lng}},
+  {...message(texts[4]),id:'burst-5'},
+ ];
+ let interpreted='';
+ const services:TaxiServices={
+  interpret:async(current)=>{interpreted=current;return{intent:'provide',fields:{name:{value:'Jorge',evidence:'Soy Jorge'}}};},
+  resolve:async()=>({kind:'unavailable'}),
+  quote:async(from,to)=>{equal(from.lat,origin.lat);equal(to.lat,destination.lat);return 6500;},
+  candidates:async()=>{throw new Error('A batched message must never assign before the confirmation button.');},
+ };
+ const d=await coordinateTaxi(events,session(),channel,services,now);
+ equal(interpreted,texts.join('\n'));
+ equal(d.action,'draft');equal(d.reason,'summary');equal(d.draft.name,'Jorge');
+ equal(d.draft.origin?.lat,origin.lat);equal(d.draft.destination?.lat,destination.lat);
+ equal(d.messages.length,1);assert(d.messages[0].buttons?.length===1);
+ assert(d.messages[0].buttons?.[0].id.startsWith('txc_'));
+ assert(d.messages[0].text.includes('Confirmar viaje'));
+});
 Deno.test('native location: greeting asks for pickup through a durable role without requesting a taxi',async()=>{
  const f=fixture(),d=await f.run();equal(d.messages[0].locationRequest,'origin');equal(d.draft.awaitingLocation,'origin');equal(d.draft.confirmation,null);equal(d.action,'draft');equal(f.counts(),{assignments:0,quotes:0});
 });
