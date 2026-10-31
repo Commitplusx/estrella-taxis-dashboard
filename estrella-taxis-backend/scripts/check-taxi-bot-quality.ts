@@ -26,6 +26,7 @@ files.push(resolve(root,'tests/taxi-bot-tools.test.ts'));
 files.push(resolve(root,'tests/taxi-destination-help.test.ts'));
 files.push(resolve(root,'tests/fixtures/taxi-help-intents.ts'));
 files.push(resolve(root,'tests/fixtures/taxi-pickup-context.ts'));
+files.push(resolve(root,'tests/fixtures/taxi-semantic-clarification.ts'));
 files.push(...['estrella-taxis-backend/supabase/functions/_shared/bot/taxis/contactAdmin.ts','estrella-taxis-backend/supabase/functions/_shared/bot/taxis/driverAdmin.ts','estrella-taxis-backend/supabase/functions/_shared/bot/taxis/channelPhone.ts','estrella-taxis-backend/supabase/functions/taxi-bot-admin/drivers.ts','src/components/TaxiDriversPanel.tsx','src/components/TaxiPhoneField.tsx','tests/taxi-driver-admin.test.ts'].map((file)=>resolve(root,file)));
 files.push(...['tests/stellar-separation.test.ts','tests/stellar-package.test.ts','tests/stellar-config.test.ts','tests/stellar-entrypoints.test.ts','src/lib/stellarBackendConfig.ts','src/lib/supabase.ts','estrella-taxis-backend/scripts/package-stellar-functions.ts','estrella-taxis-backend/supabase/functions/ycloud-webhook/index.ts','estrella-taxis-backend/supabase/functions/process-queue/index.ts'].map((file)=>resolve(root,file)));
 for(const file of files){

@@ -95,7 +95,8 @@ export function parseInterpretation(raw:unknown,current:string):Interpretation {
   if(intent!=='request'&&intent!=='provide'&&intent!=='quote'&&intent!=='question'&&intent!=='confirm'&&intent!=='cancel'&&intent!=='status'&&intent!=='human'&&intent!=='smalltalk'&&intent!=='ambiguous')throw new TrackingError(502,'invalid_taxi_intent','Intención no válida.');
   const fields:Interpretation['fields']={};
   for(const [key,v] of Object.entries(raw.fields)) {
-    if((key!=='name'&&key!=='origin'&&key!=='destination'&&key!=='pickupReference')||!record(v)||Object.keys(v).some((k)=>!['value','evidence'].includes(k))||typeof v.value!=='string'||typeof v.evidence!=='string')throw new TrackingError(502,'invalid_taxi_field','Campo no válido.');
+    if((key!=='name'&&key!=='origin'&&key!=='destination'&&key!=='pickupReference')||!record(v)||Object.keys(v).some((k)=>!['value','evidence','refines'].includes(k))||typeof v.value!=='string'||typeof v.evidence!=='string')throw new TrackingError(502,'invalid_taxi_field','Campo no válido.');
+    if(v.refines!==undefined&&((key!=='origin'&&key!=='destination')||typeof v.refines!=='string'||v.refines.length<2||v.refines.length>400||v.refines!==v.refines.trim()||/[<>]/.test(v.refines)||[...v.refines].some(c=>c.charCodeAt(0)<32)))throw new TrackingError(502,'invalid_taxi_refinement','La referencia no corresponde a una localidad pendiente.');
     const value=v.value.trim(),evidence=v.evidence.trim();
     const chosen=normalize(value),escaped=chosen.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
     const literal=new RegExp('(?<![\\p{L}\\p{N}_])'+escaped+'(?![\\p{L}\\p{N}_])','u');
@@ -117,13 +118,17 @@ export function parseInterpretation(raw:unknown,current:string):Interpretation {
     // Explicit corrections of the other endpoint do not invalidate this endpoint.
     const all=current.split('\n').map(normalize).join('\n'),chosenAt=[...all.matchAll(new RegExp(literal.source,'gu'))].at(-1)?.index??-1,later=all.slice(chosenAt+chosen.length);
     const laterCorrection=[...later.matchAll(/(?:^|[.,\n;])\s*(?:no[, ]+)?(?:mejor|mas bien|quise decir|perdon|sino|ahora)\b[^,.;\n]*/g)].some((m)=>{
-      const other=key==='origin'?'destino|voy a|vamos a|lleva(?:me|nos) (?:a|al)|me dirijo (?:a|al)':key==='destination'?'origen|recogida|recogeme|estoy en|te espero en':'origen|destino|recogida';
-      return key==='name'?/\b(?:nombre|me llamo|soy)\b/.test(m[0]):!new RegExp('\\b(?:'+other+')\\b').test(m[0]);
+      const pickup='origen|recogida|recogeme|estoy en|te espero en',destination='destino|(?:voy|vamos) (?:a|al|para|pa)|lleva(?:me|nos) (?:a|al)|me (?:dirijo|llevan) (?:a|al)',name='nombre|me llamo|soy';
+      const mentions=(pattern:string)=>new RegExp('\\b(?:'+pattern+')\\b').test(m[0]);
+      if(key==='name')return mentions(name);
+      // A mixed correction can change both endpoints: another field never masks this field's correction.
+      if(mentions(key==='destination'?destination:pickup))return true;
+      return !mentions((key==='destination'?pickup:destination)+'|'+name);
     });
     const alternative=key!=='name'&&/\s(?:o|u)\s/.test(n);
     if((negated&&!referenceContrast)||alternative||laterCorrection||(/[?¿]/.test(n)&&!quoteQuestion&&!serviceQuestion)||/\b(?:si pudiera|tal vez|quizas|a lo mejor|podria|si voy|no se si)\b/.test(whole)||(!referenceContrast&&/\bno\b/.test(n)&&(correction===null||!correction.includes(chosen)))||(correction!==null&&!correction.includes(chosen))||/\b(?:dijo|dice|ejemplo|supongamos)\b/.test(whole))throw new TrackingError(502,'ambiguous_taxi_field','Hace falta aclarar el dato antes de cambiarlo.');
     if(key==='name'&&/\b(?:taxi|mandalo|confirmo|hola|si|no|origen|destino)\b/.test(chosen))throw new TrackingError(502,'invalid_taxi_name','Falta el nombre del pasajero.');
-    fields[key]={value,evidence};
+    fields[key]=v.refines===undefined?{value,evidence}:{value,evidence,refines:v.refines};
   }
   return {intent,fields};
 }

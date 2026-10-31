@@ -1,4 +1,4 @@
-import {assertTaxiTransition,conversationPhase,hasDestination}from'./stateMachine.ts';
+import {assertTaxiTransition,conversationPhase,hasDestination,pendingLocalityContext}from'./stateMachine.ts';
 import type{ModelMetadata}from'./trace.ts';
 import { emptyDraft, type Candidate, type Draft, type Interpretation, type Place, type TaxiChannel, type TaxiDecision, type TaxiInbound, type TaxiSession } from './contracts.ts';
 import { activeRideChange, cancellationQuestion, cancelsTaxi, confirmsTaxi, courtesyOnly, declinesTaxi, locationRole, locationRoleConflict, refersToSharedLocation, needsHuman, normalize, unsupportedRide,resetCommand,cancelDraftCommand,draftLocationRequest,defersDestination } from './policy.ts';
@@ -72,23 +72,6 @@ function replyNextStep(decision:TaxiDecision,phase:string):TaxiReplyContext['nex
   return'none';
 }
 interface PendingLocalityAnswer {field:'origin'|'destination';query:string;answer:string;combined:string}
-function pendingLocalityAnswer(current:string,session:TaxiSession):PendingLocalityAnswer|null{
-  const field=session.draft.awaitingLocation;
-  if(field!=='origin'&&field!=='destination')return null;
-  const query=field==='origin'?session.draft.pickupText:session.draft.destinationText;
-  if(!query||field==='origin'&&session.draft.origin||field==='destination'&&(session.draft.destination||session.draft.destinationArea||session.draft.destinationDeferred===true))return null;
-  const previous=[...session.history].reverse().find(item=>item.role==='assistant')?.content??'';
-  const previousText=normalize(previous);
-  if(!/\b(?:opciones|zonas?|tarifa)\b/.test(previousText)||!/\bcual\b/.test(previousText))return null;
-  const answer=current.trim().replace(/\s+/g,' '),normalized=normalize(answer);
-  if(answer.length<2||answer.length>120||/[¿?]/.test(answer)||! /^[\p{L}\p{M}\p{N}][\p{L}\p{M}\p{N}\s.'#,/-]{0,119}$/u.test(answer)||
-    courtesyOnly(answer)||defersDestination(answer)||needsHuman(answer)||cancelsTaxi(answer)||confirmsTaxi(answer)||declinesTaxi(answer)||unsupportedRide(answer)||activeRideChange(answer)||
-    /^(?:no|mejor|en realidad|ninguna|ninguno|todavia|aun|no se|cual|que|donde|como|cuanto|por que)\b/.test(normalized)||
-    /\b(?:ignora|instrucciones|mandame|envia|cancelar|cancela|cobrar|reservar|reserva)\b/.test(normalized))return null;
-  const combined=normalize(query)===normalized?query:`${query}, ${answer}`;
-  if(combined.length>400)return null;
-  return{field,query,answer,combined};
-}
 export async function coordinateTaxi(messages:TaxiInbound[],session:TaxiSession,channel:TaxiChannel,services:TaxiServices,now:number,signal?:AbortSignal):Promise<TaxiDecision> {
   const decision=await decideTaxi(messages,session,channel,services,now,signal);
   assertTaxiTransition(session,messages,decision,now);
@@ -234,10 +217,10 @@ async function decideTaxi(messages:TaxiInbound[],session:TaxiSession,channel:Tax
   const native=nativeLocationSegments(messages);
   let interpretation:Interpretation;
   let interpretationIssue:'interpretation_failed'|'ambiguous_intent'|'unclear_name'|'pickup_reference_too_long'|null=null;
-  const localityAnswer=messages.every(message=>message.type==='text')?pendingLocalityAnswer(current,session):null;
+  const pendingLocality=pendingLocalityContext(session);
+  let localityAnswer:PendingLocalityAnswer|null=null;
   try{
-    if(localityAnswer){const fields:Interpretation['fields']={};fields[localityAnswer.field]={value:localityAnswer.combined,evidence:localityAnswer.answer};interpretation={intent:'provide',fields};}
-    else interpretation=current&&!(selectedRole&&messages.some((m)=>m.location!==null))?await services.interpret(current,session,channel,signal):{intent:'provide',fields:{}};
+    interpretation=current&&!(selectedRole&&messages.some((m)=>m.location!==null))?await services.interpret(current,session,channel,signal):{intent:'provide',fields:{}};
   }
   catch{interpretationIssue='interpretation_failed';interpretation={intent:'ambiguous',fields:{}};}
   if(interpretation.intent==='human')return human('model_handoff');
@@ -252,12 +235,22 @@ async function decideTaxi(messages:TaxiInbound[],session:TaxiSession,channel:Tax
   }
   if(interpretation.fields.name){
     const chosen=normalize(interpretation.fields.name.value).replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
-    const explicit=new RegExp('\\b(?:me llamo|soy|a nombre de|mi nombre es)\\s+'+chosen+'(?:\\b|$)').test(normalize(interpretation.fields.name.evidence));
+    const explicit=new RegExp('\\b(?:me llamo|soy|a nombre de|(?:mi |el )?nombre (?:es|sera)|(?:el |la )?pasajer[oa] (?:es|sera))\\s+'+chosen+'(?:\\b|$)').test(normalize(interpretation.fields.name.evidence));
     const contextualAnswer=conversationPhase(session,now)==='name'&&!d.name;
     if(!explicit&&!contextualAnswer){
       if(!native.length)return clarifyPending('unclear_name',d);
       interpretationIssue='unclear_name';interpretation={intent:'provide',fields:{}};
     }
+  }
+  // A model-proposed continuation must target the exact unresolved place in this durable session.
+  // New destinations default to replacement; the backend never appends a name or an unrelated reply.
+  for(const field of ['origin','destination'] as const){
+    const proposed=interpretation.fields[field];if(proposed?.refines===undefined)continue;
+    if(!pendingLocality||pendingLocality.field!==field||pendingLocality.query!==proposed.refines)return clarifyPending('ambiguous_intent');
+    const query=pendingLocality.query,answer=proposed.value,combined=normalize(query)===normalize(answer)?query:`${query}, ${answer}`;
+    if(combined.length>400)return clarifyPending('ambiguous_intent');
+    localityAnswer={field,query,answer,combined};
+    interpretation={...interpretation,fields:{...interpretation.fields,[field]:{value:combined,evidence:proposed.evidence}}};
   }
   const repeatedPickup=interpretation.fields.origin?restatesKnownPickup(d,interpretation.fields.origin.value,interpretation.fields.origin.evidence):false;
   let pickupNote:string|null=null;
@@ -323,6 +316,9 @@ async function decideTaxi(messages:TaxiInbound[],session:TaxiSession,channel:Tax
   }
   if(changed){d.confirmation=null;d.expiresAt=null;d.quoteCents=null;d.quoteH3=null;}
   if(interpretationIssue)return clarifyPending(interpretationIssue,d);
+  if(pendingLocality&&!interpretation.fields[pendingLocality.field]&&d.awaitingLocation===pendingLocality.field){
+    return requestLocation(d,pendingLocality.field,interpretation.intent==='question'?'service_question':'locality_still_pending',`Sigo con ${pendingLocality.query} como ${pendingLocality.field==='destination'?'destino':'referencia de dónde pasamos por ti'}. ¿Me das una calle o referencia para ubicar ese punto? ${pendingLocality.field==='destination'?'Su pin es opcional.':'Comparte también el pin donde pasamos por ti.'}`);
+  }
   if(unresolved.length===1){
     const field=unresolved[0],areas=recognized[field];
     if(localityAnswer?.field===field){

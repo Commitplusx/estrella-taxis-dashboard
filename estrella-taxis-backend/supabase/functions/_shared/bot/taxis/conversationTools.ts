@@ -19,19 +19,20 @@ interface TaxiToolDefinition {
     parameters: Record<string, unknown>;
   };
 }
-const field = (max: number) => ({
+const field = (max: number,locality=false) => ({
   type: "object",
   additionalProperties: false,
   required: ["value", "evidence"],
   properties: {
     value: { type: "string", minLength: 2, maxLength: max },
     evidence: { type: "string", minLength: 2, maxLength: 3000 },
+    ...(locality?{refines:{type:'string',minLength:2,maxLength:400,description:'Sólo al precisar la localidad pendiente con una calle, categoría o referencia: copia exactamente context.pendingLocality.query. value y evidence siguen siendo literales del mensaje actual. Omite refines si es otro lugar o no hay localidad pendiente.'}}:{}),
   },
 });
 const fields = {
   type: "object",
   additionalProperties: false,
-  properties: { name: field(80), origin: field(400), destination: field(400), pickupReference: {...field(400),description:'Detalle del lugar donde espera: «es el portón azul», «estoy frente a la cancha», o «yo estoy en el centro» al reafirmar el punto ya descrito mientras corrige su destino. Conserva el pin existente. También complementa origin en la misma llamada antes de recibir GPS: origin centro y pickupReference la fuente. Si se movió o pide otra puerta/dirección, usa origin para exigir pin nuevo.'} },
+  properties: { name: field(80), origin: field(400,true), destination: field(400,true), pickupReference: {...field(400),description:'Detalle del lugar donde espera: «es el portón azul», «estoy frente a la cancha», o «yo estoy en el centro» al reafirmar el punto ya descrito mientras corrige su destino. Conserva el pin existente. También complementa origin en la misma llamada antes de recibir GPS: origin centro y pickupReference la fuente. Si se movió o pide otra puerta/dirección, usa origin para exigir pin nuevo.'} },
 };
 const withFields = {
   type: "object",

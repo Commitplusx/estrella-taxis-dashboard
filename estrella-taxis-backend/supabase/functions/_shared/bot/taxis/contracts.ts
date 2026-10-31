@@ -2,7 +2,7 @@ import { record, TrackingError, positiveId } from '../../tracking/contracts.ts';
 import { taxiH3Cell, type H3QuoteScope } from './h3.ts';
 import { parseNeighborhoodArea, streetReference, type NeighborhoodArea } from './neighborhoodContracts.ts';
 export { record };
-export const TAXI_BOT_VERSION='taxi-bot-v18-pickup-context';
+export const TAXI_BOT_VERSION='taxi-bot-v19-semantic-clarification';
 export interface TaxiChannel {
   tenantId:string; waba:string; enabled:boolean; name:string; city:string;
   centerLat:number; centerLng:number; radiusKm:number; dispatcher:string|null;
@@ -26,7 +26,7 @@ export interface TaxiInbound {
   id:string;from:string;to:string;at:string;type:'text'|'button'|'location'|'unsupported';
   text:string;button:string|null;location:{lat:number;lng:number}|null;
 }
-export interface FieldValue {value:string;evidence:string}
+export interface FieldValue {value:string;evidence:string;refines?:string}
 export interface Interpretation {
   intent:'request'|'provide'|'quote'|'question'|'confirm'|'cancel'|'status'|'human'|'smalltalk'|'ambiguous';
   fields:{name?:FieldValue;origin?:FieldValue;destination?:FieldValue;pickupReference?:FieldValue};

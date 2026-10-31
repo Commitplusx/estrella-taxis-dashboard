@@ -155,6 +155,16 @@ Deno.test("interpreter few-shot dialogues all satisfy the strict taxi tool contr
   assert(parsed >= 16, "The interpreter prompt must retain its expanded examples.");
   assert(current === null, "Every synthetic customer example must have a matching tool answer.");
 });
+Deno.test('taxi tools: endpoint refinement is validated, traced compatibly and not lost before coordination',async()=>{
+  const current='Liverpool',proposal=parseTaxiToolCompletion(completion('actualizar_recorrido',{fields:{destination:{value:'Liverpool',evidence:'Liverpool',refines:'Plaza Las Flores'}}}),current);
+  equal(proposal.fields.destination?.refines,'Plaza Las Flores');
+  const s=session(),trace=new TaxiTurnTrace(s,Date.now());
+  const providers:TaxiServices={interpret:async()=>proposal,resolve:async()=>({kind:'unavailable'}),quote:async()=>null,candidates:async()=>[]};
+  const result=await trace.services(providers).interpret(current,s,channel);equal(result,proposal);
+  const packet=trace.packet();equal(packet.interpretationPrivate,{intent:'provide',fields:{destination:{value:'Liverpool',evidence:'Liverpool'}}});
+  equal(packet.steps[0]?.code,'proposed_destination_refinement');assert(packet.steps[0]?.outputHash);
+  rejects(()=>parseTaxiToolCompletion(completion('actualizar_recorrido',{fields:{name:{value:'Jorge',evidence:'Soy Jorge',refines:'Plaza Las Flores'}}}),'Soy Jorge'));
+});
 
 for (
   const [name, intent] of [

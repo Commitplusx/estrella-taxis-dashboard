@@ -1,5 +1,7 @@
 # Recogida, referencias y aclaración del destino
 
+Esta nota conserva la evidencia de la entrega v18/versiones 32. La publicación vigente y su verificación posterior están en [STELLAR_SEMANTIC_CLARIFICATION.md](STELLAR_SEMANTIC_CLARIFICATION.md).
+
 Motor: `taxi-bot-v18-pickup-context`. Corrige la conversación reportada donde «Vendrían por mí / Al centro / Estoy en la fuente» terminó con Centro como destino y luego volvió a pedir el GPS al aclarar «No, me llevarían a plaza, yo estoy en el centro».
 
 ## Causas y corrección

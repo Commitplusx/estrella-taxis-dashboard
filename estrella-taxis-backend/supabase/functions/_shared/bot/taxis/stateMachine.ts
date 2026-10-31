@@ -43,6 +43,14 @@ export function taxiProgress(s:TaxiSession,now:number){
   return {phase,hasPickupGps:Boolean(d.origin?.source==='gps'&&d.pickupMessageId),hasPassengerName:Boolean(d.name),missing:[...(!d.origin||d.origin.source!=='gps'||!d.pickupMessageId?['pickup_gps']:[]),...(!hasDestination(d)&&d.destinationDeferred!==true?['destination_choice']:[]),...(!d.name?['passenger_name']:[]),...(d.fareMode!=='quoted'||d.quoteCents===null?['server_fare']:[])],destinationOptional:true,destinationDeferred:d.destinationDeferred===true,confirmation:'current_button_only',hasPickupNote:Boolean(d.pickupText),hasDestination:hasDestination(d),canRequest:phase==='review'&&d.fareMode==='quoted'&&d.quoteCents!==null};
 }
 export function hasDestination(d:TaxiSession['draft']):boolean{return Boolean(d.destination||d.destinationText||d.destinationArea);}
+/** The backend owns the unresolved place; the model only proposes how a current detail relates to it. */
+export function pendingLocalityContext(s:TaxiSession):{field:'origin'|'destination';query:string}|null{
+  const field=s.draft.awaitingLocation;
+  if(field!=='origin'&&field!=='destination')return null;
+  const query=field==='origin'?s.draft.pickupText:s.draft.destinationText;
+  if(!query||field==='origin'&&s.draft.origin||field==='destination'&&(s.draft.destination||s.draft.destinationArea||s.draft.destinationDeferred===true))return null;
+  return{field,query};
+}
 /** Derived state: the persisted session remains the single source of truth. */
 export function assertTaxiTransition(
   s: TaxiSession,

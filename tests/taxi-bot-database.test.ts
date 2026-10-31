@@ -19,6 +19,7 @@ import {parseQualityDetail,parseQualityPage}from'../estrella-taxis-backend/supab
 import {createTaxiInterpreter,TAXI_INTERPRETER_CONTRACT}from'../estrella-taxis-backend/supabase/functions/_shared/bot/taxis/interpreter.ts';
 import {fingerprint}from'../estrella-taxis-backend/supabase/functions/_shared/tracking/contracts.ts';
 import {parseOutgoing,sendTaxiMessage}from'../estrella-taxis-backend/supabase/functions/_shared/bot/taxis/transport.ts';
+import {TaxiTurnTrace}from'../estrella-taxis-backend/supabase/functions/_shared/bot/taxis/trace.ts';
 const denyAdminWrite = async (): Promise<never> => { throw new Error('No administration writes in this fixture.'); };
 const sql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261027220000_taxi_bot_transactions.sql',import.meta.url),'utf8');
 const h3CatalogSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20260901110001_create_h3_zonas.sql',import.meta.url),'utf8');
@@ -245,6 +246,36 @@ test('pickup context SQL: fragmented pickup and destination clarification keep o
   const accepted=await turn(await f.enqueue('',customer,crypto.randomUUID(),'txc_'+corrected.draft.confirmation));assert.equal(accepted.action,'confirm');assert.equal(assignments,1);assert.equal(await f.scalar('SELECT count(*)::int FROM viajes'),1);assert.equal(await f.scalar('SELECT count(*)::int FROM taxi_bot_offers'),1);
  }finally{await f.db.close();}
 });
+test('semantic clarification SQL: pending locality, identity and a new destination stay distinct across durable turns',async()=>{
+ const f=await fixture();try{
+  await f.prepare();let assignments=0;
+  const channel:TaxiChannel={tenantId:tenant,waba,enabled:true,name:'Base sintética',city:'Comitán',centerLat:16.25,centerLng:-92.13,radiusKm:20,dispatcher:null,model:'fixture',baseCents:null,perKmCents:null,pricingMode:'h3_zone_max'};
+  const proposals:Record<string,unknown>={
+   ['Voy a Plaza Las Flores']:{intent:'provide',fields:{destination:{value:'Plaza Las Flores',evidence:'Voy a Plaza Las Flores'}}},
+   ['Soy Jorge']:{intent:'provide',fields:{name:{value:'Jorge',evidence:'Soy Jorge'}}},
+   ['Liverpool']:{intent:'provide',fields:{destination:{value:'Liverpool',evidence:'Liverpool',refines:'Plaza Las Flores'}}},
+   ['Me llevan al Hospital']:{intent:'provide',fields:{destination:{value:'Hospital',evidence:'Me llevan al Hospital'}}},
+   ['El nombre es Ana']:{intent:'provide',fields:{name:{value:'Ana',evidence:'El nombre es Ana'}}},
+  };
+  const area={label:'Plaza Las Flores',category:'cash_a' as const,version:'a'.repeat(32),cents:5500,cell:null,priceSource:'reference' as const};
+  const services:TaxiServices={interpret:async text=>{assert.ok(Object.hasOwn(proposals,text),'Every model decision is declared.');return parseInterpretation(proposals[text],text);},resolve:async query=>query==='Plaza Las Flores'?{kind:'ambiguous',labels:['Plaza Las Flores (Cash A)','Plaza Las Flores (otros puntos)'],neighborhoods:[area,{...area,category:'otro_punto',version:'b'.repeat(32)}]}:{kind:'unavailable'},quote:async()=>4500,candidates:async()=>{assignments++;return[{deviceId:1,name:'Unidad 1'}];}};
+  const turn=async(event:Record<string,unknown>)=>{
+   const claim=await f.begin(event.eventId);assert.equal(claim.state,'proceed');assert.ok(Array.isArray(claim.messages));const s=parseSession(claim.session),trace=new TaxiTurnTrace(s,Date.now());
+   const decision=await coordinateTaxi(claim.messages.map(item=>parseStoredInbound(item,Date.now())),s,channel,trace.services(services),Date.now());const audit=trace.packet(decision);
+   assert.equal(await f.scalar('SELECT taxi_bot_trace_packet_valid($1)',[audit]),true);await f.commit(claim.eventId,claim,{...decision,audit});return decision;
+  };
+  const pending=await turn(await f.enqueue('Voy a Plaza Las Flores'));assert.equal(pending.draft.confirmation,null);assert.equal(pending.draft.awaitingLocation,'destination');
+  const identity=await turn(await f.enqueue('Soy Jorge'));assert.equal(identity.draft.name,'Jorge');assert.equal(identity.draft.destinationText,'Plaza Las Flores');assert.equal(identity.draft.confirmation,null);assert.equal(identity.draft.pickupMessageId,f.draft.pickupMessageId);
+  const detail=await turn(await f.enqueue('Liverpool'));assert.equal(detail.draft.destinationText,'Plaza Las Flores, Liverpool');assert.equal(detail.draft.confirmation,null);assert.equal(detail.draft.name,'Jorge');
+  assert.equal(await f.scalar("SELECT count(*)::int FROM taxi_bot_turn_traces WHERE packet#>>'{steps,0,code}'='proposed_destination_refinement'"),1);
+  const changed=await turn(await f.enqueue('Me llevan al Hospital'));assert.equal(changed.draft.destinationText,'Hospital');assert.equal(changed.draft.pickupMessageId,f.draft.pickupMessageId);assert.ok(changed.draft.confirmation);
+  const named=await turn(await f.enqueue('El nombre es Ana'));assert.equal(named.draft.name,'Ana');assert.equal(named.draft.destinationText,'Hospital');assert.notEqual(named.draft.confirmation,changed.draft.confirmation);assert.deepEqual(named.draft.origin,f.draft.origin);
+  assert.equal(assignments,0);assert.equal(await f.scalar('SELECT count(*)::int FROM viajes'),0);
+  const old=await turn(await f.enqueue('',customer,crypto.randomUUID(),'txc_'+changed.draft.confirmation));assert.equal(old.reason,'stale_confirmation');assert.equal(assignments,0);
+  const accepted=await turn(await f.enqueue('',customer,crypto.randomUUID(),'txc_'+named.draft.confirmation));assert.equal(accepted.action,'confirm');assert.equal(assignments,1);assert.equal(await f.scalar('SELECT count(*)::int FROM viajes'),1);assert.equal(await f.scalar('SELECT count(*)::int FROM taxi_bot_offers'),1);
+ }finally{await f.db.close();}
+});
+
 test('GPS button consent SQL: typed assent cannot create trips, offers or notifications; the current click works once without a destination',async()=>{
  const f=await fixture();try{
   await f.prepare();const scope=taxiH3Scope(f.draft.origin,f.draft.origin),token=crypto.randomUUID(),pending={...f.draft,destination:null,destinationText:null,fareMode:'unquoted',quoteBasis:null,quoteCents:null,quoteH3:null,confirmation:null,awaitingLocation:'destination',destinationPrompt:token,destinationDeferred:false};

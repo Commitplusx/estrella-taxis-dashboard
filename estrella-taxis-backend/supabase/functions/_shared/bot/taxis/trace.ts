@@ -121,10 +121,15 @@ export class TaxiTurnTrace {
                 model = value;
               }),
             (value) => {
-              this.interpretation = value;
+              // Keep the SQL trace-v1 literal-field contract. The proposal hash above includes
+              // refines; a bounded step code records its presence without silently widening SQL.
+              const fields:Interpretation['fields']={};
+              for(const key of ['name','origin','destination','pickupReference'] as const){const field=value.fields[key];if(field)fields[key]={value:field.value,evidence:field.evidence};}
+              this.interpretation = {...value,fields};
               return {
                 intent: value.intent,
                 fields: Object.keys(value.fields),
+                ...(value.fields.destination?.refines!==undefined?{code:'proposed_destination_refinement'}:value.fields.origin?.refines!==undefined?{code:'proposed_origin_refinement'}:{}),
               };
             },
           );
