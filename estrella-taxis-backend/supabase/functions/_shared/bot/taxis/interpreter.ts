@@ -4,6 +4,7 @@ import {
   record,
   type TaxiChannel,
   type TaxiSession,
+  type TaxiTurnContext,
 } from "./contracts.ts";
 import {
   parseTaxiToolCompletion,
@@ -19,6 +20,7 @@ Puedes entender lenguaje coloquial y datos en cualquier orden. Conserva todos lo
 Reconoce el papel de cada lugar por el sentido de la frase, no por el turno del formulario. «Estoy en», «te espero en», «pasas por mí en», «recógeme en» y «mándame un taxi a» describen recogida. «Voy a», «voy pa», «me dirijo a», «quiero llegar a», «llévame a» y «¿me llevas a…?» describen destino. Estos papeles explícitos prevalecen aunque expectedField esté esperando el otro extremo. «Te espero en Pilita Seca» es origin, nunca destination por estar preguntando el destino; el destino pendiente se conserva pendiente.
 Un origen o destino guardado se puede corregir. Distingue un cambio de punto de una descripción del mismo lugar; no conviertas toda frase «estoy en…» en un traslado. Consulta pickupNote, el pin guardado y la conversación. Si describe otro lugar de recogida o dice que se movió, usa origin y el servidor exige un pin nuevo; no hace falta la palabra «cambia». Ejemplo: con recogida en Calle Primera y sin referencia previa a Pilita Seca, «te espero en Pilita Seca» propone origin="Pilita Seca". En cambio, si ya mandó el pin del Centro y está aclarando el destino, «No, me llevarían a plaza, yo estoy en el centro» propone destination="plaza" y pickupReference="el centro"; reafirma dónde espera y conserva el pin. «Sigo en la fuente» y «es el mismo lugar» tampoco anuncian un traslado. Si hay duda real sobre si se movió, usa aclarar_solicitud; nunca inventes el cambio.
 Lee el lote como una conversación, también cuando una frase está repartida entre mensajes. «Vendrían por mí / Al centro / Estoy en la fuente» pide recogida en centro y agrega la fuente como pickupReference: no aporta destino. «Al centro» completa «vendrían por mí», no una pregunta de destino que nadie hizo. Usa origin="centro" y pickupReference="la fuente", citando por separado las cláusulas actuales. En «Me llevarían / A plaza / Yo estoy en el centro», el verbo llevar indica destination="plaza" y la ubicación actual describe la recogida. No intercambies los extremos por separar los mensajes.
+context.currentTurn.nativeLocations describe los pines nativos que acompañan este mismo lote. role es el papel que el backend pudo asociar y beforeText indica cuántos fragmentos escritos preceden al pin. No contiene una dirección que debas inventar. Si hay un pin origin y otro destination, «aquí me recoges / ahí voy / soy José Ángel» sólo necesita name="José Ángel": los dos lugares ya los aplica el servidor. No declares ambiguo todo el mensaje por contener las dos etiquetas ni descartes el nombre. Extrae también cualquier destino escrito, referencia, duda o corrección explícita junto al pin. Si el papel de un pin es null, conserva los datos textuales claros y deja que el backend pregunte a qué extremo corresponde; no inventes coordenadas ni resuelvas el pin por tu cuenta.
 «Voy a la Pilita Seca» aporta destination="Pilita Seca" aunque todavía falte la recogida. «Estoy en El Piedrón y voy a Pilita Seca», «de El Piedrón a Pilita Seca» y «voy a Pilita Seca, recógeme en El Piedrón» aportan origin="El Piedrón" y destination="Pilita Seca" juntos. Extrae cada lugar y su referencia, no los verbos de traslado ni la otra dirección. Conserva calles, números, color de casa y referencias del extremo correspondiente.
 No agregues artículos ni corrijas por tu cuenta la escritura de un nombre: de «me dirijo al Piedrón» extrae destination="Piedrón" (literal), no "El Piedrón". De «voy pa la Pilita Seca» extrae "Pilita Seca" o "la Pilita Seca", sin traducir «pa» a un texto inventado dentro de value. La búsqueda de lugares y alias corresponde al servidor.
 Entiende errores como «voi», «tasi», «toy», «pa», «xfa» y «me yebas ala…» por el contexto, sin corregir el nombre dentro de value. Extrae palabras completas del texto actual: de «me yebas ala pilita seca» usa destination="pilita seca", no "la pilita seca" recortada dentro de «ala». Tampoco recortes «Mariana» a «Ana». «Me mandas un taxi al Piedrón a nombre de Mariana» aporta origin="Piedrón" y name="Mariana"; «El Piedrón» inventaría un artículo ausente. La referencia de cada extremo conserva su calle y número.
@@ -131,6 +133,7 @@ export function createTaxiInterpreter(
     session: TaxiSession,
     channel: TaxiChannel,
     signal?: AbortSignal,
+    turn?:TaxiTurnContext,
   ): Promise<Interpretation> => {
     if (!apiKey || !model) {
       throw new TrackingError(
@@ -161,6 +164,7 @@ export function createTaxiInterpreter(
       phase,
       progress: taxiProgress(session, Date.now()),
       pendingLocality:pendingLocalityContext(session),
+      currentTurn:turn??{nativeLocations:[]},
       expectedField: phase === 'origin' || phase === 'destination' || phase === 'name' ? phase : null,
       draft: {
         name: session.draft.name,

@@ -1,7 +1,7 @@
 import {assertTaxiTransition,conversationPhase,hasDestination,pendingLocalityContext}from'./stateMachine.ts';
 import type{ModelMetadata}from'./trace.ts';
-import { emptyDraft, type Candidate, type Draft, type Interpretation, type Place, type TaxiChannel, type TaxiDecision, type TaxiInbound, type TaxiSession } from './contracts.ts';
-import { activeRideChange, cancellationQuestion, cancelsTaxi, confirmsTaxi, courtesyOnly, declinesTaxi, locationRole, locationRoleConflict, refersToSharedLocation, needsHuman, normalize, unsupportedRide,resetCommand,cancelDraftCommand,draftLocationRequest,defersDestination } from './policy.ts';
+import { emptyDraft, type Candidate, type Draft, type Interpretation, type Place, type TaxiChannel, type TaxiDecision, type TaxiInbound, type TaxiSession,type TaxiTurnContext,type FieldValue } from './contracts.ts';
+import { activeRideChange, cancellationQuestion, cancelsTaxi, confirmsTaxi, courtesyOnly, declinesTaxi, locationRole, locationRoleOnly, locationRoleConflict, refersToSharedLocation, needsHuman, normalize, unsupportedRide,resetCommand,cancelDraftCommand,draftLocationRequest,defersDestination } from './policy.ts';
 import { getDistanceFromLatLonInKm } from '../../algorithms/headingMatcher.ts';
 import { taxiH3Scope } from './h3.ts';
 import type { NeighborhoodArea } from './neighborhoodContracts.ts';
@@ -9,7 +9,7 @@ import { localityDisplayName } from './neighborhoods.ts';
 import type {TaxiQuestion,TaxiReplyContext}from'./conversationReply.ts';
 export type LocationResult={kind:'resolved';place:Place}|{kind:'ambiguous';labels:string[];neighborhoods?:NeighborhoodArea[]}|{kind:'reference_conflict';label:string}|{kind:'unavailable'};
 export interface TaxiServices {
-  interpret:(text:string,session:TaxiSession,channel:TaxiChannel,signal?:AbortSignal,observe?:(metadata:ModelMetadata)=>void)=>Promise<Interpretation>;
+  interpret:(text:string,session:TaxiSession,channel:TaxiChannel,signal?:AbortSignal,observe?:(metadata:ModelMetadata)=>void,turn?:TaxiTurnContext)=>Promise<Interpretation>;
   resolve:(text:string,channel:TaxiChannel,signal?:AbortSignal,area?:NeighborhoodArea|null,observe?:(metadata:ModelMetadata)=>void)=>Promise<LocationResult>;
   quote:(origin:Place,destination:Place,channel:TaxiChannel,signal?:AbortSignal,destinationArea?:NeighborhoodArea|null)=>Promise<number|null>;
   candidates:(origin:Place,channel:TaxiChannel,signal?:AbortSignal)=>Promise<Candidate[]>;
@@ -44,8 +44,24 @@ function restatesKnownPickup(d:Draft,value:string,evidence:string):boolean{
   if(/\b(?:ya no (?:estoy|estamos|sigo)|(?:me|nos) (?:movi|movimos|cambie|cambiamos)|ahora (?:estoy|recogeme|me recoges|te espero)|otra (?:entrada|direccion|calle|puerta|ubicacion)|nuevo (?:punto|origen)|(?:cambia|corrige) (?:el |mi )?(?:origen|recogida|punto))\b/.test(normalize(evidence)))return false;
   return containsPickupDescription(d.pickupText,value)||containsPickupDescription(d.origin.text,value);
 }
+/** Locate the final literal value inside its actual evidence, including clauses split across bubbles. */
+function evidencedMessageIndex(messages:TaxiInbound[],field:FieldValue):number{
+ const spans:{index:number;start:number;end:number}[]=[],parts:string[]=[];let offset=0;
+ for(const [index,message]of messages.entries()){const value=normalize(message.text);if(!value)continue;if(parts.length)offset++;spans.push({index,start:offset,end:offset+value.length});parts.push(value);offset+=value.length;}
+ const current=parts.join(' '),evidence=normalize(field.evidence),start=current.lastIndexOf(evidence),chosen=normalize(field.value);
+ if(start<0)return-1;
+ const escaped=chosen.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'),at=[...evidence.matchAll(new RegExp('(?<![\\p{L}\\p{N}_])'+escaped+'(?![\\p{L}\\p{N}_])','gu'))].at(-1)?.index;
+ if(at===undefined)return-1;
+ const end=start+at+chosen.length-1;return spans.find(span=>span.start<=end&&span.end>end)?.index??-1;
+}
 function nativeLocationSegments(messages:TaxiInbound[]):{message:TaxiInbound;context:string}[]{
   const indexes=messages.flatMap((message,index)=>message.location?[index]:[]);
+  if(indexes.length>1){
+    const labels=messages.flatMap((message,index)=>message.type==='text'&&locationRole(message.text)&&!locationRoleConflict(message.text)?[{index,text:message.text}]:[]);
+    // A label may precede or follow its pin. Pair in order only when every pin has
+    // one explicit label and no pair crosses another pin; otherwise ask for roles.
+    if(labels.length===indexes.length&&labels.every((label,position)=>!indexes.some(other=>other!==indexes[position]&&other>Math.min(label.index,indexes[position])&&other<Math.max(label.index,indexes[position]))))return indexes.map((index,position)=>({message:messages[index],context:labels[position].text}));
+  }
   return indexes.map((index,position)=>{
     const start=position===0?0:indexes[position-1]+1;
     const end=position===indexes.length-1?messages.length:index+1;
@@ -208,29 +224,34 @@ async function decideTaxi(messages:TaxiInbound[],session:TaxiSession,channel:Tax
   const finalDecline=declinesTaxi(latest.text)&&messages.every((m)=>m.type==='text'&&(confirmsTaxi(m.text)||courtesyOnly(m.text)||declinesTaxi(m.text)));
   if(finalDecline)return {...reply('Está bien, todavía no solicito el taxi. Cuando estés listo, revisamos el viaje de nuevo. 🙂','summary_declined'),action:'draft',draft:{...session.draft,confirmation:null,expiresAt:null,destinationPrompt:null}};
   let d:Draft={...session.draft};let changed=false;
-  const selectedRole=locationRole(current);
+  let resolvedPendingRole:'origin'|'destination'|null=null;
+  const selectedRole=locationRole(current),roleOnly=locationRoleOnly(current);
   if(selectedRole&&d.pendingLocation&&messages.every((m)=>m.type==='text')){
     if(Date.parse(d.pendingLocation.expiresAt)<=now)return requestLocation(d,selectedRole,'pending_location_expired','Ese pin ya venció. Compártelo otra vez para usarlo en este viaje.');
     d[selectedRole]=d.pendingLocation.place;if(selectedRole==='origin')d.pickupMessageId=d.pendingLocation.messageId??null;d[selectedRole==='origin'?'originArea':'destinationArea']=null;d.pendingLocation=null;d.awaitingLocation=null;
-    return prepareSummary(d,'summary');
+    resolvedPendingRole=selectedRole;
+    if(selectedRole==='destination'){d.destinationText=null;d.destinationDeferred=false;}
+    if(roleOnly)return prepareSummary(d,'summary');
+    changed=true;
   }
   const native=nativeLocationSegments(messages);
+  const turn:TaxiTurnContext={nativeLocations:native.map(item=>({role:locationRole(item.context),beforeText:messages.slice(0,messages.indexOf(item.message)).filter(m=>Boolean(m.text)).length}))};
   let interpretation:Interpretation;
   let interpretationIssue:'interpretation_failed'|'ambiguous_intent'|'unclear_name'|'pickup_reference_too_long'|null=null;
-  const pendingLocality=pendingLocalityContext(session);
+  const interpretationSession=changed?{...session,draft:d}:session,pendingLocality=pendingLocalityContext(interpretationSession);
   let localityAnswer:PendingLocalityAnswer|null=null;
   try{
-    interpretation=current&&!(selectedRole&&messages.some((m)=>m.location!==null))?await services.interpret(current,session,channel,signal):{intent:'provide',fields:{}};
+    interpretation=current&&!(selectedRole&&roleOnly&&native.length)?await services.interpret(current,interpretationSession,channel,signal,undefined,turn):{intent:'provide',fields:{}};
   }
   catch{interpretationIssue='interpretation_failed';interpretation={intent:'ambiguous',fields:{}};}
   if(interpretation.intent==='human')return human('model_handoff');
   if(interpretationIssue||interpretation.intent==='ambiguous'||interpretation.intent==='cancel'||interpretation.intent==='confirm'){
     interpretationIssue??='ambiguous_intent';
-    if(!native.length)return clarifyPending(interpretationIssue);
+    if(!native.length)return clarifyPending(interpretationIssue,d);
     interpretation={intent:'provide',fields:{}};
   }
   if(interpretation.intent==='status'){
-    if(!native.length)return reply('Todavía no has solicitado el taxi. Primero hay que revisar el recorrido y confirmar el resumen.','no_active_status');
+    if(!native.length&&!changed)return reply('Todavía no has solicitado el taxi. Primero hay que revisar el recorrido y confirmar el resumen.','no_active_status');
     interpretationIssue='ambiguous_intent';interpretation={intent:'provide',fields:{}};
   }
   if(interpretation.fields.name){
@@ -244,6 +265,8 @@ async function decideTaxi(messages:TaxiInbound[],session:TaxiSession,channel:Tax
   }
   // A model-proposed continuation must target the exact unresolved place in this durable session.
   // New destinations default to replacement; the backend never appends a name or an unrelated reply.
+  const textPositions:Partial<Record<'origin'|'destination',number>>={};
+  for(const field of ['origin','destination'] as const){const proposed=interpretation.fields[field];if(proposed)textPositions[field]=evidencedMessageIndex(messages,proposed);}
   for(const field of ['origin','destination'] as const){
     const proposed=interpretation.fields[field];if(proposed?.refines===undefined)continue;
     if(!pendingLocality||pendingLocality.field!==field||pendingLocality.query!==proposed.refines)return clarifyPending('ambiguous_intent');
@@ -270,7 +293,7 @@ async function decideTaxi(messages:TaxiInbound[],session:TaxiSession,channel:Tax
   const referenceConflicts:Partial<Record<'origin'|'destination',string>>={};
   for(const field of ['origin','destination'] as const) {
     const requested=interpretation.fields[field];if(!requested)continue;
-    if(native.length&&refersToSharedLocation(requested.value))continue;
+    if((native.length||resolvedPendingRole===field)&&refersToSharedLocation(requested.value))continue;
     if(field==='origin'&&repeatedPickup){changed=true;continue;}
     changed=true;d.confirmation=null;d.expiresAt=null;d.quoteCents=null;d.quoteH3=null;d.destinationPrompt=null;
     const areaKey=field==='origin'?'originArea':'destinationArea';
@@ -291,9 +314,10 @@ async function decideTaxi(messages:TaxiInbound[],session:TaxiSession,channel:Tax
     for(const item of native){
       const point=item.message.location;if(!point)continue;
       const place:Place={text:`Ubicación compartida (${point.lat.toFixed(5)}, ${point.lng.toFixed(5)})`,lat:point.lat,lng:point.lng,placeId:null,source:'gps'};
-      if(!within(place,channel))return human('outside_service_area','La ubicación queda fuera de la zona configurada. La base debe confirmar ese servicio.');
       const explicit=locationRole(item.context),conflict=locationRoleConflict(item.context);
       const target=conflict?null:explicit??inferLocationRole(preview,interpretationIssue===null&&planned.length===0&&(!preview.origin||preview.origin.source!=='gps'));
+      if(target&&interpretation.fields[target]&&(textPositions[target]??-1)>messages.indexOf(item.message)&&!(target==='origin'&&repeatedPickup)&&!refersToSharedLocation(interpretation.fields[target]?.value??''))continue;
+      if(!within(place,channel))return human('outside_service_area','La ubicación queda fuera de la zona configurada. La base debe confirmar ese servicio.');
       if(!target){unclear={place,messageId:item.message.id};break;}
       planned.push({target,place,messageId:item.message.id});
       preview[target]=place;

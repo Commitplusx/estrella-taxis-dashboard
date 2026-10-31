@@ -110,16 +110,17 @@ export class TaxiTurnTrace {
     const compose=base.question;
     return {
       ...(compose?{question:(kind,current,channel,signal,context)=>this.run('compose',{kind,current,context,contract:TAXI_QUESTION_PROMPT},()=>compose(kind,current,channel,signal,context),value=>({code:value?'generated':'canonical'}))}:{}),
-      interpret: async (text, session, channel, signal) => {
+      interpret: async (text, session, channel, signal,observe,turn) => {
         let model: ModelMetadata | undefined;
         try {
           return await this.run(
             "interpret",
-            { text, session },
+            { text, session,turn },
             () =>
               base.interpret(text, session, channel, signal, (value) => {
                 model = value;
-              }),
+                observe?.(value);
+              },turn),
             (value) => {
               // Keep the SQL trace-v1 literal-field contract. The proposal hash above includes
               // refines; a bounded step code records its presence without silently widening SQL.

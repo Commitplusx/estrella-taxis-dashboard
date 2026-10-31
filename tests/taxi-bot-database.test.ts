@@ -276,6 +276,41 @@ test('semantic clarification SQL: pending locality, identity and a new destinati
  }finally{await f.db.close();}
 });
 
+for(const source of ['native_pair','pending_pin'] as const)test('compound GPS SQL: '+source+' keeps all current facts and creates one trip only after the current click',async()=>{
+ const f=await fixture();try{
+  if(source==='pending_pin')await f.prepare();else await f.seedH3();await f.db.exec('UPDATE taxi_bot_channels SET base_cents=5500');
+  const channel:TaxiChannel={tenantId:tenant,waba,enabled:true,name:'Base sintética',city:'Comitán',centerLat:16.25,centerLng:-92.13,radiusKm:20,dispatcher:null,model:'fixture',baseCents:5500,perKmCents:null,pricingMode:'h3_zone_max'};
+  let assignments=0,interpretations=0;const input=source==='native_pair'?'Aquí me recoges\nAhí voy\nSoy José Ángel':'Es el origen\nSoy José Ángel\nVoy a Hospital';
+  const proposal={intent:'provide',fields:{name:{value:'José Ángel',evidence:'Soy José Ángel'},...(source==='pending_pin'?{destination:{value:'Hospital',evidence:'Voy a Hospital'}}:{})}};
+  const services:TaxiServices={interpret:async current=>{interpretations++;assert.equal(current,input);return parseInterpretation(proposal,current);},resolve:async text=>{assert.equal(source,'pending_pin');assert.equal(text,'Hospital');return{kind:'unavailable'};},quote:async()=>source==='native_pair'?6500:5500,candidates:async()=>{assignments++;return[{deviceId:1,name:'Unidad 1'}];}};
+  const turn=async(event:Record<string,unknown>)=>{const claim=await f.begin(event.eventId);assert.equal(claim.state,'proceed');assert.ok(Array.isArray(claim.messages));const s=parseSession(claim.session),trace=new TaxiTurnTrace(s,Date.now()),d=await coordinateTaxi(claim.messages.map(item=>parseStoredInbound(item,Date.now())),s,channel,trace.services(services),Date.now());const payload={...d,audit:trace.packet(d)};await f.commit(claim.eventId,claim,payload);return{d,claim,payload};};
+  const pinId=crypto.randomUUID(),first=await f.enqueue('',customer,pinId,null,{lat:16.25,lng:-92.13});
+  if(source==='native_pair'){await f.enqueue('Aquí me recoges');await f.enqueue('',customer,crypto.randomUUID(),null,{lat:16.26,lng:-92.14});await f.enqueue('Ahí voy');await f.enqueue('Soy José Ángel');}
+  else{const pending=await turn(first);assert.equal(pending.d.reason,'location_target_unclear');assert.equal(pending.d.draft.pendingLocation?.messageId,pinId);}
+  let event=first;if(source==='pending_pin'){event=await f.enqueue('Es el origen');await f.enqueue('Soy José Ángel');await f.enqueue('Voy a Hospital');}
+  const summary=await turn(event);assert.equal(interpretations,1);assert.equal(summary.d.draft.name,'José Ángel');assert.equal(summary.d.draft.pickupMessageId,pinId);assert.equal(summary.d.draft.pendingLocation,null);assert.ok(summary.d.draft.confirmation);assert.equal(summary.d.draft.origin?.lat,16.25);
+  if(source==='native_pair')assert.equal(summary.d.draft.destination?.lat,16.26);else assert.equal(summary.d.draft.destinationText,'Hospital');
+  assert.equal(assignments,0);assert.equal(await f.scalar('SELECT count(*)::int FROM viajes'),0);assert.equal(await f.scalar('SELECT count(*)::int FROM taxi_bot_offers'),0);
+  const typed=await turn(await f.enqueue('Sí'));assert.notEqual(typed.d.draft.confirmation,summary.d.draft.confirmation);assert.equal(assignments,0);
+  const old=await turn(await f.enqueue('',customer,crypto.randomUUID(),'txc_'+summary.d.draft.confirmation));assert.equal(old.d.reason,'stale_confirmation');assert.equal(assignments,0);
+  const accepted=await turn(await f.enqueue('',customer,crypto.randomUUID(),'txc_'+typed.d.draft.confirmation));assert.equal(accepted.d.action,'confirm');assert.equal(assignments,1);assert.equal(await f.scalar('SELECT count(*)::int FROM viajes'),1);assert.equal(await f.scalar('SELECT count(*)::int FROM taxi_bot_offers'),1);
+  assert.equal((await f.commit(accepted.claim.eventId,accepted.claim,accepted.payload)).state,'replay');assert.equal(await f.scalar('SELECT count(*)::int FROM viajes'),1);
+ }finally{await f.db.close();}
+});
+
+for(const role of ['origin','destination'] as const)test('compound correction SQL: the latest written '+role+' supersedes a pin earlier in the same debounced burst',async()=>{
+ const f=await fixture();try{
+  await f.prepare();await f.db.exec('UPDATE taxi_bot_channels SET base_cents=5500');
+  const channel:TaxiChannel={tenantId:tenant,waba,enabled:true,name:'Base sintética',city:'Comitán',centerLat:16.25,centerLng:-92.13,radiusKm:20,dispatcher:null,model:'fixture',baseCents:5500,perKmCents:null,pricingMode:'h3_zone_max'},label=role==='origin'?'Aquí me recoges':'Ahí voy',change=role==='origin'?'Ahora recógeme en Pilita Seca':'No, mejor a Hospital',value=role==='origin'?'Pilita Seca':'Hospital';
+  const services:TaxiServices={interpret:async current=>parseInterpretation({intent:'provide',fields:{[role]:{value,evidence:change}}},current),resolve:async()=>({kind:'unavailable'}),quote:async()=>5500,candidates:async()=>{throw Error('No confirmation click.');}};
+  const event=await f.enqueue('',customer,crypto.randomUUID(),null,{lat:16.26,lng:-92.14});await f.enqueue(label);await f.enqueue(change);
+  const claim=await f.begin(event.eventId);assert.equal(claim.state,'proceed');assert.ok(Array.isArray(claim.messages));const session=parseSession(claim.session),d=await coordinateTaxi(claim.messages.map(item=>parseStoredInbound(item,Date.now())),session,channel,services,Date.now());await f.commit(claim.eventId,claim,{...d});
+  assert.equal(d.draft[role],null);assert.equal(await f.scalar("SELECT draft->>$1 FROM taxi_bot_sessions WHERE customer=$2",[role==='origin'?'pickupText':'destinationText',customer]),value);
+  if(role==='origin'){assert.equal(d.draft.pickupMessageId,null);assert.equal(d.draft.confirmation,null);assert.equal(d.messages[0].locationRequest,'origin');}else{assert.equal(d.draft.pickupMessageId,f.draft.pickupMessageId);assert.ok(d.draft.confirmation);}
+  assert.equal(await f.scalar('SELECT count(*)::int FROM viajes'),0);assert.equal(await f.scalar('SELECT count(*)::int FROM taxi_bot_offers'),0);
+ }finally{await f.db.close();}
+});
+
 test('GPS button consent SQL: typed assent cannot create trips, offers or notifications; the current click works once without a destination',async()=>{
  const f=await fixture();try{
   await f.prepare();const scope=taxiH3Scope(f.draft.origin,f.draft.origin),token=crypto.randomUUID(),pending={...f.draft,destination:null,destinationText:null,fareMode:'unquoted',quoteBasis:null,quoteCents:null,quoteH3:null,confirmation:null,awaitingLocation:'destination',destinationPrompt:token,destinationDeferred:false};

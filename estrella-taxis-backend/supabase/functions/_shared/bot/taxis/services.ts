@@ -63,7 +63,7 @@ export function createTaxiServices(store:TrackingStore,fetcher:Fetcher,config:{m
   }
   return {
     question:(kind,current,c,signal,context)=>naturalTaxiQuestion(fetcher,config.modelKey,c.model,kind,current,signal,context),
-    interpret:(current,session,c,signal,observe)=>createTaxiInterpreter(fetcher,config.modelKey,c.model,observe)(current,session,c,signal),resolve,
+    interpret:(current,session,c,signal,observe,turn)=>createTaxiInterpreter(fetcher,config.modelKey,c.model,observe)(current,session,c,signal,turn),resolve,
     quote:async(origin,destination,c,signal,destinationArea)=>{
       if(!coord(origin.lat,origin.lng)||!coord(destination.lat,destination.lng)||getDistanceFromLatLonInKm(origin.lat,origin.lng,c.centerLat,c.centerLng)>c.radiusKm||getDistanceFromLatLonInKm(destination.lat,destination.lng,c.centerLat,c.centerLng)>c.radiusKm)return null;
       if(c.pricingMode==='h3_zone_max'){

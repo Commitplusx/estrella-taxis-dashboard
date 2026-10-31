@@ -1,5 +1,7 @@
 # Aclaraciones naturales sin mezclar nombre, recogida y destino
 
+Esta nota conserva la entrega v19/versiones 33. La validación y publicación posterior están en [STELLAR_COMPOUND_TURN_VALIDATION.md](STELLAR_COMPOUND_TURN_VALIDATION.md).
+
 Motor: `taxi-bot-v19-semantic-clarification`. Proyecto independiente: `izrsxygazsalfhpaualj`.
 
 ## Fallos reproducidos y cambio

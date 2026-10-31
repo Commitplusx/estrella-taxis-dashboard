@@ -1,5 +1,6 @@
 import {createTaxiServices}from'../estrella-taxis-backend/supabase/functions/_shared/bot/taxis/services.ts';
-import type{TaxiChannel}from'../estrella-taxis-backend/supabase/functions/_shared/bot/taxis/contracts.ts';
+import {emptyDraft,record,type TaxiChannel,type TaxiSession,type TaxiTurnContext}from'../estrella-taxis-backend/supabase/functions/_shared/bot/taxis/contracts.ts';
+import {TaxiTurnTrace}from'../estrella-taxis-backend/supabase/functions/_shared/bot/taxis/trace.ts';
 import type{TrackingStore}from'../estrella-taxis-backend/supabase/functions/_shared/tracking/store.ts';
 import type{Fetcher}from'../estrella-taxis-backend/supabase/functions/_shared/tracking/http.ts';
 function assert(v:unknown,m='Assertion failed'):asserts v{if(!v)throw new Error(m);}
@@ -10,6 +11,17 @@ const config={mapsKey:'fixture-maps-key',modelKey:'fixture-model-key',traccarUrl
 const denyAdminWrite = async (): Promise<never> => { throw new Error('No administration writes in this fixture.'); };
 function store(aliases:unknown[]=[]):TrackingStore{return{writePackages:denyAdminWrite,writeCompanyPackage:denyAdminWrite,writeCompanyStatus:denyAdminWrite,read:async(table,q)=>{equal(q.get('tenant_id'),'eq.'+c.tenantId);if(table==='lugares_frecuentes')return aliases;if(table==='conductores')return[{device_id:1},{device_id:2},{device_id:3},{device_id:5}];throw new Error('Undeclared fixture table.');},writeScores:async()=>{throw new Error('Forbidden score write.');},rpc:async(name,args)=>{equal(name,'taxi_bot_neighborhood_read');equal(args.p_tenant,c.tenantId);return[];}};}
 const denyFetch:Fetcher=async()=>{throw new Error('No undeclared provider call may be approved.');};
+Deno.test('compound pin context crosses the service and trace boundaries into the actual provider request',async()=>{
+ const s:TaxiSession={revision:0,mode:'bot',active:null,history:[],draft:emptyDraft()},turn:TaxiTurnContext={nativeLocations:[{role:'origin',beforeText:0},{role:'destination',beforeText:2}]};
+ let requests=0,observed=0;const f:Fetcher=async(_url,init)=>{
+  requests++;const body:unknown=JSON.parse(String(init?.body));assert(record(body)&&Array.isArray(body.messages));const last:unknown=body.messages.at(-1);assert(record(last)&&typeof last.content==='string');const input:unknown=JSON.parse(last.content);assert(record(input)&&record(input.context));equal(input.context.currentTurn,turn);equal(input.current,'Aquí me recoges\nAhí voy\nSoy José Ángel');
+  assert(!JSON.stringify(input.context.currentTurn).includes('lat'));assert(!JSON.stringify(input.context.currentTurn).includes(c.waba));
+  return Response.json({choices:[{finish_reason:'tool_calls',message:{role:'assistant',content:null,tool_calls:[{id:'fixture_compound',type:'function',function:{name:'actualizar_recorrido',arguments:JSON.stringify({fields:{name:{value:'José Ángel',evidence:'Soy José Ángel'}}})}}]}}],usage:{prompt_tokens:100,completion_tokens:20}});
+ };
+ const trace=new TaxiTurnTrace(s,Date.now()),services=trace.services(createTaxiServices(store(),f,config));
+ const result=await services.interpret('Aquí me recoges\nAhí voy\nSoy José Ángel',s,c,undefined,metadata=>{observed++;equal(metadata.outputTokens,20);},turn);
+ equal(result.fields.name?.value,'José Ángel');equal(requests,1);equal(observed,1);equal(trace.packet().steps[0]?.model?.outputTokens,20);assert(trace.packet().steps[0]?.inputHash);
+});
 Deno.test('taxi geocoding preserves exact GPS including zero longitude and never fetches a customer URL',async()=>{
   const s=createTaxiServices(store(),denyFetch,config);const gps=await s.resolve('16.25, 0',c);assert(gps.kind==='resolved');equal(gps.place.lng,0);
   equal((await s.resolve('https://maps.app.goo.gl/example',c)).kind,'unavailable');

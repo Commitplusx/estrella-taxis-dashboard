@@ -1,6 +1,7 @@
 import { coordinateTaxi, type TaxiServices } from '../estrella-taxis-backend/supabase/functions/_shared/bot/taxis/coordinator.ts';
 import { emptyDraft, record, type Interpretation, type TaxiChannel, type TaxiInbound, type TaxiSession } from '../estrella-taxis-backend/supabase/functions/_shared/bot/taxis/contracts.ts';
 import { parseOutgoing, sendTaxiMessage } from '../estrella-taxis-backend/supabase/functions/_shared/bot/taxis/transport.ts';
+import { parseInterpretation } from '../estrella-taxis-backend/supabase/functions/_shared/bot/taxis/policy.ts';
 function assert(v:unknown):asserts v{if(!v)throw new Error('Assertion failed');}
 function equal(a:unknown,b:unknown){if(JSON.stringify(a)!==JSON.stringify(b))throw new Error('Different values: '+JSON.stringify(a)+' / '+JSON.stringify(b));}
 const now=Date.now(),waba='+529630000001',customer='+529630000002';
@@ -13,6 +14,14 @@ function fixture(proposal:Interpretation={intent:'smalltalk',fields:{}}){
  const services:TaxiServices={interpret:async()=>proposal,resolve:async()=>({kind:'unavailable'}),quote:async()=>{quotes++;return 6500;},candidates:async()=>{assignments++;return[];}};
  return{services,counts:()=>({assignments,quotes}),run:(s=session(),m=message())=>coordinateTaxi([m],s,channel,services,now)};
 }
+for(const source of ['native','pending'] as const)Deno.test('compound GPS turn: labelling the pickup does not discard the passenger name or written destination: '+source,async()=>{
+ const s=session(),pin={...message(''),id:'compound-pickup',type:'location' as const,location:{lat:origin.lat,lng:origin.lng}};
+ if(source==='pending'){s.draft.pendingLocation={place:origin,messageId:pin.id,expiresAt:new Date(now+600000).toISOString()};s.draft.awaitingLocation='choice';}
+ const texts=['Aquí me recoges','Soy José Ángel','Voy al Hospital'],events=texts.map(message);if(source==='native')events.splice(1,0,pin);
+ let calls=0;const f=fixture();f.services.interpret=async current=>{calls++;return parseInterpretation({intent:'provide',fields:{name:{value:'José Ángel',evidence:'Soy José Ángel'},destination:{value:'Hospital',evidence:'Voy al Hospital'}}},current);};
+ const d=await coordinateTaxi(events,s,channel,f.services,now);
+ equal(calls,1);equal(d.draft.name,'José Ángel');equal(d.draft.destinationText,'Hospital');equal(d.draft.origin?.lat,origin.lat);equal(d.draft.pickupMessageId,pin.id);equal(d.draft.pendingLocation,null);assert(d.draft.confirmation);equal(f.counts().assignments,0);
+});
 Deno.test('native location: one debounced natural-language turn joins texts and both GPS pins before showing one confirmation',async()=>{
  const texts=['Buenas tardes','Me puede enviar un taxi','Aquí estoy','Y voy para esta','Soy Jorge'];
  const events:TaxiInbound[]=[
