@@ -1,5 +1,7 @@
 # Switch de libre/ocupado: señal desconocida
 
+> Estado posterior: [actualización inmediata de Wialon al buscar una unidad, publicación v41 y prueba real de la 0540](STELLAR_GPS_REFRESH_20261031.md). Se conserva la regla de ocupación de este documento.
+
 ## Comportamiento vigente
 
 El puente activo consulta `prms.io_3.v` de Wialon. Se conserva la polaridad configurada: 0 es ocupado y 1 es libre; se admiten esos números y sus representaciones exactas `"0"`/`"1"`. Cualquier otro valor, campo ausente, booleano o estructura inválida es **desconocido**.

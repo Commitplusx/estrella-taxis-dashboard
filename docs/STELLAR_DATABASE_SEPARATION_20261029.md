@@ -1,5 +1,7 @@
 # Base independiente de Stellar Tracking — 29 de octubre de 2026
 
+> Estado vigente del 31-10-2026: proyecto independiente `izrsxygazsalfhpaualj`, canal de Pompeyo activo y [prueba real completada de la 0540, APK instalada y consulta inmediata a Wialon publicada](STELLAR_GPS_REFRESH_20261031.md). Las notas inferiores describen etapas anteriores.
+
 > Actualización del 31-10-2026: [la ocupación desconocida ya no se convierte en libre y queda excluida del despacho](STELLAR_GPS_OCCUPANCY_20261031.md). Las cifras y versiones anteriores se conservan como historial.
 
 > **Destino posterior confirmado:** [Stellar Tracking en Estrella orgs](STELLAR_ORGS_RELEASE_20261029.md), proyecto `izrsxygazsalfhpaualj`. Esta página y su JSON conservan el historial del primer proyecto en Estrella envios; ya no representan el destino del cliente local. El bot sigue sin activar.

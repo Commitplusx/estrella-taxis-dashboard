@@ -1,5 +1,7 @@
 # Acceso por número y turnos compartidos
 
+> Actualización: [APK 1.0.0+2 instalada y abierta en Android; prueba real de asignación de la unidad 0540](STELLAR_GPS_REFRESH_20261031.md#prueba-real-de-instalación-y-asignación). El acceso por correo o número descrito aquí sigue vigente.
+
 ## Uso
 
 Dueños y conductores entran a la web y la APK con su **WhatsApp registrado y contraseña**. Se aceptan los diez dígitos de México, +52 y el prefijo móvil anterior +521. Una cuenta existente conserva su contraseña y correo anterior. La administración conserva el acceso por correo.

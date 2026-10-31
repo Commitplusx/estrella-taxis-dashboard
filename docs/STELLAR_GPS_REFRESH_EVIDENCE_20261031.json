@@ -1,0 +1,484 @@
+{
+  "date": "2026-10-31",
+  "project": "izrsxygazsalfhpaualj",
+  "apk": {
+    "package": "com.stellar.tracking",
+    "version": "1.0.0+2",
+    "bytes": 161374745,
+    "sha256": "2d7cd62012279c99ce2b4811a02bc81925c87d22aba3c68fe21676909e869df1",
+    "install": "Success",
+    "launch": "Status: ok",
+    "fullApkTurnWorkflowTested": false
+  },
+  "dispatchTest": {
+    "type": "administrator_requested_manual_fixture_not_customer_checkout",
+    "unit": "0540",
+    "deviceId": 4,
+    "senderSuffix": "2491",
+    "driverSuffix": "1852",
+    "customerSuffix": "9156",
+    "tripId": "b2853b50-daea-4d67-b921-a1f73875e3bc",
+    "offerId": "fd767bbb-e31f-4fb4-a547-bd479c42dd32",
+    "active_trips": 0,
+    "allowed_customer_count": 0,
+    "final_receipts": [
+      {
+        "error": null,
+        "kind": "trip-finished",
+        "state": "read"
+      },
+      {
+        "error": null,
+        "kind": "trip-assigned",
+        "state": "read"
+      },
+      {
+        "error": null,
+        "kind": "driver-assigned",
+        "state": "read"
+      }
+    ],
+    "lifecycle": [
+      {
+        "entity": "trip",
+        "next": "buscando_conductor",
+        "previous": null
+      },
+      {
+        "entity": "offer",
+        "next": "offered",
+        "previous": null
+      },
+      {
+        "entity": "trip",
+        "next": "en_camino",
+        "previous": "buscando_conductor"
+      },
+      {
+        "entity": "offer",
+        "next": "accepted",
+        "previous": "offered"
+      },
+      {
+        "entity": "trip",
+        "next": "completado",
+        "previous": "en_camino"
+      },
+      {
+        "entity": "offer",
+        "next": "finished",
+        "previous": "accepted"
+      }
+    ],
+    "real_driver_buttons": [
+      {
+        "button_kind": "txa",
+        "source_at": "2026-10-31T18:48:46+00:00",
+        "state": "completed",
+        "type": "button"
+      },
+      {
+        "button_kind": "txf",
+        "source_at": "2026-10-31T18:50:01+00:00",
+        "state": "completed",
+        "type": "button"
+      }
+    ],
+    "trip_state": "completado"
+  },
+  "validation": {
+    "denoBot": 22628,
+    "nodePostgres": 157,
+    "bridgeUnitHttp": 8,
+    "reviewedActiveLoop": 3,
+    "vpsBridgeTests": 8,
+    "staticFiles": 128,
+    "entrypointsChecked": [
+      "process-queue",
+      "ycloud-webhook"
+    ]
+  },
+  "functions": [
+    {
+      "name": "ycloud-webhook",
+      "version": 41,
+      "status": "ACTIVE"
+    },
+    {
+      "name": "process-queue",
+      "version": 41,
+      "status": "ACTIVE"
+    },
+    {
+      "name": "taxi-bot-admin",
+      "version": 34,
+      "status": "ACTIVE"
+    }
+  ],
+  "runtimeVerification": [
+    {
+      "name": "process-queue",
+      "runtimeFiles": 29,
+      "options": 200,
+      "changed": [
+        "_shared/bot/taxis/runtime.ts",
+        "_shared/bot/taxis/services.ts",
+        "_shared/bot/taxis/gpsRefresh.ts"
+      ]
+    },
+    {
+      "name": "ycloud-webhook",
+      "runtimeFiles": 29,
+      "options": 200,
+      "changed": [
+        "_shared/bot/taxis/runtime.ts",
+        "_shared/bot/taxis/services.ts",
+        "_shared/bot/taxis/gpsRefresh.ts"
+      ]
+    }
+  ],
+  "bridgeApplied": {
+    "before": "30a69e3a164a1a881642018461e4e04af9f36213c5a1f311a879c18c9bfa59d6",
+    "after": "e32748e9a3102db821ce7456e5c77d882ca57ad97fad8d54642314421fe39f12",
+    "module": "b1e73f5a89a5041a9a4b09f1b81caf9043fd16fe3db8d6c1b380a163a00144fd",
+    "nginxBefore": "ea55ef3030c970c406bcaa35a2910e3ff9844fa7a1b06dc6e11cc7d6e688d735",
+    "nginxAfter": "f6230df350a0b437237dc8dae4b95fa456e04e0bdf943fbc2c9f770563e2b551",
+    "backup": "/root/wialon-bridge/backups/refresh-20261031-30a69e3a164a",
+    "restarted": false
+  },
+  "bridgeAfter": {
+    "bridgeHash": "e32748e9a3102db821ce7456e5c77d882ca57ad97fad8d54642314421fe39f12",
+    "moduleHash": "b1e73f5a89a5041a9a4b09f1b81caf9043fd16fe3db8d6c1b380a163a00144fd",
+    "processes": [
+      {
+        "name": "wialon-bridge",
+        "pid": 78261,
+        "status": "online",
+        "restarts": 2
+      },
+      {
+        "name": "bot-worker",
+        "pid": 879,
+        "status": "online",
+        "restarts": 0
+      },
+      {
+        "name": "stellar-taxi-bot",
+        "pid": 56254,
+        "status": "online",
+        "restarts": 0
+      }
+    ],
+    "latest_syncs": [
+      {
+        "event": "taxi_gps_sync",
+        "reason": "poll",
+        "synced": 18
+      },
+      {
+        "event": "taxi_gps_sync",
+        "reason": "dispatch",
+        "synced": 18
+      },
+      {
+        "event": "taxi_gps_sync",
+        "reason": "poll",
+        "synced": 18
+      },
+      {
+        "event": "taxi_gps_sync",
+        "reason": "poll",
+        "synced": 18
+      },
+      {
+        "event": "taxi_gps_sync",
+        "reason": "poll",
+        "synced": 18
+      }
+    ]
+  },
+  "workerAfter": {
+    "nginxHash": "f6230df350a0b437237dc8dae4b95fa456e04e0bdf943fbc2c9f770563e2b551",
+    "latestWorkerTicks": [
+      {
+        "event": "taxi_tick",
+        "processed": 0,
+        "deferred": 0,
+        "failed": 0
+      },
+      {
+        "event": "taxi_tick",
+        "processed": 0,
+        "deferred": 0,
+        "failed": 0
+      },
+      {
+        "event": "taxi_tick",
+        "processed": 0,
+        "deferred": 0,
+        "failed": 0
+      }
+    ]
+  },
+  "liveProbe": {
+    "unauthorized": 401,
+    "authorized": 200,
+    "synced": 18,
+    "completedAt": "2026-10-31T18:57:55.919Z",
+    "elapsedMs": 260
+  },
+  "functionManifests": [
+    {
+      "name": "process-queue",
+      "changed": [
+        "_shared/bot/taxis/runtime.ts",
+        "_shared/bot/taxis/services.ts",
+        "_shared/bot/taxis/gpsRefresh.ts"
+      ],
+      "files": [
+        {
+          "name": "process-queue/index.ts",
+          "sha256": "e318256e7f65af22956aa686bc26ac2548cf7e4ea8be2fb7d3cfb7ae3edcbbb4"
+        },
+        {
+          "name": "_shared/bot/taxis/runtime.ts",
+          "sha256": "557c1c7caf545624b384a5c286e329bf09d31f6632dc49532c1f9cf23b99dca2"
+        },
+        {
+          "name": "_shared/tracking/http.ts",
+          "sha256": "85764359443be35e8dfbe22dd3e535564bf969444f12292b4e9eff568afe9075"
+        },
+        {
+          "name": "_shared/tracking/contracts.ts",
+          "sha256": "87955c6254674f049d9046d48b1be8f5c4d6226f454b334fa09abf870e2f750c"
+        },
+        {
+          "name": "_shared/tracking/store.ts",
+          "sha256": "0f7fc549903a0439751d37d1e6be96a80a9203858297e7445f14892b2072c069"
+        },
+        {
+          "name": "_shared/tracking/packages.ts",
+          "sha256": "0104cedfa30982a0b38da8e5a75a1120e3311f5ee7e197cf7a8a4f7595e55979"
+        },
+        {
+          "name": "_shared/tracking/companies.ts",
+          "sha256": "e2fffb9d345c2c70c40ee92900cb5fa8d76922d9574861a135060c820d9f5853"
+        },
+        {
+          "name": "_shared/bot/taxis/engine.ts",
+          "sha256": "cd330a1216cea9d7025853a1a663de6aba2efb347d0f99afde622db1f49a4afc"
+        },
+        {
+          "name": "_shared/bot/taxis/trace.ts",
+          "sha256": "3938edb3f093ccba7457d37e95846f4508eb1d60d741f9e350115e996e18c0a6"
+        },
+        {
+          "name": "_shared/bot/taxis/contracts.ts",
+          "sha256": "304f05dd7f9f6090d0a76f36ce66f01bbf101efe9740849fa1d8ad41b8830cdc"
+        },
+        {
+          "name": "_shared/bot/taxis/h3.ts",
+          "sha256": "b85bd35b94323634e1a9a74e2c3fe8ecac941a290e2eb8acf2fc91b9a8517e68"
+        },
+        {
+          "name": "_shared/bot/taxis/neighborhoodContracts.ts",
+          "sha256": "be92dcab9565bd1d8708fc45ee81424d26a28eee367f6106a559c5ee2ca77d12"
+        },
+        {
+          "name": "_shared/bot/taxis/coordinator.ts",
+          "sha256": "6e1bef2d77ca02975e847404c553fad10b0614050d254171a9fb6a8154f06d60"
+        },
+        {
+          "name": "_shared/bot/taxis/stateMachine.ts",
+          "sha256": "41a0a60f59cc375d3a8c01b8a5a184cbf7b79a8b8d8b21e29b2d39081ce20364"
+        },
+        {
+          "name": "_shared/bot/taxis/policy.ts",
+          "sha256": "7e05a4ee8a4f165b705ad1023c753584b67d289bc3253b3765be1816311a53ee"
+        },
+        {
+          "name": "_shared/algorithms/headingMatcher.ts",
+          "sha256": "d0dc40054cdf3cdf1d279f58d458d068e13a565d4c38a39ba7e5bbcdca9dcdf1"
+        },
+        {
+          "name": "_shared/bot/taxis/neighborhoods.ts",
+          "sha256": "daef9445359cdc779f361d17cf1ddcbb818bae532c8e437d432fb5248a95a5a0"
+        },
+        {
+          "name": "_shared/bot/taxis/conversationReply.ts",
+          "sha256": "459cad763216f7b17978bf28846adc46999f532d2e3e9a61a6fbf3d807e1da40"
+        },
+        {
+          "name": "_shared/bot/taxis/messageBudget.ts",
+          "sha256": "8c14c80def4bc6d8ca39ce21e5db28f7ac675addc837fcfe8b34c331d1e3d195"
+        },
+        {
+          "name": "_shared/bot/taxis/interpreter.ts",
+          "sha256": "e4837430575cd764ccd52b97df18857db967bf263c98ea0fc43d69357cb5d464"
+        },
+        {
+          "name": "_shared/bot/taxis/conversationTools.ts",
+          "sha256": "d9c83adab42195500e26bfa39f30479f55c87a5269ed6f7037df29e5bd86fd0e"
+        },
+        {
+          "name": "_shared/bot/taxis/transport.ts",
+          "sha256": "3736d49b46c86900a527e7a7661487b65625095a9b0b790d52e3ca2955858a18"
+        },
+        {
+          "name": "_shared/bot/taxis/dispatchContracts.ts",
+          "sha256": "dbea89c59dfb11ad2492a0c94d9d3f95ba7fb9200044fbe3bc99340f659ce64d"
+        },
+        {
+          "name": "_shared/bot/taxis/services.ts",
+          "sha256": "c66f5b81c228f5dc1c4e1f578d1f1f68c0c0bedea34835cde363f581f8b13885"
+        },
+        {
+          "name": "_shared/tracking/auth.ts",
+          "sha256": "390bf98c7b016e5b7307b8f7669362660c37db79923be273906584ebe856e7fc"
+        },
+        {
+          "name": "_shared/bot/taxis/gpsOccupancy.ts",
+          "sha256": "f420dea72e49741d33fe19e1397e601c799c135c010176c66c2f901cc943313b"
+        },
+        {
+          "name": "_shared/bot/taxis/gpsRefresh.ts",
+          "sha256": "8d741362c3c785d0cc26a51d1e89d8fe09036a947b283476024e40cd74ddb358"
+        },
+        {
+          "name": "_shared/bot/taxis/addressGeocoder.ts",
+          "sha256": "2ec0aaf1b6cbab4ff9fff814e941d674e0e4e58da72f854a4def7583e9934201"
+        },
+        {
+          "name": "process-queue/deno.json",
+          "sha256": "7bd99c63c2313bd63093ce85e3cf5dc0077e2b702ef60b7f66d1019f520a8258"
+        }
+      ]
+    },
+    {
+      "name": "ycloud-webhook",
+      "changed": [
+        "_shared/bot/taxis/runtime.ts",
+        "_shared/bot/taxis/services.ts",
+        "_shared/bot/taxis/gpsRefresh.ts"
+      ],
+      "files": [
+        {
+          "name": "ycloud-webhook/index.ts",
+          "sha256": "8264deec4e824537a3f3915dd56b2d2b7fd6e6e495de62eaddb6e40e5fe627af"
+        },
+        {
+          "name": "_shared/bot/taxis/runtime.ts",
+          "sha256": "557c1c7caf545624b384a5c286e329bf09d31f6632dc49532c1f9cf23b99dca2"
+        },
+        {
+          "name": "_shared/tracking/http.ts",
+          "sha256": "85764359443be35e8dfbe22dd3e535564bf969444f12292b4e9eff568afe9075"
+        },
+        {
+          "name": "_shared/tracking/contracts.ts",
+          "sha256": "87955c6254674f049d9046d48b1be8f5c4d6226f454b334fa09abf870e2f750c"
+        },
+        {
+          "name": "_shared/tracking/store.ts",
+          "sha256": "0f7fc549903a0439751d37d1e6be96a80a9203858297e7445f14892b2072c069"
+        },
+        {
+          "name": "_shared/tracking/packages.ts",
+          "sha256": "0104cedfa30982a0b38da8e5a75a1120e3311f5ee7e197cf7a8a4f7595e55979"
+        },
+        {
+          "name": "_shared/tracking/companies.ts",
+          "sha256": "e2fffb9d345c2c70c40ee92900cb5fa8d76922d9574861a135060c820d9f5853"
+        },
+        {
+          "name": "_shared/bot/taxis/engine.ts",
+          "sha256": "cd330a1216cea9d7025853a1a663de6aba2efb347d0f99afde622db1f49a4afc"
+        },
+        {
+          "name": "_shared/bot/taxis/trace.ts",
+          "sha256": "3938edb3f093ccba7457d37e95846f4508eb1d60d741f9e350115e996e18c0a6"
+        },
+        {
+          "name": "_shared/bot/taxis/contracts.ts",
+          "sha256": "304f05dd7f9f6090d0a76f36ce66f01bbf101efe9740849fa1d8ad41b8830cdc"
+        },
+        {
+          "name": "_shared/bot/taxis/h3.ts",
+          "sha256": "b85bd35b94323634e1a9a74e2c3fe8ecac941a290e2eb8acf2fc91b9a8517e68"
+        },
+        {
+          "name": "_shared/bot/taxis/neighborhoodContracts.ts",
+          "sha256": "be92dcab9565bd1d8708fc45ee81424d26a28eee367f6106a559c5ee2ca77d12"
+        },
+        {
+          "name": "_shared/bot/taxis/coordinator.ts",
+          "sha256": "6e1bef2d77ca02975e847404c553fad10b0614050d254171a9fb6a8154f06d60"
+        },
+        {
+          "name": "_shared/bot/taxis/stateMachine.ts",
+          "sha256": "41a0a60f59cc375d3a8c01b8a5a184cbf7b79a8b8d8b21e29b2d39081ce20364"
+        },
+        {
+          "name": "_shared/bot/taxis/policy.ts",
+          "sha256": "7e05a4ee8a4f165b705ad1023c753584b67d289bc3253b3765be1816311a53ee"
+        },
+        {
+          "name": "_shared/algorithms/headingMatcher.ts",
+          "sha256": "d0dc40054cdf3cdf1d279f58d458d068e13a565d4c38a39ba7e5bbcdca9dcdf1"
+        },
+        {
+          "name": "_shared/bot/taxis/neighborhoods.ts",
+          "sha256": "daef9445359cdc779f361d17cf1ddcbb818bae532c8e437d432fb5248a95a5a0"
+        },
+        {
+          "name": "_shared/bot/taxis/conversationReply.ts",
+          "sha256": "459cad763216f7b17978bf28846adc46999f532d2e3e9a61a6fbf3d807e1da40"
+        },
+        {
+          "name": "_shared/bot/taxis/messageBudget.ts",
+          "sha256": "8c14c80def4bc6d8ca39ce21e5db28f7ac675addc837fcfe8b34c331d1e3d195"
+        },
+        {
+          "name": "_shared/bot/taxis/interpreter.ts",
+          "sha256": "e4837430575cd764ccd52b97df18857db967bf263c98ea0fc43d69357cb5d464"
+        },
+        {
+          "name": "_shared/bot/taxis/conversationTools.ts",
+          "sha256": "d9c83adab42195500e26bfa39f30479f55c87a5269ed6f7037df29e5bd86fd0e"
+        },
+        {
+          "name": "_shared/bot/taxis/transport.ts",
+          "sha256": "3736d49b46c86900a527e7a7661487b65625095a9b0b790d52e3ca2955858a18"
+        },
+        {
+          "name": "_shared/bot/taxis/dispatchContracts.ts",
+          "sha256": "dbea89c59dfb11ad2492a0c94d9d3f95ba7fb9200044fbe3bc99340f659ce64d"
+        },
+        {
+          "name": "_shared/bot/taxis/services.ts",
+          "sha256": "c66f5b81c228f5dc1c4e1f578d1f1f68c0c0bedea34835cde363f581f8b13885"
+        },
+        {
+          "name": "_shared/tracking/auth.ts",
+          "sha256": "390bf98c7b016e5b7307b8f7669362660c37db79923be273906584ebe856e7fc"
+        },
+        {
+          "name": "_shared/bot/taxis/gpsOccupancy.ts",
+          "sha256": "f420dea72e49741d33fe19e1397e601c799c135c010176c66c2f901cc943313b"
+        },
+        {
+          "name": "_shared/bot/taxis/gpsRefresh.ts",
+          "sha256": "8d741362c3c785d0cc26a51d1e89d8fe09036a947b283476024e40cd74ddb358"
+        },
+        {
+          "name": "_shared/bot/taxis/addressGeocoder.ts",
+          "sha256": "2ec0aaf1b6cbab4ff9fff814e941d674e0e4e58da72f854a4def7583e9934201"
+        },
+        {
+          "name": "ycloud-webhook/deno.json",
+          "sha256": "111b8af3bd8fefd639c55ca44bb259bf58f834aee48e11b3bc12fbe2d8099c5b"
+        }
+      ]
+    }
+  ]
+}

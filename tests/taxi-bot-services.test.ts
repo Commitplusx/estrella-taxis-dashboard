@@ -60,3 +60,24 @@ Deno.test('taxi candidates use the configured service radius and include parked 
   };
   equal(await createTaxiServices(store(),f,config).candidates(origin,c),[{deviceId:1,name:'Valid'},{deviceId:5,name:'Fresh parked taxi'}]);
 });
+for(const state of ['free','occupied','unknown'] as const)Deno.test('dispatch observes the switch after Wialon refresh: '+state,async()=>{
+ let refreshed=false;const calls:string[]=[];
+ const f:Fetcher=async(input)=>{
+  const path=new URL(String(input)).pathname;calls.push(path);
+  if(path==='/taxi-gps-refresh'){refreshed=true;return Response.json({state:'refreshed',synced:19,completedAt:new Date().toISOString()});}
+  assert(refreshed,'Traccar must not be read before the Wialon refresh');
+  if(path==='/api/session')return Response.json({id:1,administrator:true,disabled:false},{headers:{'set-cookie':'JSESSIONID=fixture-cookie-123; Secure'}});
+  if(path==='/api/devices')return Response.json([{id:1,name:'Test unit',status:'online'}]);
+  equal(path,'/api/positions');return Response.json([{id:1,deviceId:1,latitude:origin.lat,longitude:origin.lng,fixTime:new Date().toISOString(),speed:0,valid:true,attributes:{ignition:true,occupied:state==='free'?false:state==='occupied'?true:'unknown',taxiAvailability:state}}]);
+ };
+ const services=createTaxiServices(store(),f,{...config,gpsRefresh:{url:'https://taxis.estrella-eats.mx/taxi-gps-refresh',secret:'synthetic-refresh-secret-'.repeat(2)}});
+ equal(await services.candidates(origin,c),state==='free'?[{deviceId:1,name:'Test unit'}]:[]);
+ equal(calls,['/taxi-gps-refresh','/api/session','/api/session','/api/devices','/api/positions']);
+});
+Deno.test('refresh failure defers selection and an empty eligible fleet never queries Wialon',async()=>{
+ let calls=0;const f:Fetcher=async(input)=>{calls++;equal(new URL(String(input)).pathname,'/taxi-gps-refresh');return new Response('',{status:503});};
+ const settings={...config,gpsRefresh:{url:'https://taxis.estrella-eats.mx/taxi-gps-refresh',secret:'synthetic-refresh-secret-'.repeat(2)}};
+ let failed=false;try{await createTaxiServices(store(),f,settings).candidates(origin,c);}catch{failed=true;}assert(failed);equal(calls,1);
+ const emptyStore:TrackingStore={...store(),rpc:async(name)=>{equal(name,'taxi_bot_dispatch_eligible');return[];}};
+ equal(await createTaxiServices(emptyStore,f,settings).candidates(origin,c),[]);equal(calls,1);
+});

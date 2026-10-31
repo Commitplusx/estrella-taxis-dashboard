@@ -6,7 +6,7 @@ import { signedBody } from './transport.ts';
 function engine():TaxiEngine|null{
   if(Deno.env.get('TAXI_BOT_ENABLED')!=='true')return null;
   const store=new RestTrackingStore(Deno.env.get('SUPABASE_URL')??'',Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')??'');
-  const services=createTaxiServices(store,fetch,{mapsKey:Deno.env.get('GOOGLE_MAPS_API_KEY')??'',modelKey:Deno.env.get('DEEPSEEK_API_KEY')??'',traccarUrl:Deno.env.get('TRACCAR_URL')??'https://taxis.estrella-eats.mx/api',traccarEmail:Deno.env.get('TRACCAR_EMAIL')??'',traccarPassword:Deno.env.get('TRACCAR_PASSWORD')??'',geocoderUrl:Deno.env.get('TAXI_GEOCODER_URL')??'https://photon.komoot.io/api/'});
+  const services=createTaxiServices(store,fetch,{mapsKey:Deno.env.get('GOOGLE_MAPS_API_KEY')??'',modelKey:Deno.env.get('DEEPSEEK_API_KEY')??'',traccarUrl:Deno.env.get('TRACCAR_URL')??'https://taxis.estrella-eats.mx/api',traccarEmail:Deno.env.get('TRACCAR_EMAIL')??'',traccarPassword:Deno.env.get('TRACCAR_PASSWORD')??'',geocoderUrl:Deno.env.get('TAXI_GEOCODER_URL')??'https://photon.komoot.io/api/',gpsRefresh:{url:'https://taxis.estrella-eats.mx/taxi-gps-refresh',secret:Deno.env.get('TAXI_WORKER_SECRET')??''}});
   return new TaxiEngine(store,services,{webhookSecret:Deno.env.get('TAXI_YCLOUD_WEBHOOK_SECRET')??'',workerSecret:Deno.env.get('TAXI_WORKER_SECRET')??'',ycloudKey:Deno.env.get('YCLOUD_API_KEY')??'',now:()=>Date.now()});
 }
 /** This deployment is dedicated to taxis; Robin's runs in its own checkout/worker. */

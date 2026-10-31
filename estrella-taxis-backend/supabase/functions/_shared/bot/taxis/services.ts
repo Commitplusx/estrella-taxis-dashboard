@@ -3,6 +3,7 @@ import { requestJson, type Fetcher } from '../../tracking/http.ts';
 import type { TrackingStore } from '../../tracking/store.ts';
 import { findOptimalTaxi, getDistanceFromLatLonInKm } from '../../algorithms/headingMatcher.ts';
 import { gpsOccupancy } from './gpsOccupancy.ts';
+import {refreshTaxiGps,type GpsRefreshConfig} from './gpsRefresh.ts';
 import type { TraccarDevice, TraccarPosition } from '../../tracking/fleetTypes.ts';
 import { flag, positiveId, TrackingError } from '../../tracking/contracts.ts';
 import { record, text, coord, type Place, type TaxiChannel } from './contracts.ts';
@@ -15,7 +16,7 @@ import { parseNeighborhoods, streetReference, type NeighborhoodArea } from './ne
 import { exactNeighborhoods, mentionedNeighborhoods, representativeArea, semanticNeighborhoods } from './neighborhoods.ts';
 import type { ModelMetadata } from './trace.ts';
 import{naturalTaxiQuestion}from'./conversationReply.ts';
-export function createTaxiServices(store:TrackingStore,fetcher:Fetcher,config:{mapsKey:string;modelKey:string;traccarUrl:string;traccarEmail:string;traccarPassword:string;geocoderUrl?:string}):TaxiServices {
+export function createTaxiServices(store:TrackingStore,fetcher:Fetcher,config:{mapsKey:string;modelKey:string;traccarUrl:string;traccarEmail:string;traccarPassword:string;geocoderUrl?:string;gpsRefresh?:GpsRefreshConfig}):TaxiServices {
   async function resolvePoint(address:string,c:TaxiChannel,signal?:AbortSignal):Promise<LocationResult>{
     const gps=/^\s*(-?\d{1,3}(?:\.\d+)?)\s*,\s*(-?\d{1,3}(?:\.\d+)?)\s*$/.exec(address);
     if(gps&&coord(Number(gps[1]),Number(gps[2])))return {kind:'resolved',place:{text:address,lat:Number(gps[1]),lng:Number(gps[2]),placeId:null,source:'gps'}};
@@ -102,6 +103,7 @@ export function createTaxiServices(store:TrackingStore,fetcher:Fetcher,config:{m
       if(rows.length>500)throw new TrackingError(413,'taxi_fleet_limit','La flota supera el límite del selector actual.');
       const allowed=new Set<number>();for(const r of rows){if(!record(r)||!positiveId(r.device_id))throw new TrackingError(502,'taxi_bad_driver','La base tiene una unidad no válida.');allowed.add(r.device_id);}
       if(!allowed.size)return [];
+      if(config.gpsRefresh)await refreshTaxiGps(fetcher,config.gpsRefresh,signal);
       const fleet=new FleetApi(config.traccarUrl,fetcher),session=await fleet.jobSession(config.traccarEmail,config.traccarPassword,signal);
       // A fresh GPS fix can still be usable when Traccar labels the device offline;
       // the driver must accept the WhatsApp offer before any trip is assigned.
