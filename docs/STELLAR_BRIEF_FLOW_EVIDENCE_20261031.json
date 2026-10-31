@@ -380,7 +380,11 @@
         "blindAccuracyMeasured": false
       }
     ],
-    "physicalWhatsAppTested": false
+    "physicalWhatsAppTested": false,
+    "reusedExistingAssertionDependency": {
+      "passed": 4,
+      "newDependencies": false
+    }
   },
   "frontend": {
     "publicUrl": "https://stellar.estrella-eats.mx",
@@ -391,7 +395,44 @@
       "driverLabel": true
     },
     "sourceSelection": "Reviewed staged changes, excluding unrelated local Promotions changes",
-    "publication": "GitHub main with Vercel deployment"
+    "publication": "GitHub main with Vercel deployment",
+    "productionVerification": {
+      "route": "/drivers",
+      "status": 200,
+      "entry": "/assets/index-ob7gMNKT.js",
+      "sha256": "dbcf04d20fdd1aa68f25f3f9f2a6130e2bd6fdd80ca1a2222d33c582865be496",
+      "matchesIsolatedBuild": false,
+      "ownerLabel": true,
+      "driverLabel": true,
+      "ownerRead": true,
+      "shift": true,
+      "policyMatchesIsolatedBuild": true,
+      "policyHashes": [
+        {
+          "kind": "driverRoutes",
+          "hash": "271b768b47aec4bb7493bd5bb91daaa5e8cd7d9e5488523dc074c1b0eb137798"
+        },
+        {
+          "kind": "ownerRoutes",
+          "hash": "9a7897cd4f5d06846fe12b29b9a056b87f7b80f5371f8758852e3aa4598fc8af"
+        },
+        {
+          "kind": "rolePolicy",
+          "hash": "b5b4afb1722487d85e34594ef11cd1319a1e56a9d918d79752a633a057180b6c"
+        }
+      ],
+      "githubCommit": "49b89f5f921b186e4615b140861e465d0843dd2c",
+      "githubVercelStatus": "success",
+      "fullBundleHashComparison": "Different artifacts; matched the complete role policy and both allowed-route arrays independently of minified identifier names.",
+      "physicalPersonalSessionTested": false
+    },
+    "productionConfigurationBuild": {
+      "entry": "/assets/index-BuD7g4X3.js",
+      "sha256": "9d394235944f6efac428e5d8e7a59f5d40bbdbe606385fe09b7fa91965f18a29",
+      "configuration": "Committed deployment/stellar/web-public.json; no local environment override",
+      "ownerLabel": true,
+      "driverLabel": true
+    }
   },
   "flutter": {
     "compiled": false,
