@@ -16,7 +16,8 @@ export function representativeArea(row:Neighborhood):NeighborhoodArea{
  return{label:row.label,category:row.category,version:row.version,cents:row.cents,cell:null,priceSource:'reference'};
 }
 export function localityDisplayName(area:Pick<NeighborhoodArea,'label'|'category'>):string{
- return area.category?`${area.label} (${LOCALITY_CATEGORY_LABELS[area.category].toLocaleLowerCase('es-MX')})`:area.label;
+ const category=area.category==='cash_a'?'Cash A':area.category?LOCALITY_CATEGORY_LABELS[area.category].toLocaleLowerCase('es-MX'):null;
+ return category?`${area.label} (${category})`:area.label;
 }
 export async function semanticNeighborhoods(query:string,rows:Neighborhood[],fetcher:Fetcher,key:string,model:string,signal?:AbortSignal,observe?:(value:ModelMetadata)=>void):Promise<Neighborhood[]>{
  if(!rows.length||!key||!model)return [];

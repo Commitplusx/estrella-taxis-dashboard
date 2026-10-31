@@ -62,12 +62,30 @@ function replyNextStep(decision:TaxiDecision,phase:string):TaxiReplyContext['nex
   if(phase==='name'&&!decision.draft.name)return'passenger_name';
   return'none';
 }
+interface PendingLocalityAnswer {field:'origin'|'destination';query:string;answer:string;combined:string}
+function pendingLocalityAnswer(current:string,session:TaxiSession):PendingLocalityAnswer|null{
+  const field=session.draft.awaitingLocation;
+  if(field!=='origin'&&field!=='destination')return null;
+  const query=field==='origin'?session.draft.pickupText:session.draft.destinationText;
+  if(!query||field==='origin'&&session.draft.origin||field==='destination'&&(session.draft.destination||session.draft.destinationArea||session.draft.destinationDeferred===true))return null;
+  const previous=[...session.history].reverse().find(item=>item.role==='assistant')?.content??'';
+  const previousText=normalize(previous);
+  if(!/\b(?:opciones|zonas?|tarifa)\b/.test(previousText)||!/\bcual\b/.test(previousText))return null;
+  const answer=current.trim().replace(/\s+/g,' '),normalized=normalize(answer);
+  if(answer.length<2||answer.length>120||/[¿?]/.test(answer)||! /^[\p{L}\p{M}\p{N}][\p{L}\p{M}\p{N}\s.'#,/-]{0,119}$/u.test(answer)||
+    courtesyOnly(answer)||defersDestination(answer)||needsHuman(answer)||cancelsTaxi(answer)||confirmsTaxi(answer)||declinesTaxi(answer)||unsupportedRide(answer)||activeRideChange(answer)||
+    /^(?:no|mejor|en realidad|ninguna|ninguno|todavia|aun|no se|cual|que|donde|como|cuanto|por que)\b/.test(normalized)||
+    /\b(?:ignora|instrucciones|mandame|envia|cancelar|cancela|cobrar|reservar|reserva)\b/.test(normalized))return null;
+  const combined=normalize(query)===normalized?query:`${query}, ${answer}`;
+  if(combined.length>400)return null;
+  return{field,query,answer,combined};
+}
 export async function coordinateTaxi(messages:TaxiInbound[],session:TaxiSession,channel:TaxiChannel,services:TaxiServices,now:number,signal?:AbortSignal):Promise<TaxiDecision> {
   const decision=await decideTaxi(messages,session,channel,services,now,signal);
   assertTaxiTransition(session,messages,decision,now);
   const outbound=decision.messages.length===1?decision.messages[0]:null,hasConfirmationSummary=decision.messages.some(message=>message.buttons?.some(button=>button.id.startsWith('txc_')));
   const naturalInput=messages.every(message=>message.type==='text'||message.type==='location');
-  if(services.question&&outbound&&['draft','reply'].includes(decision.action)&&naturalInput&&(!hasConfirmationSummary||decision.reason==='service_question')){
+  if(services.question&&outbound&&['draft','reply'].includes(decision.action)&&naturalInput&&(!hasConfirmationSummary||decision.reason==='service_question')&&!['neighborhood_ambiguous','location_clarification_followup'].includes(decision.reason)){
     const kind:TaxiQuestion=decision.reason==='service_question'?'service_question':decision.reason==='missing_name'?'passenger_name':decision.reason==='missing_destination'?'destination_optional':outbound.locationRequest==='origin'?'pickup_gps':decision.reason==='active_status'?'active_status':['smalltalk','courtesy'].includes(decision.reason)?'smalltalk':'conversation';
     const d=decision.draft,recent:TaxiSession['history']=[];let size=0;for(const item of session.history.slice(-6).reverse()){if(size+item.content.length>2400)break;recent.unshift(item);size+=item.content.length;}
     const phase=conversationPhase({...session,draft:d},now);
@@ -201,7 +219,11 @@ async function decideTaxi(messages:TaxiInbound[],session:TaxiSession,channel:Tax
   const native=nativeLocationSegments(messages);
   let interpretation:Interpretation;
   let interpretationIssue:'interpretation_failed'|'ambiguous_intent'|'unclear_name'|'pickup_reference_too_long'|null=null;
-  try{interpretation=current&&!(selectedRole&&messages.some((m)=>m.location!==null))?await services.interpret(current,session,channel,signal):{intent:'provide',fields:{}};}
+  const localityAnswer=messages.every(message=>message.type==='text')?pendingLocalityAnswer(current,session):null;
+  try{
+    if(localityAnswer){const fields:Interpretation['fields']={};fields[localityAnswer.field]={value:localityAnswer.combined,evidence:localityAnswer.answer};interpretation={intent:'provide',fields};}
+    else interpretation=current&&!(selectedRole&&messages.some((m)=>m.location!==null))?await services.interpret(current,session,channel,signal):{intent:'provide',fields:{}};
+  }
   catch{interpretationIssue='interpretation_failed';interpretation={intent:'ambiguous',fields:{}};}
   if(interpretation.intent==='human')return human('model_handoff');
   if(interpretationIssue||interpretation.intent==='ambiguous'||interpretation.intent==='cancel'||interpretation.intent==='confirm'){
@@ -247,7 +269,7 @@ async function decideTaxi(messages:TaxiInbound[],session:TaxiSession,channel:Tax
     let resolved:LocationResult;try{resolved=await services.resolve(requested.value,channel,signal,d[areaKey]);}catch{resolved={kind:'unavailable'};}
     d[areaKey]=null;
     if(resolved.kind==='resolved'&&within(resolved.place,channel)){d[field]=resolved.place;if(d.awaitingLocation===field)d.awaitingLocation=null;}
-    else {d[field]=null;if(resolved.kind==='reference_conflict')referenceConflicts[field]=resolved.label;if(resolved.kind==='ambiguous'&&resolved.neighborhoods?.length){recognized[field]=resolved.neighborhoods;if(resolved.neighborhoods.length===1)d[areaKey]=resolved.neighborhoods[0];else unresolved.push(field);}if(d.awaitingLocation===field)d.awaitingLocation=null;}
+    else {d[field]=null;if(resolved.kind==='reference_conflict')referenceConflicts[field]=resolved.label;if(resolved.kind==='ambiguous'&&resolved.neighborhoods?.length){recognized[field]=resolved.neighborhoods;if(resolved.neighborhoods.length===1)d[areaKey]=resolved.neighborhoods[0];else unresolved.push(field);}if(localityAnswer?.field===field&&!unresolved.includes(field))unresolved.push(field);if(d.awaitingLocation===field)d.awaitingLocation=null;}
   }
   if(d.awaitingLocation==='choice'&&!d.pendingLocation&&!unresolved.length&&(interpretation.fields.origin||interpretation.fields.destination))d.awaitingLocation=!d.origin?'origin':!d.destination?'destination':null;
   if(native.length){
@@ -283,6 +305,12 @@ async function decideTaxi(messages:TaxiInbound[],session:TaxiSession,channel:Tax
   if(interpretationIssue)return clarifyPending(interpretationIssue,d);
   if(unresolved.length===1){
     const field=unresolved[0],areas=recognized[field];
+    if(localityAnswer?.field===field){
+      const detail=areas?.length
+        ?`La tarifa cambia según cuál de estas opciones corresponde: ${areas.map(localityDisplayName).join(' o ')}.`
+        :'Todavía no logro ubicarlo con certeza para calcular la tarifa.';
+      return requestLocation(d,field,'location_clarification_followup',`¡Gracias! Ya anoté ${localityAnswer.answer} como referencia de ${localityAnswer.query}. ${detail} ¿Cuál corresponde? Si te queda más fácil, comparte el pin del destino; es opcional. 🚕`);
+    }
     const conflict=referenceConflicts[field];if(conflict)return requestLocation(d,field,'neighborhood_reference_conflict',`La ubicación que encontré no cae en ${conflict}. ¿Me confirmas la colonia o me das otra calle o referencia? Si prefieres, comparte el pin.`);
     if(areas?.length===1)return requestLocation(d,field,'neighborhood_reference_required',`Ubico ${localityDisplayName(areas[0])}. ¿En qué calle o con qué referencia ${field==='origin'?'te recogemos':'queda el destino'}? También puedes compartir el pin, si prefieres.`);
     if(areas?.length)return requestLocation(d,field,'neighborhood_ambiguous',`Encontré estas opciones: ${areas.map(localityDisplayName).join(', ')}. ¿Cuál es? Después dime la calle o una referencia.`);

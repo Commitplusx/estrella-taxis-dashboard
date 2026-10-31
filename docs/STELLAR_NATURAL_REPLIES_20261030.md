@@ -27,3 +27,11 @@ El redactor de respuestas usa diez ejemplos situacionales para saludar, explicar
 Verificación local de esta ampliación: 5,903 pruebas Deno y 124 pruebas Node/SQL/integración aprobadas; el control de tipos y el control de calidad del bot también pasaron. Los ejemplos son un conjunto sintético de desarrollo y no prueban la precisión de un modelo en vivo; no se mandó un WhatsApp real.
 
 Versión del motor: `taxi-bot-v13-conversational-examples`. Publicado el 30-10-2026 en `izrsxygazsalfhpaualj`: `process-queue` v28 y `ycloud-webhook` v28. Descargué las funciones activas después de publicar: SHA-256 confirma que los tres archivos de ejecución revisados coinciden con el candidato y que no cambió ningún otro archivo ejecutable. OPTIONS respondió 200 en ambos endpoints. No se envió una conversación de prueba por WhatsApp.
+
+## Aclaraciones de destinos ambiguos, 30-10-2026
+
+Si el servidor mostró opciones para un lugar y el pasajero responde con un comercio o una referencia breve (por ejemplo, «Liverpool» después de «Plaza Las Flores»), el estado pendiente adjunta esa respuesta al lugar consultado y lo vuelve a resolver. No la reinicia como una pregunta de destino opcional. Si aún hay varias tarifas posibles, mantiene el lugar y pregunta cuál opción corresponde; una corrección explícita («mejor voy al Hospital») sustituye el lugar anterior. La respuesta de precio sigue siendo del servidor.
+
+El redactor natural no reescribe las listas de colonias/tarifas, para conservar sus categorías exactas. El nombre de categoría «Cash A» mantiene sus mayúsculas. Las pruebas reproducen tanto un «Liverpool» resoluble como uno que sigue ambiguo, y verifican que una corrección reemplace el destino.
+
+Verificación local de esta corrección: 5,906 pruebas Deno y 124 pruebas Node/SQL/integración aprobadas; control de tipos y calidad aprobados. La resolución de mapas real depende de los servicios y datos configurados para la base; no se envió un WhatsApp real.
