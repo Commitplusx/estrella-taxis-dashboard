@@ -53,13 +53,12 @@ function BaseContactsDirectory({ preferredBase, preview, accessMode }: { preferr
       {channel ? <TaxiDriversPanel key={tenantId + '|' + channel.waba} tenantId={tenantId} waba={channel.waba} canEdit={context.canConfigure} canManageAccounts={preview || context.canManageAccounts === true} accessMode={accessMode} preview={preview} disabled={false}
         onZones={() => { window.location.assign('/zonas-tarifas?base=' + encodeURIComponent(tenantId)); }} onLockChange={setLocked} />
         : tenantId && <div className="taxi-config"><h2>Falta configurar el WhatsApp de esta base</h2><p>Guarda su canal para administrar los contactos y vincular sus unidades.</p><a className="taxi-text-button" href={settingsUrl}>Ir a configuración <ArrowRight size={17} aria-hidden="true" /></a></div>}
-      <p className="taxi-people-help">El administrador vincula el correo a la persona y su taxi. Los viajes llegan al WhatsApp del conductor que tenga activadas las ofertas de esa unidad.</p>
+      <p className="taxi-people-help">El administrador vincula el número de acceso a la persona y su taxi. Los viajes llegan al WhatsApp del conductor que tenga activadas las ofertas de esa unidad.</p>
     </>}
   </main>;
 }
 
 function PersonalTaxiProfile({ baseName,owner }: { baseName: string;owner:boolean }) {
-  const { user } = useAuth();
   const [person, setPerson] = useState<BaseContact | null>(null), [error, setError] = useState('');
   useEffect(() => {
     const abort = new AbortController();
@@ -74,6 +73,6 @@ function PersonalTaxiProfile({ baseName,owner }: { baseName: string;owner:boolea
     {error && <p className="taxi-error" role="alert">{error}</p>}
     {!person && !error && <p role="status">Consultando tu acceso…</p>}
     {owner&&<TaxiOwnerPanel/>}
-    {person && <section className="taxi-config"><h2>{person.name}</h2><dl className="taxi-personal-facts"><div><dt>Correo de acceso</dt><dd>{user?.email}</dd></div><div><dt>Rol</dt><dd>{contactRoles.find(role => role.value === person.role)?.label}</dd></div><div><dt>Unidad</dt><dd>{person.unitNumber} · GPS #{person.deviceId}</dd></div><div><dt>WhatsApp</dt><dd>{person.phone ?? 'Pendiente de completar'}</dd></div><div><dt>Ofertas de viaje</dt><dd>{person.receiving ? 'Llegan a tu WhatsApp cuando la unidad está disponible' : 'No recibes ofertas de viaje'}</dd></div></dl><p>{owner?'Elige al chofer y su turno arriba. Para cambiar el taxi asignado o tus datos, pide ayuda a la base.':'Para cambiar el taxi o tus datos, solicita el cambio al administrador de la base.'}</p></section>}
+    {person && <section className="taxi-config"><h2>{person.name}</h2><dl className="taxi-personal-facts"><div><dt>Número de acceso</dt><dd>{person.phone}</dd></div><div><dt>Rol</dt><dd>{contactRoles.find(role => role.value === person.role)?.label}</dd></div><div><dt>Unidad</dt><dd>{person.unitNumber} · GPS #{person.deviceId}</dd></div><div><dt>WhatsApp</dt><dd>{person.phone ?? 'Pendiente de completar'}</dd></div><div><dt>Ofertas de viaje</dt><dd>{person.receiving ? 'Llegan a tu WhatsApp cuando la unidad está disponible' : 'No recibes ofertas de viaje'}</dd></div></dl><p>{owner?'Elige al chofer y su turno arriba. Para cambiar el taxi asignado o tus datos, pide ayuda a la base.':'Para cambiar el taxi o tus datos, solicita el cambio al administrador de la base.'}</p></section>}
   </main>;
 }

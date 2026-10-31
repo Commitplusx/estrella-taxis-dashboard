@@ -1,5 +1,7 @@
 # Dueños, choferes y turnos de Pompeyo
 
+> Estado vigente: consulta [acceso por número y turnos compartidos](STELLAR_PHONE_ACCESS_AND_SHARED_TURNS.md). Los apartados siguientes documentan la entrega anterior. La APK debug nueva está compilada y pendiente de instalar.
+
 ## Uso
 
 El administrador vincula la ficha del dueño a su correo y al taxi real de Traccar desde **Conductores → Ver acceso**. Al entrar con ese correo, el dueño abre **Conductores → Mi taxi y mi acceso** (`/drivers`), agrega sus choferes con nombre, WhatsApp, correo y contraseña inicial y elige **Poner en turno**. Cada chofer obtiene un acceso individual, limitado al mismo taxi. Agregar un chofer no lo pone automáticamente en turno.

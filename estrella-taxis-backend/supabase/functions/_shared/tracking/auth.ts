@@ -54,6 +54,15 @@ export class FleetApi {
     if (response.status === 204) return null;
     return await readJson(response, 2097152);
   }
+  async loginToken(cookie:string,signal?:AbortSignal):Promise<string> {
+    const response=await this.fetcher(this.base+'/session/token',{method:'POST',headers:{Cookie:cookie,'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({expiration:new Date(Date.now()+10*60000).toISOString()}),signal:signal?AbortSignal.any([signal,AbortSignal.timeout(10000)]):AbortSignal.timeout(10000),redirect:'error'});
+    if(!response.ok){await response.body?.cancel();throw new TrackingError(503,'login_unavailable','No pudimos iniciar sesión. Intenta más tarde.');}
+    const reader=response.body?.getReader();if(!reader)throw new TrackingError(502,'login_unavailable','No pudimos validar la sesión.');
+    const decoder=new TextDecoder();let token='',size=0;
+    try{while(true){const part=await reader.read();if(part.done)break;size+=part.value.length;if(size>4096){await reader.cancel();throw new TrackingError(502,'login_unavailable','No pudimos validar la sesión.');}token+=decoder.decode(part.value,{stream:true});}token=(token+decoder.decode()).trim();}finally{reader.releaseLock();}
+    if(!/^[A-Za-z0-9._~+\/=\-]{8,2048}$/.test(token))throw new TrackingError(502,'login_unavailable','No pudimos validar la sesión.');
+    return token;
+  }
   async jobSession(email:string,password:string,signal?:AbortSignal):Promise<FleetSession> {
     if(!email || !password) throw new TrackingError(503,'job_not_configured','Falta configurar la cuenta del cálculo programado.');
     const result=await requestJson(this.fetcher,`${this.base}/session`,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded',Accept:'application/json'},body:new URLSearchParams({email,password}),signal});

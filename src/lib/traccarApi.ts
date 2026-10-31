@@ -5,6 +5,7 @@
 
 import { readJson } from '../../estrella-taxis-backend/supabase/functions/_shared/tracking/http.ts';
 import { record } from '../../estrella-taxis-backend/supabase/functions/_shared/tracking/contracts.ts';
+import { phoneLoginToken } from './phoneLoginClient';
 export const BASE_URL = '/api'; // Usa el proxy de Vite en Local y el de Vercel en Producción
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
@@ -36,16 +37,19 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 
 // ── Sesión / Auth ──────────────────────────────────
 export const api = {
-  login: (email: string, password: string) =>
-    fetch(`${BASE_URL}/session`, {
+  login: async (email: string, password: string):Promise<TraccarUser> => {
+    const identifier=email.trim();
+    if(!identifier.includes('@'))return api.loginWithToken(await phoneLoginToken(identifier,password));
+    return fetch(`${BASE_URL}/session`, {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({ email, password }),
+      body: new URLSearchParams({ email:identifier, password }),
     }).then(res => {
       if (!res.ok) throw new Error('Credenciales incorrectas');
       return res.json();
-    }),
+    });
+  },
 
   loginWithToken: (token: string) =>
     fetch(`${BASE_URL}/session`, {

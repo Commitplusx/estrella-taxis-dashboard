@@ -21,6 +21,7 @@ function fixture(options:{createLost?:boolean;replay?:boolean;foreignUser?:boole
    if(name==='taxi_account_pending')return[];
    if(name==='taxi_account_begin')return options.replay?{state:'replay',result:saved,activated:true}:{state:'proceed',lease:'55555555-5555-4555-8555-555555555555'};
    if(name==='taxi_account_finish')return options.failFinish?{state:'revision_conflict'}:{...saved,userId:args.p_user,contact:{...person,accountUserId:args.p_user}};
+   if(name==='taxi_person_devices')return[7];
    if(name==='taxi_account_activated'){activated=true;return true;}
    throw new Error('Unexpected RPC '+name);
   }};
@@ -91,3 +92,6 @@ Deno.test('personal account: owner, driver and owner-driver cannot access base c
   }
  }
 });
+
+Deno.test('accounts: a new personal access uses the existing contact phone, without a required email',async()=>{const f=fixture();const result=await f.run({...f.command,userId:null,email:null,password:'Fixture-initial-123'});assert(record(result)&&result.state==='saved');assert(f.created===1);const create=f.calls.find(c=>c.path==='/users'&&c.method==='POST');assert(record(create?.body));assert(create.body.email==='taxi-'+personId+'@accounts.stellar.invalid');});
+Deno.test('accounts: phone login migration preserves an existing account and password',async()=>{const f=fixture();await f.run({...f.command,email:null});assert(f.created===0);assert(!f.calls.some(c=>c.path==='/users'&&c.method==='POST'));assert(f.activated);});

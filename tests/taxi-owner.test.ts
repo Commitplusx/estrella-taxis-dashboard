@@ -9,21 +9,24 @@ const version='a'.repeat(32),waba='+529630000001';
 const person={id:contactId,unitNumber:'487',name:'Chofer sintético',phoneInput:'+529630000003',phone:'+529630000003',role:'driver',deviceId:7,receiving:false,version,accountUserId:82};
 const context={owner:{...person,id:ownerId,role:'owner',accountUserId:42},tenantId:tenant,waba,deviceId:7,drivers:[person],driver:{deviceId:7,name:'Otro chofer',phone:'+529630000004',active:true,version},busy:false,pending:[]};
 for(const patch of [{deviceId:8},{owner:{...context.owner,role:'driver'}},{drivers:[{...person,deviceId:8}]},{drivers:[person,person]},{pending:[{requestId,contactId:ownerId,expected:null,name:'Nombre',phone:'+529630000009',email:null,review:false}]},{busy:'yes'},{driver:{...context.driver,deviceId:8}}])Deno.test('owner context rejects malformed or foreign scope '+JSON.stringify(patch),()=>{assertThrows(()=>parseOwnerContext({...context,...patch}));});
-function fixture(options:{visible?:boolean;disabled?:boolean;managerAdmin?:boolean;shiftState?:string;invalidShiftResult?:boolean;createLost?:boolean;registration?:boolean}={}){
+function fixture(options:{visible?:boolean;disabled?:boolean;managerAdmin?:boolean;shiftState?:string;invalidShiftResult?:boolean;createLost?:boolean;registration?:boolean;shared?:boolean}={}){
  const calls:{name:string;args:Record<string,unknown>}[]=[],writes:{method:string;path:string;body:Record<string,unknown>}[]=[];
  const deny=async():Promise<never>=>{throw Error('Undeclared write');};
- let users:Record<string,unknown>[]=[],grants:number[]=[],created=0,activated=false,createLost=options.createLost===true,leaseExpired=false,beginCalls=0;
- const roster=()=>({...context,drivers:options.registration?[{...person,accountUserId:activated?82:null}]:context.drivers});
+ let users:Record<string,unknown>[]=[],grants:number[]=options.shared?[8]:[],created=0,activated=false,createLost=options.createLost===true,leaseExpired=false,beginCalls=0;
+ const sharedPerson={...person,role:'owner',deviceId:8};
+ const roster=()=>({...context,...(options.shared?{authorizedDriverIds:[contactId]}:{}),drivers:options.shared?[sharedPerson]:options.registration?[{...person,accountUserId:activated?82:null}]:context.drivers});
  const store:TrackingStore={writeScores:deny,writePackages:deny,writeCompanyPackage:deny,writeCompanyStatus:deny,
   read:async(table)=>{assertEquals(table,'perfiles');return[{traccar_user_id:42,empresa_id:tenant,rol:'owner'}];},
   rpc:async(name,args)=>{calls.push({name,args});
    if(name==='taxi_owner_read'){assertEquals(args,{p_user:42});return roster();}
    if(name==='taxi_owner_shift_apply'){assertEquals(args.p_user,42);return options.invalidShiftResult?null:{state:options.shiftState??'saved'};}
-   if(name==='taxi_owner_contact_save'){assertEquals(args.p_user,42);return{state:'saved',contact:{...person,accountUserId:null},driverVersion:version};}
+   if(name==='taxi_owner_contact_save'){assertEquals(args.p_user,42);return options.shared?{state:'saved',contact:sharedPerson,accessReady:true,driverVersion:version}:{state:'saved',contact:{...person,accountUserId:null},driverVersion:version};}
    if(name==='taxi_bot_contacts_read')return{contacts:[{...person,accountUserId:activated?82:null}],linkedUnitIds:[7],drivers:[context.driver],activeCount:1,zoneCount:1};
    if(name==='taxi_account_begin'){assertEquals(args.p_actor,42);beginCalls++;if(options.createLost&&beginCalls>1&&!leaseExpired)return{state:'running'};return{state:'proceed',lease:requestId};}
    if(name==='taxi_account_finish'){assertEquals(args.p_actor,42);return{state:'saved',userId:82,email:'driver@example.test',contact:{...person,accountUserId:82}};}
    if(name==='taxi_owner_account_allowed'){assertEquals(args.p_actor,42);return true;}
+   if(name==='taxi_person_devices')return options.shared?[7,8]:[7];
+   if(name==='taxi_owner_driver_link_allowed')return true;
    if(name==='taxi_account_activated'){assertEquals(args.p_actor,42);activated=true;return true;}
    throw Error('Undeclared RPC '+name);
   }};
@@ -32,7 +35,7 @@ function fixture(options:{visible?:boolean;disabled?:boolean;managerAdmin?:boole
   if(method==='GET'){
    if(path==='/devices')return Response.json(options.visible===false?[]:[{id:7,name:'Taxi sintético'}]);
    assertEquals(cookie,'JSESSIONID=manager-session');
-   if(path==='/users/82')return Response.json({id:82,administrator:false,disabled:options.disabled===true});
+   if(path==='/users/82')return Response.json({id:82,administrator:false,disabled:options.disabled===true,readonly:true});
    if(path==='/users')return Response.json(users);
    if(path.startsWith('/groups?'))return Response.json([]);
    if(path.startsWith('/devices?'))return Response.json(grants.map(id=>({id,name:'Taxi sintético'})));
@@ -40,7 +43,7 @@ function fixture(options:{visible?:boolean;disabled?:boolean;managerAdmin?:boole
   assertEquals(cookie,'JSESSIONID=manager-session');const body:unknown=typeof init?.body==='string'?JSON.parse(init.body):null;assert(record(body));writes.push({method,path,body});
   if(path==='/users'&&method==='POST'){created++;const target={...body,id:82,password:undefined};users.push(target);if(createLost){createLost=false;throw Error('Declared lost create response');}return Response.json(target);}
   if(path==='/users/82'&&method==='PUT'){users=[body];return Response.json(body);}
-  if(path==='/permissions'){if(method==='POST'&&body.deviceId===7)grants=[7];return new Response(null,{status:204});}
+  if(path==='/permissions'){if(method==='POST'&&body.deviceId===7)grants=options.shared?[8,7]:[7];return new Response(null,{status:204});}
   throw Error('Undeclared provider request '+path);
  });
  const manager=async()=>({userId:99,admin:options.managerAdmin!==false,cookie:'JSESSIONID=manager-session'});
@@ -76,3 +79,5 @@ Deno.test('owner registration preserves the request through a lost provider resp
 for(const patch of [{email:'bad'},{password:'short'},{phone:'+99999999999'},{role:'owner'},{deviceId:8}])Deno.test('owner registration rejects invalid or expanded input '+JSON.stringify(patch),async()=>{
  const f=fixture({registration:true});await assertRejects(()=>f.run({action:'owner_driver_save',requestId,contactId,expected:version,name:person.name,phone:person.phone,email:'driver@example.test',password:'Fixture-password-123',...patch}));assertEquals(f.writes.length,0);assertEquals(f.calls.some(c=>c.name==='taxi_owner_contact_save'),false);
 });
+
+Deno.test('shared driver: an owner keeps the same account, owned taxi and password when covering another unit',async()=>{const f=fixture({shared:true});const result=await f.run({action:'owner_driver_save',requestId,contactId,expected:null,name:person.name,phone:person.phone,email:null,password:'Unused-fixture-123'});assertEquals(f.created,0);assertEquals(result.drivers[0].role,'owner');assertEquals(result.drivers[0].deviceId,8);assertEquals(f.writes.map(w=>({method:w.method,path:w.path})),[{method:'POST',path:'/permissions'}]);assertEquals(f.writes[0].body,{userId:82,deviceId:7});await f.run({action:'owner_driver_save',requestId,contactId,expected:null,name:person.name,phone:person.phone,email:null,password:'Unused-fixture-123'});assertEquals(f.writes.length,1);});

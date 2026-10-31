@@ -2,7 +2,7 @@ import {LIFECYCLES,type Lifecycle}from'../estrella-taxis-backend/supabase/functi
 import {conversationPhase}from'../estrella-taxis-backend/supabase/functions/_shared/bot/taxis/stateMachine.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {readFileSync}from'node:fs';
+import {readFileSync,writeFileSync}from'node:fs';
 import {PGlite}from'@electric-sql/pglite';
 import {emptyDraft,parseSession,parseStoredInbound,record,TAXI_BOT_VERSION}from'../estrella-taxis-backend/supabase/functions/_shared/bot/taxis/contracts.ts';
 import {TaxiEngine}from'../estrella-taxis-backend/supabase/functions/_shared/bot/taxis/engine.ts';
@@ -54,6 +54,8 @@ const ownerSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migratio
 const driverReceiptSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261031230000_taxi_driver_acceptance_receipts.sql',import.meta.url),'utf8');
 const briefFlowSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261031233000_taxi_brief_customer_flow.sql',import.meta.url),'utf8');
 const briefRecoverySql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261031234000_taxi_brief_recovery_edges.sql',import.meta.url),'utf8');
+const phoneLoginSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261031235000_taxi_phone_login.sql',import.meta.url),'utf8');
+const sharedDriverSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261031235100_taxi_shared_driver_turns.sql',import.meta.url),'utf8');
 const tenant='11111111-1111-4111-8111-111111111111',other='22222222-2222-4222-8222-222222222222',waba='+529630000001',customer='+529630000002',driverPhone='+529630000003';
 const pompeyo='4cf9acf1-f07e-4a01-9396-eb5bde3e7411';
 function unknownArray(value:unknown):value is unknown[]{return Array.isArray(value);}
@@ -732,6 +734,8 @@ async function fixture(options:{legacy?:boolean;seedCoverageBeforeMigration?:boo
     await db.exec(driverReceiptSql);
     await db.exec(briefFlowSql);
     await db.exec(briefRecoverySql);
+    await db.exec(phoneLoginSql);
+    await db.exec(sharedDriverSql);
   }
   // These legacy protocol fixtures explicitly act as customers too. Driver-only access has separate tests below.
   await db.query('INSERT INTO taxi_bot_allowed_customers(tenant_id,phone)VALUES($1,$2),($1,$3),($1,$4)',[tenant,customer,driverPhone,'+529630000004']);
@@ -1805,6 +1809,49 @@ test('dispatch rounds SQL: service-only RPCs and private queues are unavailable 
 });
 
 const ownerId='11111111-1111-4111-8111-111111111121',firstDriver='11111111-1111-4111-8111-111111111122',nextDriver='11111111-1111-4111-8111-111111111123';
+test('shared turns regression: an existing owner can cover another taxi without losing ownership or creating a duplicate',async()=>{
+ const f=await ownerFixture();try{
+  const secondOwner=crypto.randomUUID(),request=crypto.randomUUID(),incoming=crypto.randomUUID();
+  await f.db.query("INSERT INTO perfiles(traccar_user_id,empresa_id,rol)VALUES(24,$1,'owner')",[tenant]);
+  await f.db.query("INSERT INTO taxi_base_contacts(id,tenant_id,unit_number,name,phone_input,role,device_id,traccar_user_id)VALUES($1,$2,'495','Otro dueño','9630000004','owner',2,24)",[secondOwner,tenant]);
+  const originalContact=ownerSql.match(/CREATE FUNCTION public\.taxi_owner_contact_save[\s\S]*?END \$\$;/)?.[0];assert.ok(originalContact);
+  await f.db.exec('BEGIN;SAVEPOINT legacy_reproduction');await f.db.exec(originalContact.replace('CREATE FUNCTION','CREATE OR REPLACE FUNCTION'));
+  const args=[21,request,incoming,null,'Otro dueño','9630000004'];
+  assert.equal(f.obj(await f.scalar('SELECT taxi_owner_contact_save($1,$2,$3,$4,$5,$6)',args)).state,'driver_changed');
+  await f.db.exec('ROLLBACK TO SAVEPOINT legacy_reproduction;COMMIT');
+  const receipt=f.obj(await f.scalar('SELECT taxi_owner_contact_save($1,$2,$3,$4,$5,$6)',args));assert.equal(receipt.state,'saved');assert.equal(receipt.accessReady,true);assert.equal(f.obj(receipt.contact).id,secondOwner);
+  const roster=await f.read();assert.equal(roster.drivers.find(d=>d.id===secondOwner)?.role,'owner');assert.equal(roster.drivers.find(d=>d.id===secondOwner)?.deviceId,2);assert.equal(roster.drivers.find(d=>d.id===secondOwner)?.receiving,false);
+  assert.deepEqual(await f.scalar('SELECT taxi_person_devices($1,2)',[secondOwner]),[1,2]);
+  assert.equal((await f.shift(secondOwner,roster.driver?.version??null)).state,'driver_active_elsewhere');
+  const otherOwner=parseOwnerContext(await f.scalar('SELECT taxi_owner_read(24)'));
+  assert.equal(f.obj(await f.scalar('SELECT taxi_owner_shift_apply($1,$2,$3,$4)',[24,crypto.randomUUID(),null,otherOwner.driver?.version??null])).state,'saved');
+  assert.equal((await f.shift(secondOwner,(await f.read()).driver?.version??null)).state,'saved');
+  assert.equal((await f.read()).driver?.phone,'+529630000004');
+  assert.equal(await f.scalar('SELECT device_id FROM taxi_base_contacts WHERE id=$1',[secondOwner]),2);assert.equal(await f.scalar('SELECT rol FROM perfiles WHERE traccar_user_id=24'),'owner');
+  assert.deepEqual(await f.scalar('SELECT taxi_owner_contact_save($1,$2,$3,$4,$5,$6)',args),receipt);assert.equal(await f.scalar('SELECT count(*)::int FROM taxi_unit_drivers'),1);
+  assert.equal(await f.scalar('SELECT count(*)::int FROM taxi_base_contacts WHERE phone=$1',['+529630000004']),1);assert.equal(await f.scalar('SELECT count(*)::int FROM taxi_account_operations'),0);
+  await f.prepare();await f.confirm();const offer=f.obj(await f.scalar('SELECT to_jsonb(o)FROM taxi_bot_offers o WHERE device_id=1'));assert.equal(offer.driver_phone,'+529630000004');
+  const event=await f.enqueue('','+529630000004',crypto.randomUUID(),'txa_'+offer.id),claim=await f.begin(event.eventId);await f.commit(event.eventId,claim,{...f.decision('driver_accept'),offerId:offer.id});
+  assert.equal(await f.scalar("SELECT count(*)::int FROM viajes WHERE estado='en_camino'AND device_id=1"),1);assert.equal(await f.scalar("SELECT count(*)::int FROM taxi_bot_outbox WHERE destination=$1 AND dedupe_key LIKE 'trip-assigned:%'",[customer]),1);
+ }finally{await f.db.close();}
+});
+test('shared turns: an owner can drive the owned taxi while preserving the owner role',async()=>{
+ const f=await ownerFixture();try{assert.equal((await f.shift(ownerId,(await f.read()).driver?.version??null)).state,'saved');assert.equal((await f.read()).driver?.phone,'+529630000021');assert.equal(await f.scalar('SELECT role FROM taxi_base_contacts WHERE id=$1',[ownerId]),'owner');await f.prepare();await f.confirm();assert.equal(await f.scalar('SELECT driver_phone FROM taxi_bot_offers WHERE device_id=1'),'+529630000021');}finally{await f.db.close();}
+});
+test('phone login SQL: durable limits, current role and private scopes preserve the existing account',async()=>{
+ const f=await ownerFixture();try{
+  if(process.env.STELLAR_PHONE_SCHEMA==='1')writeFileSync('.codex-tmp/phone-expected-schema.json',JSON.stringify((await f.db.query("SELECT p.oid::regprocedure::text AS signature,p.prosrc AS source,p.prosecdef AS definer,p.proconfig AS config FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='public'AND p.proname IN('taxi_owner_read','taxi_owner_contact_save','taxi_owner_shift_apply','taxi_bot_guard_contact_driver','taxi_bot_contact_apply_core','taxi_bot_driver_apply','taxi_account_begin','taxi_account_finish','taxi_phone_login_scope','taxi_phone_login_begin','taxi_person_devices','taxi_owner_driver_link_allowed')ORDER BY signature")).rows,null,2));
+  const phone='+529630000021',read=()=>f.scalar('SELECT taxi_phone_login_scope($1)',[phone]);
+  assert.deepEqual(await read(),{userId:21,deviceId:1,deviceIds:[1],tenantId:tenant});
+  for(let i=0;i<8;i++){const result=f.obj(await f.scalar('SELECT taxi_phone_login_begin($1)',[phone]));assert.equal(result.allowed,true);assert.equal(f.obj(result.account).userId,21);}
+  assert.deepEqual(await f.scalar('SELECT taxi_phone_login_begin($1)',[phone]),{allowed:false});
+  const unknown=f.obj(await f.scalar('SELECT taxi_phone_login_begin($1)',['+529630000099']));assert.equal(unknown.allowed,true);assert.equal(unknown.account,null);
+  await f.db.exec("UPDATE perfiles SET rol='driver' WHERE traccar_user_id=21");assert.equal(await read(),null);
+  await f.db.exec("UPDATE perfiles SET rol='owner' WHERE traccar_user_id=21;UPDATE empresas SET activo=false");assert.equal(await read(),null);
+  for(const role of ['anon','authenticated','service_role'])assert.equal(await f.scalar("SELECT has_table_privilege($1,'taxi_phone_login_limits','SELECT')",[role]),false);
+  for(const role of ['anon','authenticated'])for(const fn of ['taxi_phone_login_scope(text)','taxi_phone_login_begin(text)','taxi_person_devices(uuid,integer)'])assert.equal(await f.scalar("SELECT has_function_privilege($1,$2,'EXECUTE')",[role,fn]),false);
+ }finally{await f.db.close();}
+});
 async function ownerFixture(){
  const f=await fixture();
  await f.db.query("INSERT INTO perfiles(traccar_user_id,empresa_id,rol)VALUES(21,$1,'owner'),(22,$1,'driver'),(23,$1,'driver')",[tenant]);
@@ -1814,7 +1861,7 @@ async function ownerFixture(){
  return{...f,read,shift};
 }
 test('owner SQL: only the assigned taxi and its drivers are visible; regular drivers cannot manage it',async()=>{
- const f=await ownerFixture();try{const c=await f.read();assert.equal(c.deviceId,1);assert.deepEqual(c.drivers.map(d=>d.id).sort(),[firstDriver,nextDriver].sort());assert.equal(c.driver?.phone,driverPhone);assert.equal(c.pending.length,0);
+ const f=await ownerFixture();try{const c=await f.read();assert.equal(c.deviceId,1);assert.deepEqual(c.drivers.map(d=>d.id).sort(),[ownerId,firstDriver,nextDriver].sort());assert.equal(c.driver?.phone,driverPhone);assert.equal(c.pending.length,0);
  for(const user of [22,23,99])await assert.rejects(f.scalar('SELECT taxi_owner_read($1)',[user]),/owner_access_required/);
  for(const role of ['anon','authenticated']){assert.equal(await f.scalar("SELECT has_function_privilege($1,'taxi_owner_shift_apply(integer,uuid,uuid,text)','EXECUTE')",[role]),false);assert.equal(await f.scalar("SELECT has_table_privilege($1,'taxi_owner_operations','SELECT')",[role]),false);}
  }finally{await f.db.close();}
@@ -1856,7 +1903,7 @@ test('owner SQL: registration reuses its receipt after a lost response and expos
  const f=await ownerFixture();try{const contact=crypto.randomUUID(),request=crypto.randomUUID(),args=[21,request,contact,null,'Nuevo chofer','9630000025'];const result=f.obj(await f.scalar('SELECT taxi_owner_contact_save($1,$2,$3,$4,$5,$6)',args));assert.equal(result.state,'saved');assert.deepEqual(await f.scalar('SELECT taxi_owner_contact_save($1,$2,$3,$4,$5,$6)',args),result);const context=await f.read();assert.equal(context.pending.length,1);assert.equal(context.pending[0].requestId,request);assert.equal(JSON.stringify(context).includes('password'),false);assert.equal(await f.scalar('SELECT count(*)::integer FROM taxi_base_contacts WHERE id=$1',[contact]),1);assert.equal((await f.scalar('SELECT taxi_owner_contact_save($1,$2,$3,$4,$5,$6)',[21,crypto.randomUUID(),contact,f.obj(result.contact).version,'Nuevo chofer','9630000025'])as Record<string,unknown>).state,'account_pending');}finally{await f.db.close();}
 });
 test('owner SQL: other units, duplicate WhatsApp and drivers without their own access cannot receive a shift',async()=>{
- const f=await ownerFixture();try{const c=await f.read();assert.equal((await f.shift(crypto.randomUUID(),c.driver?.version??null)).state,'driver_access_required');const duplicate=f.obj(await f.scalar('SELECT taxi_owner_contact_save($1,$2,$3,$4,$5,$6)',[21,crypto.randomUUID(),crypto.randomUUID(),null,'Duplicado','9630000003']));assert.equal(duplicate.state,'phone_conflict');await f.db.query('UPDATE taxi_base_contacts SET device_id=2 WHERE id=$1',[nextDriver]);assert.equal((await f.shift(nextDriver,c.driver?.version??null)).state,'driver_access_required');}finally{await f.db.close();}
+ const f=await ownerFixture();try{const c=await f.read();assert.equal((await f.shift(crypto.randomUUID(),c.driver?.version??null)).state,'driver_access_required');const duplicate=f.obj(await f.scalar('SELECT taxi_owner_contact_save($1,$2,$3,$4,$5,$6)',[21,crypto.randomUUID(),crypto.randomUUID(),null,'Duplicado','9630000003']));assert.equal(duplicate.state,'saved');assert.equal(f.obj(duplicate.contact).id,firstDriver);assert.equal(duplicate.accessReady,true);await f.db.query('UPDATE taxi_base_contacts SET device_id=2 WHERE id=$1',[nextDriver]);assert.equal((await f.shift(nextDriver,c.driver?.version??null)).state,'driver_access_required');}finally{await f.db.close();}
 });
 test('owner SQL: delegated signup can only create a driver for the owned taxi; revocation blocks final binding',async()=>{
  const f=await ownerFixture();try{const contact=crypto.randomUUID(),request=crypto.randomUUID();const saved=f.obj(await f.scalar('SELECT taxi_owner_contact_save($1,$2,$3,$4,$5,$6)',[21,request,contact,null,'Nuevo chofer','9630000025']));const assignment={role:'driver',deviceId:1,receiveOffers:false,driverVersion:saved.driverVersion};const args=[tenant,21,request,contact,f.obj(saved.contact).version,'new@example.test',null,assignment];assert.equal(await f.scalar('SELECT taxi_owner_account_allowed($1,$2,$3,$4)',[21,request,contact,assignment]),true);

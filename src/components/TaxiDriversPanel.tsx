@@ -102,7 +102,7 @@ export default function TaxiDriversPanel({ tenantId, waba, canEdit, canManageAcc
       if (command.action === 'contact_save' && accessMode && canManageAccounts && !saved.accountUserId) {
         setSelected(saved.id); setEditorMode('access'); setAccountChoice(''); setEmail('');
       } else setEditorOpen(false);
-      setNotice(command.action === 'account_save' ? 'Acceso vinculado a esta persona y su taxi. Ya puede entrar con su correo.' : saved.receiving ? 'Cambios guardados. Este conductor recibirá ofertas cuando la unidad esté disponible.' : 'Contacto guardado. No recibirá ofertas de viaje.');
+      setNotice(command.action === 'account_save' ? 'Acceso vinculado a esta persona y su taxi. Ya puede entrar con su número y contraseña.' : saved.receiving ? 'Cambios guardados. Este conductor recibirá ofertas cuando la unidad esté disponible.' : 'Contacto guardado. No recibirá ofertas de viaje.');
       setReload(value => value + 1);
     } catch (cause: unknown) {
       setError(cause instanceof Error ? cause.message : 'No se confirmó el guardado.');
@@ -134,7 +134,7 @@ export default function TaxiDriversPanel({ tenantId, waba, canEdit, canManageAcc
         {' '}<button className="taxi-text-button" onClick={onZones} disabled={locked || dirty}>Ver zonas y tarifas</button></p>
       {canManageAccounts && <p className="taxi-contact-results">{preview ? 'Vista de accesos de prueba' : `${accounts.length} cuentas de Traccar disponibles. Vincula cada correo a su persona; no hace falta volver a darla de alta.`}</p>}
       {accountsError && <p className="taxi-error" role="alert">{accountsError}</p>}
-      {pendingAccounts.map(operation => <div className="taxi-uncertain" key={operation.requestId}><p>Hay un acceso pendiente para {operation.command.email}. Completa la misma solicitud para evitar duplicados.</p><button type="button" className="taxi-secondary" disabled={locked || dirty} onClick={() => {
+      {pendingAccounts.map(operation => <div className="taxi-uncertain" key={operation.requestId}><p>Hay un acceso pendiente para {data?.contacts.find(person => person.id === operation.command.contact)?.name ?? 'esta persona'}. Completa la misma solicitud para evitar duplicados.</p><button type="button" className="taxi-secondary" disabled={locked || dirty} onClick={() => {
         edit(operation.command.contact, 'access');
         if (isContactRole(operation.command.assignment.role)) setRole(operation.command.assignment.role);
         setDevice(operation.command.assignment.deviceId === null ? '' : String(operation.command.assignment.deviceId)); setReceiving(operation.command.assignment.receiveOffers);
@@ -154,7 +154,7 @@ export default function TaxiDriversPanel({ tenantId, waba, canEdit, canManageAcc
           <span className={'taxi-contact-offers' + (contact.receiving ? ' is-receiving' : '')}><i aria-hidden="true" />{contact.receiving ? 'Recibe ofertas' : 'Sin ofertas de viaje'}</span></div>
         {canEdit && <div className="taxi-contact-row-actions"><button className="taxi-secondary" disabled={locked || dirty || loading} onClick={() => edit(contact.id)} aria-label={`Editar ${contact.name}, unidad ${contact.unitNumber}`} aria-haspopup="dialog"><Pencil size={16} aria-hidden="true" /> Editar</button>
           {canManageAccounts && <button className="taxi-text-button" disabled={locked || dirty || loading || Boolean(accountsError)} onClick={() => edit(contact.id, 'access')} aria-haspopup="dialog"><KeyRound size={16} aria-hidden="true" />{contact.accountUserId ? 'Ver acceso' : 'Crear acceso'}</button>}
-          {contact.accountUserId && <small>{accounts.find(user => user.id === contact.accountUserId)?.email ?? `Acceso #${contact.accountUserId}`}</small>}</div>}
+          {contact.accountUserId && <small>{contact.role === 'staff' ? accounts.find(user => user.id === contact.accountUserId)?.email ?? `Acceso #${contact.accountUserId}` : `Acceso con ${contact.phone ?? 'número pendiente'}`}</small>}</div>}
       </li>)}</ul> : <p role="status">{query || roleFilter !== 'all' ? 'No hay contactos que coincidan con estos filtros.' : 'Todavía no hay contactos registrados.'}</p>}
     </>}
     {notice && !editorOpen && <p className="taxi-notice taxi-contact-feedback" role="status"><CheckCircle2 size={18} aria-hidden="true" />{notice}</p>}
@@ -168,11 +168,11 @@ export default function TaxiDriversPanel({ tenantId, waba, canEdit, canManageAcc
         event.preventDefault();
         if (locked || discard || !dirty) return;
         if (editorMode === 'access') {
-          if (!person || !accountChoice) { setError('Elige una cuenta existente o Crear cuenta con correo.'); return; }
+          if (!person || !accountChoice) { setError('Elige una cuenta existente o Crear acceso con número.'); return; }
           const existing = accounts.find(user => String(user.id) === accountChoice);
           const accountEmail = existing?.email.toLowerCase() ?? email.trim().toLowerCase();
           void save({ action: 'account_save', tenantId, waba, contactId: person.id, expected: person.version, userId: existing?.id ?? null,
-            email: accountEmail, password: existing ? '' : password, role, deviceId: device ? Number(device) : null, receiveOffers: receiving,
+            email: role === 'staff' ? accountEmail : null, password: existing ? '' : password, role, deviceId: device ? Number(device) : null, receiveOffers: receiving,
             driverVersion: data.drivers.find(driver => driver.deviceId === Number(device))?.version ?? null, requestId: crypto.randomUUID() });
           return;
         }
@@ -190,15 +190,15 @@ export default function TaxiDriversPanel({ tenantId, waba, canEdit, canManageAcc
           <button type="button" className="taxi-contact-close" disabled={locked} onClick={requestClose} aria-label="Cerrar editor"><X size={22} aria-hidden="true" /></button></header>
         <div className="taxi-contact-editor-body">
           {preview && <p className="taxi-contact-preview">Vista de prueba. Aquí no se guardan cambios.</p>}
-          {canManageAccounts && selected && <div className="taxi-contact-editor-tabs"><button type="button" className={editorMode === 'details' ? 'is-active' : ''} disabled={locked || dirty || discard} onClick={() => { setEditorMode('details'); setNotice(''); }}>Datos y taxi</button><button type="button" className={editorMode === 'access' ? 'is-active' : ''} disabled={locked || dirty || discard} onClick={() => { setEditorMode('access'); setAccountChoice(person?.accountUserId ? String(person.accountUserId) : ''); setNotice(''); }}>Correo y acceso</button></div>}
+          {canManageAccounts && selected && <div className="taxi-contact-editor-tabs"><button type="button" className={editorMode === 'details' ? 'is-active' : ''} disabled={locked || dirty || discard} onClick={() => { setEditorMode('details'); setNotice(''); }}>Datos y taxi</button><button type="button" className={editorMode === 'access' ? 'is-active' : ''} disabled={locked || dirty || discard} onClick={() => { setEditorMode('access'); setAccountChoice(person?.accountUserId ? String(person.accountUserId) : ''); setNotice(''); }}>Número y acceso</button></div>}
           {editorMode === 'access' ? <fieldset className="taxi-contact-fields" disabled={locked || discard}><legend>La misma persona, con su propio correo</legend>
             <p className="taxi-contact-access-help">{role === 'staff' ? 'El operador verá las unidades y la operación de Pompeyo.' : `Verá únicamente su taxi${device ? ' · GPS #' + device : ''}. El administrador controla las altas y asignaciones.`}</p>
             <div className="taxi-fields">
               <label>Rol del acceso<select value={role} onChange={event => { if (isContactRole(event.target.value)) { setRole(event.target.value); if (!['driver','owner_driver'].includes(event.target.value)) setReceiving(false); setDirty(true); } }}>{contactRoles.map(item => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label>
               <label>Taxi asignado<select value={device} onChange={event => { setDevice(event.target.value); setDirty(true); }}><option value="">Elige su taxi</option>{data.units.map(unit => <option key={unit.id} value={unit.id}>{unit.name} · GPS #{unit.id}</option>)}</select></label>
-              <label className="taxi-contact-gps">Cuenta de acceso<select value={accountChoice} disabled={Boolean(person?.accountUserId)} onChange={event => { setAccountChoice(event.target.value); setDirty(true); }}><option value="">Elige el correo existente o crea uno</option><option value="new">Crear cuenta con correo</option>{accounts.filter(user => !user.contactId || user.contactId === selected).map(user => <option key={user.id} value={user.id}>{user.name} · {user.email}</option>)}</select></label>
+              <label className="taxi-contact-gps">Cuenta de acceso<select value={accountChoice} disabled={Boolean(person?.accountUserId)} onChange={event => { setAccountChoice(event.target.value); setDirty(true); }}><option value="">Elige su cuenta existente o crea el acceso</option><option value="new">Crear acceso con número</option>{accounts.filter(user => !user.contactId || user.contactId === selected).map(user => <option key={user.id} value={user.id}>{user.name} · {user.email.endsWith('@accounts.stellar.invalid') ? 'Acceso por número' : user.email}</option>)}</select></label>
               {person?.accountUserId ? <p className="taxi-contact-access-help">Esta persona ya utiliza la cuenta #{person.accountUserId}. Puedes cambiar su rol y taxi sin crear otro usuario.</p> : accountChoice === 'new' ? <>
-                <label className="taxi-contact-gps">Correo electrónico<input type="email" required autoComplete="off" value={email} onChange={event => { setEmail(event.target.value); setDirty(true); }} /></label>
+                {role === 'staff' ? <label className="taxi-contact-gps">Correo electrónico<input type="email" required autoComplete="off" value={email} onChange={event => { setEmail(event.target.value); setDirty(true); }} /></label> : <p>Entrará con su WhatsApp: <strong>{person?.phone ?? 'Completa el número en Datos y taxi'}</strong>.</p>}
                 <label className="taxi-contact-gps">Contraseña inicial<input type="password" required minLength={12} maxLength={128} autoComplete="new-password" value={password} onChange={event => { setPassword(event.target.value); setDirty(true); }} /><small>Al menos 12 caracteres. No se guarda en el panel ni se envía por correo.</small></label>
               </> : accountChoice && <p className="taxi-contact-access-help">Se conservarán el correo y la contraseña existentes. La cuenta verá los taxis asignados aquí.</p>}
               <label className="taxi-enable taxi-contact-receiving"><input type="checkbox" role="switch" checked={receiving} onChange={event => changeReceiving(event.target.checked)} /><span>Recibe ofertas de viaje<small>{driving?'Se enviarán a su WhatsApp cuando la unidad esté disponible.':role==='owner'?'Al activarlo confirmas que también conduce; se guardará como Dueño y conductor.':'Al activarlo confirmas que conduce; se guardará con el rol Conductor.'}</small></span></label>
@@ -207,7 +207,7 @@ export default function TaxiDriversPanel({ tenantId, waba, canEdit, canManageAcc
           <fieldset className="taxi-contact-fields" disabled={locked || discard}><legend>Datos del contacto</legend><div className="taxi-fields">
             <label className="taxi-contact-name">Nombre<input ref={nameInput} value={name} required maxLength={120} autoComplete="off" onChange={event => { setName(event.target.value); setDirty(true); }} /></label>
             <label>Número de unidad<input value={unitNumber} required maxLength={20} onChange={event => { setUnitNumber(event.target.value); setDirty(true); }} placeholder="Por ejemplo: 487" /></label>
-            <label>¿Qué hace en la base?<select value={role} disabled={Boolean(person?.accountUserId)} onChange={event => { if (isContactRole(event.target.value)) { setRole(event.target.value); if (event.target.value !== 'driver' && event.target.value !== 'owner_driver') setReceiving(false); setDirty(true); } }}>{contactRoles.map(item => <option key={item.value} value={item.value}>{item.label}</option>)}</select>{person?.accountUserId && <small>Cambia el rol y taxi en Correo y acceso para mantenerlos sincronizados.</small>}</label>
+            <label>¿Qué hace en la base?<select value={role} disabled={Boolean(person?.accountUserId)} onChange={event => { if (isContactRole(event.target.value)) { setRole(event.target.value); if (event.target.value !== 'driver' && event.target.value !== 'owner_driver') setReceiving(false); setDirty(true); } }}>{contactRoles.map(item => <option key={item.value} value={item.value}>{item.label}</option>)}</select>{person?.accountUserId && <small>Cambia el rol y taxi en Número y acceso para mantenerlos sincronizados.</small>}</label>
             <TaxiPhoneField label="WhatsApp del contacto" value={phone} onChange={value => { setPhone(value); setDirty(true); }} help="Revisa el número antes de activar ofertas." />
           </div></fieldset>
           <fieldset className="taxi-contact-fields" disabled={locked || discard}><legend>Unidad y viajes</legend><div className="taxi-fields">

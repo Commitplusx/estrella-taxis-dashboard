@@ -67,11 +67,11 @@ export default function Login() {
         
         setTimeout(() => setIsTransitioning(false), 1200);
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       setIsTransitioning(false);
       setLoginPhase(0);
       setState('error');
-      setError(err.message || (isForgotPassword ? 'Error al solicitar el correo.' : 'Credenciales inválidas.'));
+      setError(err instanceof Error ? err.message : isForgotPassword ? 'Error al solicitar el correo.' : 'Credenciales inválidas.');
     }
   };
 
@@ -184,16 +184,17 @@ export default function Login() {
                 <div className={`transition-all duration-500 ${state === 'success' ? 'opacity-0 scale-95 h-0 overflow-hidden' : 'opacity-100 scale-100'}`}>
                   {/* Email */}
                   <div className="space-y-1.5 mb-5">
-                    <label className="block text-[13px] font-semibold text-slate-700 ml-1">Correo Electrónico</label>
+                    <label htmlFor="login-identifier" className="block text-[13px] font-semibold text-slate-700 ml-1">{isForgotPassword?'Correo electrónico':'Número de WhatsApp o correo'}</label>
                     <input
-                      type="email"
+                      id="login-identifier"
+                      type={isForgotPassword?'email':'text'}
                       required
-                      autoComplete="email"
+                      autoComplete="username"
                       value={email}
                       onChange={e => setEmail(e.target.value)}
                       disabled={state === 'loading' || state === 'success'}
                       className="w-full px-4 py-3.5 border border-slate-200 rounded-xl text-sm font-medium focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all bg-slate-50 focus:bg-white disabled:opacity-60 text-slate-900 placeholder:text-slate-400"
-                      placeholder="tu@correo.com"
+                      placeholder={isForgotPassword?'tu@correo.com':'10 dígitos o +52…'}
                     />
                   </div>
   

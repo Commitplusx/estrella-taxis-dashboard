@@ -2,7 +2,9 @@ import {taxiQualityRequest}from"./quality.ts";
 import {dispatchRequest}from './dispatch.ts';
 import { driverRequest } from './drivers.ts';
 import { accountRequest } from './accounts.ts';
-import {ownerRequest,type AccountManager}from './owners.ts';
+import { phoneLogin } from './phoneLogin.ts';
+import {ownerRequest}from './owners.ts';
+import type {AccountManager}from './owners.ts';
 import { neighborhoodRequest } from './neighborhoods.ts';
 import type { Fetcher } from '../_shared/tracking/http.ts';
 import { customerPhones, parseCustomerAccess } from '../_shared/bot/taxis/customerAccess.ts';
@@ -108,6 +110,7 @@ export function createTaxiAdminHandler(
           "Faltan los datos de la consulta.",
         );
       }
+      if (raw.action === 'phone_login') return json(await phoneLogin(raw,deps.fleet,deps.store,deps.accountManager,AbortSignal.any([req.signal,AbortSignal.timeout(45000)])));
       const identity = await deps.fleet.identity(req),
         scope = await access(identity);
       if (scope.limited) {

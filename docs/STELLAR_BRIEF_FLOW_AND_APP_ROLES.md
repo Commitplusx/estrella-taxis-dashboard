@@ -1,5 +1,7 @@
 # Pompeyo: conversación breve y accesos personales
 
+> Estado vigente: consulta [acceso por número y turnos compartidos](STELLAR_PHONE_ACCESS_AND_SHARED_TURNS.md). Los apartados siguientes documentan la entrega anterior. La APK debug nueva está compilada y pendiente de instalar.
+
 ## Conversación del cliente
 
 El flujo normal tiene un presupuesto duradero de **cinco mensajes al cliente por servicio**. Ubicación GPS de recogida, nombre y destino se piden juntos cuando faltan varios datos. Se conserva el debounce de 15 segundos: las burbujas del cliente se interpretan como un lote.
