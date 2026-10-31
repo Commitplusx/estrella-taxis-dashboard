@@ -1,0 +1,106 @@
+{
+  "date": "2026-10-31T20:32:37.911Z",
+  "project": "izrsxygazsalfhpaualj",
+  "webCommit": "62d56e4574a9691a80716f4394eb4f24174dabe9",
+  "verification": {
+    "functions": [
+      {
+        "name": "process-queue",
+        "checked": 30,
+        "hashesMatch": true,
+        "options": 200
+      },
+      {
+        "name": "ycloud-webhook",
+        "checked": 30,
+        "hashesMatch": true,
+        "options": 200
+      },
+      {
+        "name": "taxi-bot-admin",
+        "checked": 37,
+        "hashesMatch": true,
+        "options": 200
+      }
+    ],
+    "migration": "20261031235500",
+    "productionEligibilityUnchanged": true
+  },
+  "web": {
+    "url": "https://stellar.estrella-eats.mx/map",
+    "status": 200,
+    "asset": "/assets/index-D-9nrw56.js",
+    "sha256": "47cce2d605dbc8aef5746a25da963ffb3ed2d94fdea35a20105b0bc5516033c8",
+    "simulatorPresent": true
+  },
+  "selectorCharacterization": {
+    "seed": 93107,
+    "cases": 2000,
+    "identical": true,
+    "comparison": "HEAD selector vs reviewed observer extraction; timings excluded"
+  },
+  "tests": {
+    "fullDeno": 22655,
+    "focusedDeno": 59,
+    "sqlSuite": 160,
+    "simulationSqlFinal": 4,
+    "map": 8,
+    "strictUiTypes": true,
+    "fullRepoTypes": "pre-existing failures outside changed surface"
+  },
+  "businessBefore": {
+    "in_turn": 13,
+    "offers": 1,
+    "outbox": 86,
+    "positions_linked": 19,
+    "requests": 0,
+    "trips": 3
+  },
+  "businessAfter": {
+    "in_turn": 13,
+    "offers": 1,
+    "outbox": 86,
+    "positions_linked": 19,
+    "requests": 5,
+    "trips": 3
+  },
+  "processes": [
+    {
+      "name": "wialon-bridge",
+      "pid": 78261,
+      "status": "online",
+      "restarts": 2
+    },
+    {
+      "name": "bot-worker",
+      "pid": 879,
+      "status": "online",
+      "restarts": 0
+    },
+    {
+      "name": "stellar-taxi-bot",
+      "pid": 56254,
+      "status": "online",
+      "restarts": 0
+    }
+  ],
+  "ui": {
+    "route": "/map",
+    "tool": "Comparar taxis disponibles",
+    "viewportWidths": [
+      1440,
+      1830,
+      390
+    ],
+    "reducedMotion": true,
+    "svgPaths": 3,
+    "physicalWhatsAppMessagesSent": 0,
+    "visualReview": {
+      "document": "STELLAR_SIMULATION_UI_REVIEW_20261031.md",
+      "disposition": "ship",
+      "scope": "three scored fixes only",
+      "resolvedFindings": 3,
+      "normalMotionPhysicallyObserved": false
+    }
+  }
+}

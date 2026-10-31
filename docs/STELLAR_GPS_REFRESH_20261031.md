@@ -2,6 +2,10 @@
 
 ## Estado vigente
 
+Actualización posterior: el simulador integrado al mapa usa el mismo refresco y selector. Las versiones vigentes pasan a `process-queue`/`ycloud-webhook` v43 y `taxi-bot-admin` v35; ver [Simulador de asignación](STELLAR_DISPATCH_SIMULATION_20261031.md). La evidencia y prueba física descritas abajo corresponden al despliegue anterior.
+
+## Despliegue original de este documento
+
 Publicado en el proyecto independiente `izrsxygazsalfhpaualj`: `process-queue` y `ycloud-webhook` versión **41 ACTIVE**. `taxi-bot-admin` sigue en v34. Se verificaron nuevamente los 29 archivos de ejecución de cada bundle y HTTP 200 a OPTIONS.
 
 Al confirmar un viaje, el selector existente comprueba conductores elegibles y solicita una sincronización al puente **antes** de leer la flota/posiciones de Traccar. Las rondas posteriores siguen la misma ruta. Sin conductores elegibles no se consulta Wialon innecesariamente. El flujo normal de cliente sigue exigiendo su pin de origen, tarifa consultada en el servidor y el botón de confirmación vigente; no se crea otra ruta de compra.
