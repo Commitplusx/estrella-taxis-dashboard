@@ -1,5 +1,7 @@
 # Accesos, personas y taxis de Pompeyo — 30 de octubre de 2026
 
+Actualización: [dueños, choferes y turnos](STELLAR_OWNER_SHIFTS.md) amplía los permisos del dueño para dar acceso a sus choferes y elegir su turno. Las restricciones descritas abajo corresponden al despliegue original; el documento nuevo define el contrato vigente para esas operaciones.
+
 ## Un solo padrón
 
 `/users` y `/drivers` usan la misma ficha de `taxi_base_contacts` y el mismo editor. La lista anterior de Conductores consultaba `/api/drivers`: identificadores de Traccar, no las personas del Excel ni las cuentas de acceso. Se retiraron de esa pantalla las altas paralelas de identificadores GPS. No se crean taxis ni IMEI.

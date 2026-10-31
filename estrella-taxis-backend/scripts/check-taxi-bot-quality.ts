@@ -29,6 +29,7 @@ files.push(resolve(root,'tests/fixtures/taxi-pickup-context.ts'));
 files.push(resolve(root,'tests/fixtures/taxi-semantic-clarification.ts'));
 files.push(resolve(root,'tests/taxi-conversation-combinations.test.ts'),resolve(root,'tests/fixtures/taxi-compound-turns.ts'));
 files.push(resolve(root,'tests/taxi-recovery.test.ts'));
+files.push(...['tests/taxi-owner.test.ts','src/components/TaxiOwnerPanel.tsx','src/lib/taxiOwnerClient.ts','estrella-taxis-backend/supabase/functions/_shared/bot/taxis/ownerContracts.ts','estrella-taxis-backend/supabase/functions/taxi-bot-admin/owners.ts'].map(file=>resolve(root,file)));
 files.push(...['tests/taxi-dispatch.test.ts','src/components/TaxiDispatchPanel.tsx','src/lib/taxiDispatchClient.ts','estrella-taxis-backend/supabase/functions/taxi-bot-admin/dispatch.ts','estrella-taxis-backend/supabase/functions/_shared/bot/taxis/dispatchContracts.ts'].map(file=>resolve(root,file)));
 files.push(resolve(root,'estrella-taxis-backend/scripts/evaluate-taxi-compound-turns.ts'));
 files.push(...['estrella-taxis-backend/supabase/functions/_shared/bot/taxis/contactAdmin.ts','estrella-taxis-backend/supabase/functions/_shared/bot/taxis/driverAdmin.ts','estrella-taxis-backend/supabase/functions/_shared/bot/taxis/channelPhone.ts','estrella-taxis-backend/supabase/functions/taxi-bot-admin/drivers.ts','src/components/TaxiDriversPanel.tsx','src/components/TaxiPhoneField.tsx','tests/taxi-driver-admin.test.ts'].map((file)=>resolve(root,file)));

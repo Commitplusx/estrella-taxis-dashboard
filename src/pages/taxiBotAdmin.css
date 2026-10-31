@@ -1308,3 +1308,12 @@ html:has(.taxi-contact-dialog[open]) { overflow: hidden; }
  .taxi-admin .taxi-neighborhood-caption { align-items:flex-start; }
  .taxi-admin .taxi-locality-filters { margin-right:-20px; padding-right:20px; }
 }
+.taxi-admin .taxi-owner-current { display:flex; align-items:center; justify-content:space-between; gap:24px; padding:24px 0; border-bottom:1px solid var(--ta-line); margin-bottom:24px; }
+.taxi-admin .taxi-owner-current h3 { margin:0 0 6px; }
+.taxi-admin .taxi-owner .taxi-section-heading h2 { display:flex;align-items:center;gap:10px; }
+.taxi-admin .taxi-owner-current p { margin:7px 0; overflow-wrap:anywhere; }
+.taxi-admin .taxi-owner-busy { color:#874414; background:#fff5e8; padding:16px; border-radius:12px; }
+.taxi-admin .taxi-owner-fields { border:0; margin:0; display:grid; gap:22px; }
+.taxi-admin .taxi-owner-fields label { display:grid; gap:8px; }
+.taxi-admin .taxi-owner-fields small { color:var(--ta-muted); line-height:1.5; }
+@media(max-width:760px){.taxi-admin .taxi-owner-current{align-items:stretch;flex-direction:column;gap:12px;}.taxi-admin .taxi-owner .taxi-driver-list li{align-items:stretch;flex-direction:column;}.taxi-admin .taxi-owner .taxi-section-heading{flex-wrap:wrap;}.taxi-admin .taxi-owner .taxi-section-heading h3{margin:8px 0;}}

@@ -110,6 +110,18 @@ export default function TaxiDriversPanel({ tenantId, waba, canEdit, canManageAcc
     } finally { setBusy(false); }
   };
   const query = search.trim().toLocaleLowerCase('es-MX');
+  const changeReceiving=(next:boolean)=>{
+    if(next&&!driving){
+      const contact=data?.contacts.find(item=>item.id===selected);
+      if(contact?.accountUserId){
+        if(!canManageAccounts){setError('El administrador debe confirmar que esta persona conduce antes de activar ofertas.');return;}
+        if(dirty&&editorMode==='details'){setError('Guarda primero los datos del contacto. Después podrás activar su acceso como conductor.');return;}
+        setEditorMode('access');setAccountChoice(String(contact.accountUserId));
+      }
+      setRole(role==='owner'?'owner_driver':'driver');
+    }
+    setReceiving(next);setDirty(true);setError('');
+  };
   const person = data?.contacts.find(contact => contact.id === selected);
   const visible = data?.contacts.filter(contact => (roleFilter === 'all' || contact.role === roleFilter) && `${contact.name} ${contact.unitNumber} ${contact.phoneInput} ${contactRoles.find(item => item.value === contact.role)?.label}`.toLocaleLowerCase('es-MX').includes(query)) ?? [];
   return <section className="taxi-config taxi-driver-setup" id="conductores-bot" aria-labelledby="taxi-driver-heading">
@@ -189,7 +201,7 @@ export default function TaxiDriversPanel({ tenantId, waba, canEdit, canManageAcc
                 <label className="taxi-contact-gps">Correo electrónico<input type="email" required autoComplete="off" value={email} onChange={event => { setEmail(event.target.value); setDirty(true); }} /></label>
                 <label className="taxi-contact-gps">Contraseña inicial<input type="password" required minLength={12} maxLength={128} autoComplete="new-password" value={password} onChange={event => { setPassword(event.target.value); setDirty(true); }} /><small>Al menos 12 caracteres. No se guarda en el panel ni se envía por correo.</small></label>
               </> : accountChoice && <p className="taxi-contact-access-help">Se conservarán el correo y la contraseña existentes. La cuenta verá los taxis asignados aquí.</p>}
-              <label className="taxi-enable taxi-contact-receiving"><input type="checkbox" role="switch" checked={receiving} disabled={!driving} onChange={event => { setReceiving(event.target.checked); setDirty(true); }} /><span>Recibe ofertas de viaje<small>Se enviarán al WhatsApp de esta persona si es quien conduce la unidad.</small></span></label>
+              <label className="taxi-enable taxi-contact-receiving"><input type="checkbox" role="switch" checked={receiving} onChange={event => changeReceiving(event.target.checked)} /><span>Recibe ofertas de viaje<small>{driving?'Se enviarán a su WhatsApp cuando la unidad esté disponible.':role==='owner'?'Al activarlo confirmas que también conduce; se guardará como Dueño y conductor.':'Al activarlo confirmas que conduce; se guardará con el rol Conductor.'}</small></span></label>
             </div>
           </fieldset> : <>
           <fieldset className="taxi-contact-fields" disabled={locked || discard}><legend>Datos del contacto</legend><div className="taxi-fields">
@@ -200,7 +212,7 @@ export default function TaxiDriversPanel({ tenantId, waba, canEdit, canManageAcc
           </div></fieldset>
           <fieldset className="taxi-contact-fields" disabled={locked || discard}><legend>Unidad y viajes</legend><div className="taxi-fields">
             <label className="taxi-contact-gps">Unidad GPS<select value={device} disabled={Boolean(person?.accountUserId)} onChange={event => { setDevice(event.target.value); setDirty(true); }}><option value="">Vincular después</option>{data.units.map(unit => <option key={unit.id} value={unit.id}>{unit.name} · GPS #{unit.id}</option>)}</select></label>
-            <label className="taxi-enable taxi-contact-receiving"><input type="checkbox" role="switch" checked={receiving} disabled={!driving && !receiving} onChange={event => { setReceiving(event.target.checked); setDirty(true); }} /><span>Recibe ofertas de viaje<small>{driving ? 'Necesita un WhatsApp completo y una unidad GPS vinculada.' : 'Disponible para Conductor o Dueño y conductor. Los demás contactos no reciben viajes.'}</small></span></label>
+            <label className="taxi-enable taxi-contact-receiving"><input type="checkbox" role="switch" checked={receiving} onChange={event => changeReceiving(event.target.checked)} /><span>Recibe ofertas de viaje<small>{driving ? 'Necesita un WhatsApp completo y una unidad GPS vinculada.' : role==='owner'?'Al activarlo confirmas que también conduce; se guardará como Dueño y conductor.':'Al activarlo confirmas que conduce; se guardará con el rol Conductor.'}</small></span></label>
           </div></fieldset>
           </>}
           {notice && <p className="taxi-notice taxi-contact-feedback" role="status">{notice}</p>}

@@ -14,8 +14,10 @@ function account(value: unknown): Record<string, unknown> & { id: number; name: 
 }
 const fail = (code: string, message: string): never => { throw new TrackingError(409, code, message); };
 /** All credentials and device grants remain in Traccar; PostgreSQL binds that user to the existing person. */
-export async function accountRequest(raw: Record<string, unknown>, tenant: string, waba: string, identity: FleetIdentity, fleet: FleetApi, store: TrackingStore, signal: AbortSignal): Promise<unknown> {
+export async function accountRequest(raw: Record<string, unknown>, tenant: string, waba: string, identity: FleetIdentity, fleet: FleetApi, store: TrackingStore, signal: AbortSignal, delegated?:{actor:number;contactId:string;deviceId:number}): Promise<unknown> {
   if (!identity.admin) throw new TrackingError(403, 'account_admin_required', 'Sólo el administrador puede crear accesos y asignar taxis.');
+  const actor=delegated?.actor??identity.userId;
+  if(delegated&&(raw.action!=='account_save'||raw.contactId!==delegated.contactId||raw.deviceId!==delegated.deviceId||raw.role!=='driver'||raw.receiveOffers!==false))throw new TrackingError(403,'owner_assignment_forbidden','Sólo puedes crear el acceso del chofer de tu taxi.');
   const users = rows(await fleet.get('/users', identity.cookie, signal, 4194304)).map(account);
   const profiles = await store.read('perfiles', new URLSearchParams({ select: 'traccar_user_id,empresa_id,rol', limit: '501' }));
   if (profiles.length > 500 || !profiles.every(record)) throw new TrackingError(502, 'invalid_profiles', 'No pudimos comprobar los accesos de la base.');
@@ -28,10 +30,10 @@ export async function accountRequest(raw: Record<string, unknown>, tenant: strin
   const linked = new Set(setupRaw.linkedUnitIds);
   const baseDevices = devices.filter(unit => linked.has(unit.id));
   const setup = parseContactSetup({ ...setupRaw, units: baseDevices });
-  const allowedUsers = users.filter(user => !user.administrator && user.id !== identity.userId && !profiles.some(profile => profile.traccar_user_id === user.id && (profile.empresa_id !== tenant || profile.rol === 'superadmin' || profile.rol === 'admin_empresa')));
+  const allowedUsers = users.filter(user => !user.administrator && user.id !== identity.userId && user.id!==actor && !profiles.some(profile => profile.traccar_user_id === user.id && (profile.empresa_id !== tenant || profile.rol === 'superadmin' || profile.rol === 'admin_empresa')));
   if (raw.action === 'accounts') {
     exact(raw, ['action', 'tenantId', 'waba']);
-    const pending = await store.rpc('taxi_account_pending', { p_actor: identity.userId, p_tenant: tenant });
+    const pending = await store.rpc('taxi_account_pending', { p_actor: actor, p_tenant: tenant });
     if (!Array.isArray(pending) || pending.length > 100 || !pending.every(record)) throw new TrackingError(502, 'invalid_account_pending', 'No pudimos comprobar las altas pendientes.');
     return { users: allowedUsers.map(user => ({ id: user.id, name: user.name, email: user.email, disabled: user.disabled === true,
       contactId: setup.contacts.find(contact => contact.accountUserId === user.id)?.id ?? null })), pending: pending.map(operation => ({ ...operation,
@@ -52,8 +54,8 @@ export async function accountRequest(raw: Record<string, unknown>, tenant: strin
   let target = raw.userId === null ? marked : allowedUsers.find(user => user.id === raw.userId);
   if (raw.userId !== null && (!target || target.email.toLowerCase() !== raw.email)) fail('user_forbidden', 'La cuenta elegida no está disponible o cambió su correo.');
   if (raw.userId === null && users.some(user => user.email.toLowerCase() === raw.email && user.id !== marked?.id)) fail('email_exists', 'Ese correo ya tiene una cuenta. Elige Usar cuenta existente.');
-  if (target?.administrator || target?.id === identity.userId || target && !allowedUsers.some(user => user.id === target?.id)) fail('user_forbidden', 'No se puede convertir esa cuenta en dueño o conductor.');
-  const begun = await store.rpc('taxi_account_begin', { p_tenant: tenant, p_actor: identity.userId, p_request: requestId, p_contact: contactId, p_expected: raw.expected, p_email: raw.email, p_user: raw.userId,
+  if (target?.administrator || target?.id === identity.userId || target?.id===actor || target && !allowedUsers.some(user => user.id === target?.id)) fail('user_forbidden', 'No se puede convertir esa cuenta en dueño o conductor.');
+  const begun = await store.rpc('taxi_account_begin', { p_tenant: tenant, p_actor: actor, p_request: requestId, p_contact: contactId, p_expected: raw.expected, p_email: raw.email, p_user: raw.userId,
     p_assignment: { role: raw.role, deviceId: raw.deviceId, receiveOffers: raw.receiveOffers, driverVersion: raw.driverVersion } });
   if (!record(begun)) throw new TrackingError(503, 'account_uncertain', 'No pudimos comprobar el alta. Comprueba la misma solicitud.');
   const replay = begun.state === 'replay' && record(begun.result) ? begun.result : null;
@@ -89,12 +91,13 @@ export async function accountRequest(raw: Record<string, unknown>, tenant: strin
     const verified = rows(await fleet.get('/devices?userId=' + target.id, identity.cookie, signal));
     if (verified.length !== wanted.length || verified.some(unit => !positiveId(unit.id) || !wanted.includes(unit.id))) throw new TrackingError(503, 'account_uncertain', 'No se confirmó la asignación exacta de taxis. Comprueba la misma solicitud.');
   }
-  const saved = replay ?? await store.rpc('taxi_account_finish', { p_actor: identity.userId, p_request: requestId, p_lease: begun.lease, p_user: target.id });
+  const saved = replay ?? await store.rpc('taxi_account_finish', { p_actor: actor, p_request: requestId, p_lease: begun.lease, p_user: target.id });
   if (record(saved) && saved.state === 'account_review') throw new TrackingError(409, 'account_review', 'Los datos cambiaron durante el alta. Actualiza la persona y elige la cuenta existente para revisar su asignación; permanece sin acceso hasta completarla.');
   if (!record(saved) || saved.state !== 'saved' || saved.userId !== target.id) throw new TrackingError(503, 'account_uncertain', 'No se confirmó el vínculo con Pompeyo. Comprueba la misma solicitud.');
   const { password: _secret, ...safeUser } = target;
+  if(delegated&&await store.rpc('taxi_owner_account_allowed',{p_actor:actor,p_request:requestId,p_contact:contactId,p_assignment:{role:'driver',deviceId:delegated.deviceId,receiveOffers:false}})!==true)throw new TrackingError(409,'owner_access_changed','Cambió la asignación de tu taxi. La cuenta permanece sin activar; pide a la base que la revise.');
   const activated = account(await fleet.write('/users/' + target.id, 'PUT', identity.cookie, { ...safeUser, disabled: false, administrator: false, readonly: true, deviceLimit: 0, userLimit: 0, deviceReadonly: true, limitCommands: true, fixedEmail: true }, signal));
   if (activated.disabled !== false || activated.administrator !== false || activated.readonly !== true || activated.userLimit !== 0 || activated.deviceReadonly !== true) throw new TrackingError(503, 'account_uncertain', 'El vínculo quedó guardado, pero falta confirmar la activación. Comprueba la misma solicitud.');
-  if (await store.rpc('taxi_account_activated', { p_actor: identity.userId, p_request: requestId, p_user: target.id }) !== true) throw new TrackingError(503, 'account_uncertain', 'Falta confirmar el alta. Comprueba la misma solicitud.');
+  if (await store.rpc('taxi_account_activated', { p_actor: actor, p_request: requestId, p_user: target.id }) !== true) throw new TrackingError(503, 'account_uncertain', 'Falta confirmar el alta. Comprueba la misma solicitud.');
   return saved;
 }

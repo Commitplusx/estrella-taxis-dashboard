@@ -86,7 +86,7 @@ Deno.test('personal account: owner, driver and owner-driver cannot access base c
   const store:TrackingStore={writeScores:deny,writePackages:deny,writeCompanyPackage:deny,writeCompanyStatus:deny,rpc:deny,read:async(table)=>{assert(table==='perfiles');return[{empresa_id:tenant,rol:role}];}};
   const fleet=new FleetApi('https://fleet.invalid/api',async()=>new Response(JSON.stringify({id:81,administrator:false}),{headers:{'Content-Type':'application/json','set-cookie':'JSESSIONID=personal-fixture; Path=/'}}));
   const handler=createTaxiAdminHandler({fleet,store,runtimeReady:true});
-  for(const action of ['contacts','accounts','account_save','set_customer_access','configure','companies_list','operations','packages_list']){
+  for(const action of ['contacts','accounts','account_save','set_customer_access','configure','companies_list','operations','packages_list',...(role==='driver'?['owner_context','owner_driver_save','owner_shift']:[])]){
    const response=await handler(new Request('https://handler.invalid',{method:'POST',headers:{'x-traccar-token':'fixture-token'},body:JSON.stringify({action,tenantId:tenant,waba})}));assert(response.status===403,role+' '+action);
   }
  }

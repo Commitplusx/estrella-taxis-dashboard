@@ -2,6 +2,7 @@ import {taxiQualityRequest}from"./quality.ts";
 import {dispatchRequest}from './dispatch.ts';
 import { driverRequest } from './drivers.ts';
 import { accountRequest } from './accounts.ts';
+import {ownerRequest,type AccountManager}from './owners.ts';
 import { neighborhoodRequest } from './neighborhoods.ts';
 import type { Fetcher } from '../_shared/tracking/http.ts';
 import { customerPhones, parseCustomerAccess } from '../_shared/bot/taxis/customerAccess.ts';
@@ -38,6 +39,7 @@ export interface AdminDependencies {
   store: TrackingStore;
   runtimeReady: boolean;
   neighborhoodModelKey?:string;neighborhoodFetcher?:Fetcher;
+  accountManager?:AccountManager;
 }
 export function createTaxiAdminHandler(
   deps: AdminDependencies,
@@ -109,6 +111,7 @@ export function createTaxiAdminHandler(
       const identity = await deps.fleet.identity(req),
         scope = await access(identity);
       if (scope.limited) {
+        if(['owner_context','owner_driver_save','owner_shift'].includes(raw.action)&&['owner','owner_driver'].includes(scope.limited))return json(await ownerRequest(raw,identity,deps.fleet,deps.store,deps.accountManager,AbortSignal.any([req.signal,AbortSignal.timeout(60000)])));
         if (raw.action !== 'context' && raw.action !== 'account_self') throw new TrackingError(403, 'personal_account_only', 'Esta cuenta sólo puede consultar su taxi y su propio perfil.');
         if (raw.action === 'account_self') {
           exact(raw, ['action']);

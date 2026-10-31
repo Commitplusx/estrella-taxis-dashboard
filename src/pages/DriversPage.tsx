@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { ArrowRight } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import TaxiDriversPanel from '../components/TaxiDriversPanel';
+import TaxiOwnerPanel from '../components/TaxiOwnerPanel';
 import { taxiAdminClient } from '../lib/taxiAdminClient';
 import { createTaxiAdminPreview } from '../lib/taxiAdminPreview';
 import { trackingCall } from '../lib/trackingClient';
@@ -11,8 +12,9 @@ import type { AdminContext } from '../../estrella-taxis-backend/supabase/functio
 import './taxiBotAdmin.css';
 /** The sidebar and WhatsApp settings share the same base contacts and editor. */
 export default function DriversPage({ preview = false, accessMode = false }: { preview?: boolean; accessMode?: boolean }) {
-  const { empresaId } = useAuth();
-  return <BaseContactsDirectory key={empresaId ?? 'administrator'} preferredBase={empresaId ?? null} preview={preview} accessMode={accessMode} />;
+  const { empresaId,user } = useAuth();
+  if(preview&&new URLSearchParams(window.location.search).get('vista')==='dueno')return <main className="taxi-admin taxi-people-page"><TaxiOwnerPanel preview/></main>;
+  return <BaseContactsDirectory key={(empresaId ?? 'administrator')+'|'+user?.id} preferredBase={empresaId ?? null} preview={preview} accessMode={accessMode} />;
 }
 
 function BaseContactsDirectory({ preferredBase, preview, accessMode }: { preferredBase: string | null; preview: boolean; accessMode: boolean }) {
@@ -37,7 +39,7 @@ function BaseContactsDirectory({ preferredBase, preview, accessMode }: { preferr
   const channel = context?.channels.find(item => item.tenantId === tenantId);
   const baseName = context?.tenants.find(base => base.id === tenantId)?.name;
   const settingsUrl = '/taxi-bot' + (tenantId ? '?base=' + encodeURIComponent(tenantId) : '') + '#configuracion';
-  if (context?.accessRole) return <PersonalTaxiProfile baseName={baseName ?? 'Pompeyo'} />;
+  if (context?.accessRole) return <PersonalTaxiProfile baseName={baseName ?? 'Pompeyo'} owner={['owner','owner_driver'].includes(context.accessRole)}/>;
   return <main className="taxi-admin taxi-people-page">
     {preview && <p className="taxi-demo">Vista local con contactos de prueba. No guarda cambios ni envía mensajes.</p>}
     <header className="taxi-admin-header"><div><h1>Conductores y dueños</h1><p>Las personas de tu base, sus unidades y quién recibe los viajes.</p></div>
@@ -56,7 +58,7 @@ function BaseContactsDirectory({ preferredBase, preview, accessMode }: { preferr
   </main>;
 }
 
-function PersonalTaxiProfile({ baseName }: { baseName: string }) {
+function PersonalTaxiProfile({ baseName,owner }: { baseName: string;owner:boolean }) {
   const { user } = useAuth();
   const [person, setPerson] = useState<BaseContact | null>(null), [error, setError] = useState('');
   useEffect(() => {
@@ -71,6 +73,7 @@ function PersonalTaxiProfile({ baseName }: { baseName: string }) {
   return <main className="taxi-admin taxi-people-page"><header className="taxi-admin-header"><div><h1>Mi taxi y mi acceso</h1><p>{baseName}</p></div><a className="taxi-secondary" href="/map">Ver mi taxi en el mapa <ArrowRight size={18} aria-hidden="true" /></a></header>
     {error && <p className="taxi-error" role="alert">{error}</p>}
     {!person && !error && <p role="status">Consultando tu acceso…</p>}
-    {person && <section className="taxi-config"><h2>{person.name}</h2><dl className="taxi-personal-facts"><div><dt>Correo de acceso</dt><dd>{user?.email}</dd></div><div><dt>Rol</dt><dd>{contactRoles.find(role => role.value === person.role)?.label}</dd></div><div><dt>Unidad</dt><dd>{person.unitNumber} · GPS #{person.deviceId}</dd></div><div><dt>WhatsApp</dt><dd>{person.phone ?? 'Pendiente de completar'}</dd></div><div><dt>Ofertas de viaje</dt><dd>{person.receiving ? 'Llegan a tu WhatsApp cuando la unidad está disponible' : 'No recibes ofertas de viaje'}</dd></div></dl><p>Para cambiar el taxi, tus datos o el conductor, solicita el cambio al administrador de la base.</p></section>}
+    {owner&&<TaxiOwnerPanel/>}
+    {person && <section className="taxi-config"><h2>{person.name}</h2><dl className="taxi-personal-facts"><div><dt>Correo de acceso</dt><dd>{user?.email}</dd></div><div><dt>Rol</dt><dd>{contactRoles.find(role => role.value === person.role)?.label}</dd></div><div><dt>Unidad</dt><dd>{person.unitNumber} · GPS #{person.deviceId}</dd></div><div><dt>WhatsApp</dt><dd>{person.phone ?? 'Pendiente de completar'}</dd></div><div><dt>Ofertas de viaje</dt><dd>{person.receiving ? 'Llegan a tu WhatsApp cuando la unidad está disponible' : 'No recibes ofertas de viaje'}</dd></div></dl><p>{owner?'Elige al chofer y su turno arriba. Para cambiar el taxi asignado o tus datos, pide ayuda a la base.':'Para cambiar el taxi o tus datos, solicita el cambio al administrador de la base.'}</p></section>}
   </main>;
 }

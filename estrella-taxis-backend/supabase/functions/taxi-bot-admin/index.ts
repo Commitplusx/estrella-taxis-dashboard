@@ -2,6 +2,7 @@ import { FleetApi } from "../_shared/tracking/auth.ts";
 import { RestTrackingStore } from "../_shared/tracking/store.ts";
 import { createTaxiAdminHandler } from "./handler.ts";
 if (import.meta.main) {
+  const fleet=new FleetApi(Deno.env.get('TRACCAR_URL')??'https://taxis.estrella-eats.mx/api');
   const required = [
     "SUPABASE_SERVICE_ROLE_KEY",
     "TAXI_WORKER_SECRET",
@@ -12,9 +13,8 @@ if (import.meta.main) {
     "DEEPSEEK_API_KEY",
   ];
   Deno.serve(createTaxiAdminHandler({
-    fleet: new FleetApi(
-      Deno.env.get("TRACCAR_URL") ?? "https://taxis.estrella-eats.mx/api",
-    ),
+    fleet,
+    accountManager:signal=>fleet.jobSession(Deno.env.get('TRACCAR_EMAIL')??'',Deno.env.get('TRACCAR_PASSWORD')??'',signal),
     store: new RestTrackingStore(
       Deno.env.get("SUPABASE_URL") ?? "",
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
