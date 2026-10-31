@@ -9,10 +9,10 @@ export function validFleetPoint(lat: number, lng: number): boolean {
 }
 
 export function fleetMarkerHtml(input: {
-  name: string; category?: string; status: string; speed: number; course: number; occupied?: boolean|null;fixTime?:string;attributes?:unknown;nowMs?:number;
+  name: string; category?: string; status: string; speed: number; course: number; occupied?: boolean|null;fixTime?:string;valid?:boolean;attributes?:unknown;nowMs?:number;
 }): string {
   const definition = getCategoryDef(input.category);
-  const issue=input.fixTime!==undefined?taxiTelemetryIssue(input.fixTime,input.attributes,input.speed,input.nowMs??Date.now()):null;
+  const issue=input.fixTime!==undefined?taxiTelemetryIssue(input.fixTime,input.attributes,input.speed,input.nowMs??Date.now(),input.valid):null;
   const color = issue?'#94a3b8':input.occupied===null?'#b45309':getMarkerColor(input.status, input.speed, input.occupied);
   const detail=issue==='idle_timeout'?'Detenido más de 30 minutos':issue==='stale_gps'?'GPS con más de 30 minutos':issue?'GPS no utilizable':null;
   const course = Number.isFinite(input.course) ? ((input.course % 360) + 360) % 360 : 0;

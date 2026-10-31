@@ -81,7 +81,7 @@ export function generateInfoWindowContent(device: TraccarDevice, pos: TraccarPos
   const finalAddress = escapeHtml(liveAddress || (pos.address ? pos.address.split(',')[0] : ''));
   const timeText = formatRelativeTime(pos.fixTime, nowMs);
   const occupation = gpsOccupancy(pos.attributes);
-  const telemetryIssue=taxiTelemetryIssue(pos.fixTime,pos.attributes,pos.speed,nowMs),motion=taxiMotion(pos.attributes,Date.parse(pos.fixTime),pos.speed);
+  const telemetryIssue=taxiTelemetryIssue(pos.fixTime,pos.attributes,pos.speed,nowMs,pos.valid),motion=taxiMotion(pos.attributes,Date.parse(pos.fixTime),pos.speed);
   const idleMinutes=motion.stationarySinceMs===null?null:Math.max(0,Math.floor((nowMs-motion.stationarySinceMs)/60000));
 
   let occupiedStatusHtml = '';
@@ -461,7 +461,7 @@ export default function MapPage() {
     devices.forEach((device) => {
       const p = positions.get(device.id);
       if (!p || !validFleetPoint(p.latitude, p.longitude)) return;
-      const icon = L.divIcon({ className: 'fleet-vehicle-marker', html: fleetMarkerHtml({ name: device.name, category: device.category, status: device.status, speed: p.speed || 0, course: p.course || 0, occupied: gpsOccupancy(p.attributes),fixTime:p.fixTime,attributes:p.attributes,nowMs:nowTick }), iconSize: [36, 36], iconAnchor: [18, 18] });
+      const icon = L.divIcon({ className: 'fleet-vehicle-marker', html: fleetMarkerHtml({ name: device.name, category: device.category, status: device.status, speed: p.speed || 0, course: p.course || 0, occupied: gpsOccupancy(p.attributes),fixTime:p.fixTime,valid:p.valid,attributes:p.attributes,nowMs:nowTick }), iconSize: [36, 36], iconAnchor: [18, 18] });
       const existing = markersRef.current.get(device.id);
       if (existing) { existing.setLatLng([p.latitude, p.longitude]).setIcon(icon); return; }
       const marker = L.marker([p.latitude, p.longitude], { icon, title: device.name, keyboard: true }).addTo(map);
@@ -547,7 +547,7 @@ export default function MapPage() {
     const marker = markersRef.current.get(device.id);
     if (!marker) return;
     marker.setLatLng([pos.latitude, pos.longitude]);
-    marker.setIcon(L.divIcon({ className: 'fleet-vehicle-marker', html: fleetMarkerHtml({ name: device.name, category: device.category, status: device.status, speed: pos.speed || 0, course: pos.course || 0, occupied: gpsOccupancy(pos.attributes),fixTime:pos.fixTime,attributes:pos.attributes }), iconSize: [36, 36], iconAnchor: [18, 18] }));
+    marker.setIcon(L.divIcon({ className: 'fleet-vehicle-marker', html: fleetMarkerHtml({ name: device.name, category: device.category, status: device.status, speed: pos.speed || 0, course: pos.course || 0, occupied: gpsOccupancy(pos.attributes),fixTime:pos.fixTime,valid:pos.valid,attributes:pos.attributes }), iconSize: [36, 36], iconAnchor: [18, 18] }));
   }, []);
 
   const handleWsDevices = useCallback((updated: TraccarDevice[]) => {
@@ -1027,6 +1027,8 @@ export default function MapPage() {
               const ignition = pos.attributes?.ignition;
               const speed = knotsToKmh(pos.speed || 0);
               const isMoving = Number(speed) > 2;
+              const issue=taxiTelemetryIssue(pos.fixTime,pos.attributes,pos.speed,nowTick,pos.valid),motion=taxiMotion(pos.attributes,Date.parse(pos.fixTime),pos.speed);
+              const idleMinutes=motion.stationarySinceMs===null?null:Math.max(0,Math.floor((nowTick-motion.stationarySinceMs)/60000));
 
               return (
                 <div className="mt-2">
@@ -1034,7 +1036,7 @@ export default function MapPage() {
                     <div>
                       <h3 className="text-xl font-bold text-slate-900 leading-tight flex items-center gap-2">
                         {currentSelectedDevice.name}
-                        {currentSelectedDevice.status === 'online' && (
+                        {currentSelectedDevice.status === 'online' && !issue && (
                           <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200">
                             {isMoving ? <Loader2 size={12} className="animate-spin text-emerald-600" /> : <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>}
                             EN VIVO
@@ -1042,11 +1044,13 @@ export default function MapPage() {
                         )}
                       </h3>
                       <p className="text-xs font-medium text-slate-500 mt-1">
-                        Última señal: <strong className="text-slate-700">{formatRelativeTime(pos.serverTime, nowTick)}</strong>
+                        Último punto GPS: <strong className="text-slate-700">{formatRelativeTime(pos.fixTime, nowTick)}</strong>
                       </p>
                     </div>
                   </div>
 
+                  {issue&&<p className="text-xs text-amber-800 mb-2" role="status">{issue==='idle_timeout'?'Sin ofertas: detenido más de 30 minutos':issue==='stale_gps'?'Sin ofertas: GPS con más de 30 minutos':'GPS no utilizable para asignar viajes'}</p>}
+                  {idleMinutes!==null&&<p className="text-xs text-slate-600 mb-3">Detenido al menos: {idleMinutes} min</p>}
                   {/* Status Tags Row */}
                   <div className="flex flex-wrap items-center gap-2 mb-5">
                     {/* Online Status */}

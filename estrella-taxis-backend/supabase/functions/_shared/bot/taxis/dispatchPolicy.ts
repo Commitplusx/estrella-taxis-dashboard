@@ -24,9 +24,9 @@ export function taxiMotion(attributes:unknown,fixMs:number,speedKnots:unknown):T
  if(attributes.taxiMotionState!=='stationary'||since===null||since>fixMs||moving)return{valid:false,stationarySinceMs:null};
  return{valid:true,stationarySinceMs:since};
 }
-export function taxiTelemetryIssue(fixTime:unknown,attributes:unknown,speedKnots:unknown,now:number):TaxiTelemetryIssue|null{
+export function taxiTelemetryIssue(fixTime:unknown,attributes:unknown,speedKnots:unknown,now:number,valid:unknown):TaxiTelemetryIssue|null{
  const fix=typeof fixTime==='string'?Date.parse(fixTime):NaN,age=now-fix;
- if(!Number.isFinite(now)||!Number.isFinite(fix))return'invalid_gps';
+ if(valid!==true||!Number.isFinite(now)||!Number.isFinite(fix))return'invalid_gps';
  if(age < -30000)return'future_gps';
  if(age>TAXI_GPS_MAX_AGE_MS)return'stale_gps';
  const motion=taxiMotion(attributes,fix,speedKnots);

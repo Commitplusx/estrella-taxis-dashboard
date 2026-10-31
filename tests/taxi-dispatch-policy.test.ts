@@ -17,7 +17,7 @@ for(const gpsAge of [0,120,600,1200,1800,1801])for(const idle of [null,1200,1800
   const p=position(gpsAge,idle,free),before=JSON.stringify(p),{result}=select([p],status);
   const expected=free===true&&gpsAge<=1800&&(idle===null||idle<=1800);
   assertEquals(result.success,expected);assertEquals(JSON.stringify(p),before);
-  const issue=taxiTelemetryIssue(p.fixTime,p.attributes,p.speed,now);
+  const issue=taxiTelemetryIssue(p.fixTime,p.attributes,p.speed,now,p.valid);
   assertEquals(issue,gpsAge>1800?'stale_gps':idle!==null&&idle>1800?'idle_timeout':null);
  });
 }
