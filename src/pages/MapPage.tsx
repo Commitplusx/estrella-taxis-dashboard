@@ -528,11 +528,9 @@ export default function MapPage() {
 
   // Manejar visibilidad del BottomNav en móviles cuando se abre/cierra una tarjeta
   useEffect(() => {
-    if ((currentSelectedDevice || isSimulatorActive) && window.innerWidth < 640) {
-      window.dispatchEvent(new CustomEvent('hideBottomNav'));
-    } else {
-      window.dispatchEvent(new CustomEvent('showBottomNav'));
-    }
+    const update=()=>window.dispatchEvent(new CustomEvent((currentSelectedDevice||isSimulatorActive)&&window.innerWidth<640?'hideBottomNav':'showBottomNav'));
+    update();window.addEventListener('resize',update);
+    return()=>{window.removeEventListener('resize',update);window.dispatchEvent(new CustomEvent('showBottomNav'));};
     return () => {
       window.dispatchEvent(new CustomEvent('showBottomNav'));
     };
