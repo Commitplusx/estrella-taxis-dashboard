@@ -1,0 +1,93 @@
+{
+  "implementationCommit": "41beaef",
+  "publishedCommit": "ee6916d61a63b695c2980266661320a07099589c",
+  "project": "izrsxygazsalfhpaualj",
+  "migration": {
+    "version": "20261031220000",
+    "sha256": "f638576c9becea6ea5cde21f310161bf3dc09737c6053f2fb30745675e2857ce"
+  },
+  "functions": [
+    {
+      "name": "ycloud-webhook",
+      "status": "ACTIVE",
+      "version": 36
+    },
+    {
+      "name": "process-queue",
+      "status": "ACTIVE",
+      "version": 36
+    },
+    {
+      "name": "taxi-bot-admin",
+      "status": "ACTIVE",
+      "version": 33
+    }
+  ],
+  "verification": {
+    "runtimeFilesMatched": 28,
+    "typeOnlyFilesOmitted": 7,
+    "sql": {
+      "unchanged": 5,
+      "patched": 2,
+      "added": 5,
+      "rls": true,
+      "publicAccess": false,
+      "history": "20261031220000"
+    },
+    "http": {
+      "options": 200,
+      "unauthorized": 401
+    }
+  },
+  "frontend": {
+    "route": "/drivers",
+    "status": 200,
+    "entry": "/assets/index-DxtmNxEQ.js",
+    "sha256": "cd295a72616af67a05544e69e41e9afa216ba5f24b7368ededa3cdebfd0d3e5c",
+    "matchesIsolatedBuild": true,
+    "read": true,
+    "register": true,
+    "shift": true,
+    "panel": true
+  },
+  "hosting": {
+    "commit": "ee6916d61a63b695c2980266661320a07099589c",
+    "state": "success",
+    "statuses": [
+      {
+        "context": "Vercel",
+        "state": "success",
+        "description": "Deployment has completed",
+        "url": "https://vercel.com/deiffs-projects/estrella-taxis-dashboard/8F5tr9Qt8qHEZSrGvHpGdBB3SpPN"
+      }
+    ]
+  },
+  "tests": {
+    "denoPassed": 22541,
+    "nodeSqlPassed": 163,
+    "strictTypeCheck": true,
+    "productionAccountCreation": false,
+    "productionShiftChanges": false,
+    "physicalWhatsAppDeliveryTest": false,
+    "realOwnerLoginTest": false
+  },
+  "mobile": {
+    "compiled": false,
+    "newApk": false,
+    "location": "C:/Users/Kaleb/Desktop/StellarTracking/flutter_app/",
+    "files": [
+      {
+        "name": "lib/services/taxi_owner_client.dart",
+        "sha256": "32d4e281c73f2f584b7b5f7f85bf53e80343978b51f78724063502b0b1d67e5f"
+      },
+      {
+        "name": "lib/screens/taxi_owner_screen.dart",
+        "sha256": "79ba4d1003115c9b8f9660ca05634600d3ffd6d3600aaf106c755d86a9fe7008"
+      },
+      {
+        "name": "lib/screens/profile_screen.dart",
+        "sha256": "e5ac5b748f8aa6ba3bdd6f889ea78ef138475a3323fc566c9aa8a3842e5172df"
+      }
+    ]
+  }
+}
