@@ -1,5 +1,7 @@
 # Base independiente de Stellar Tracking — 29 de octubre de 2026
 
+> Actualización del 31-10-2026: [la ocupación desconocida ya no se convierte en libre y queda excluida del despacho](STELLAR_GPS_OCCUPANCY_20261031.md). Las cifras y versiones anteriores se conservan como historial.
+
 > **Destino posterior confirmado:** [Stellar Tracking en Estrella orgs](STELLAR_ORGS_RELEASE_20261029.md), proyecto `izrsxygazsalfhpaualj`. Esta página y su JSON conservan el historial del primer proyecto en Estrella envios; ya no representan el destino del cliente local. El bot sigue sin activar.
 
 Estado comprobado: **proyecto creado y SQL/Edge publicados; bot sin activar**. Este documento sustituye las notas anteriores de publicación pendiente únicamente para los componentes enumerados aquí. No acredita una conversación, reserva ni notificación real.

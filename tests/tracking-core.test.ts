@@ -64,17 +64,17 @@ Deno.test('narrative citations cannot invent incidents or execute markup',()=>{
 Deno.test('dispatch filters offline, occupied, stopped, invalid and stale units',()=>{
   const now=Date.parse('2026-10-27T12:00:00Z');
   const devices=Array.from({length:6},(_,index)=>({id:index+1,name:'U'+index,uniqueId:'u'+index,status:index===0?'online':'offline'}));
-  const points=devices.map((unit)=>({id:unit.id,deviceId:unit.id,fixTime:new Date(now).toISOString(),latitude:16.25,longitude:-92.13}));
+  const points=devices.map((unit)=>({id:unit.id,deviceId:unit.id,fixTime:new Date(now).toISOString(),latitude:16.25,longitude:-92.13,attributes:{occupied:false}}));
   equal(findOptimalTaxi(devices,points,16.251,-92.13,10,now).success,true);
-  for(const attributes of [{occupied:'1'},{occupied:1},{ignition:'false'},{ignition:0}]) assert(!findOptimalTaxi([devices[0]],[{...points[0],attributes}],16.251,-92.13,10,now).success);
+  for(const attributes of [{occupied:'1'},{occupied:1},{occupied:false,ignition:'false'},{occupied:false,ignition:0}]) assert(!findOptimalTaxi([devices[0]],[{...points[0],attributes}],16.251,-92.13,10,now).success);
   assert(!findOptimalTaxi([devices[0]],[{...points[0],valid:false}],16.251,-92.13,10,now).success);
   assert(!findOptimalTaxi([devices[0]],[{...points[0],fixTime:new Date(now-601000).toISOString()}],16.251,-92.13,10,now).success);
 });
 Deno.test('taxi offers can reach a parked taxi but never trust a stale offline fix or a known occupied unit',()=>{
   const now=Date.parse('2026-10-27T12:00:00Z'),pickup={lat:16.251,lng:-92.13},options={allowIgnitionOff:true,allowOfflineFixAgeMs:120000};
-  const parked={...devices[0],status:'online'},parkedPoint={...positions(1,10,false)[0],fixTime:new Date(now).toISOString()};
+  const parked={id:1,name:'Estacionado',uniqueId:'fixture-1',status:'online'},parkedPoint={...positions(1,10,false)[0],fixTime:new Date(now).toISOString(),attributes:{ignition:false,occupied:false}};
   equal(findOptimalTaxi([parked],[parkedPoint],pickup.lat,pickup.lng,20,now,options).success,true);
-  const recentlyOffline={...devices[1],status:'offline'},freshFix={...parkedPoint,deviceId:recentlyOffline.id,id:recentlyOffline.id};
+  const recentlyOffline={id:2,name:'Desconectado reciente',uniqueId:'fixture-2',status:'offline'},freshFix={...parkedPoint,deviceId:recentlyOffline.id,id:recentlyOffline.id};
   equal(findOptimalTaxi([recentlyOffline],[freshFix],pickup.lat,pickup.lng,20,now,options).success,true);
   const staleFix={...freshFix,fixTime:new Date(now-120001).toISOString()};
   equal(findOptimalTaxi([recentlyOffline],[staleFix],pickup.lat,pickup.lng,20,now,options).success,false);

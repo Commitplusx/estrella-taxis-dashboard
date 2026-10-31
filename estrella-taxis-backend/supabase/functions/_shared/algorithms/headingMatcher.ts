@@ -129,9 +129,9 @@ export function findOptimalTaxi(
       continue;
     }
 
-    // Filtrar taxis ocupados (ignorar si attributes.occupied es 'true' o true)
-    if (pos.attributes && flag(pos.attributes.occupied) === true) {
-      continue; // Ignorar taxis que ya llevan pasaje
+    // Only confirmed free telemetry is eligible. Missing/invalid occupancy is not free.
+    if (!pos.attributes || flag(pos.attributes.occupied) !== false) {
+      continue;
     }
 
     const device = byId.get(pos.deviceId);

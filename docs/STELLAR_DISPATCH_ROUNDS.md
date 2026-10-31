@@ -1,5 +1,7 @@
 # Asignación por rondas y recuperación de WhatsApp
 
+> Actualización del 31-10-2026: [la ocupación desconocida ya no se convierte en libre y queda excluida del despacho](STELLAR_GPS_OCCUPANCY_20261031.md). Las cifras y versiones anteriores se conservan como historial.
+
 Motor `taxi-bot-v22-dispatch-rounds`, proyecto independiente `izrsxygazsalfhpaualj`. Este documento sustituye el estado de publicación del documento anterior de recuperación de conversación en lo relativo a las tres funciones afectadas.
 
 ## Flujo y garantías

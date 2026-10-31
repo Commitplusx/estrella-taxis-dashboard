@@ -50,11 +50,11 @@ Deno.test('taxi candidates use the configured service radius and include parked 
     equal(new Headers(init?.headers).get('Cookie'),'JSESSIONID=fixture-cookie-123');
     if(u.pathname==='/api/devices')return new Response(JSON.stringify([{id:1,name:'Valid',status:'online'},{id:2,name:'Offline stale',status:'offline'},{id:3,name:'Invalid fix',status:'online'},{id:4,name:'Foreign',status:'online'},{id:5,name:'Fresh parked taxi',status:'offline'}]),{status:200});
     if(u.pathname==='/api/positions')return new Response(JSON.stringify([
-      {id:1,deviceId:1,latitude:16.251,longitude:-92.131,fixTime:new Date().toISOString(),speed:0,valid:true,attributes:{ignition:true,occupied:false}},
-      {id:2,deviceId:2,latitude:16.251,longitude:-92.131,fixTime:new Date(Date.now()-3*60*1000).toISOString(),speed:0,valid:true,attributes:{ignition:true,occupied:false}},
-      {id:3,deviceId:3,latitude:16.251,longitude:-92.131,fixTime:new Date().toISOString(),speed:0,valid:false,attributes:{ignition:true,occupied:false}},
-      {id:4,deviceId:4,latitude:16.251,longitude:-92.131,fixTime:new Date().toISOString(),speed:0,valid:true,attributes:{ignition:true,occupied:false}},
-      {id:5,deviceId:5,latitude:16.251,longitude:-91.99,fixTime:new Date().toISOString(),speed:0,valid:true,outdated:true,attributes:{ignition:false,occupied:false}},
+      {id:1,deviceId:1,latitude:16.251,longitude:-92.131,fixTime:new Date().toISOString(),speed:0,valid:true,attributes:{ignition:true,occupied:false,taxiAvailability:'free'}},
+      {id:2,deviceId:2,latitude:16.251,longitude:-92.131,fixTime:new Date(Date.now()-3*60*1000).toISOString(),speed:0,valid:true,attributes:{ignition:true,occupied:false,taxiAvailability:'free'}},
+      {id:3,deviceId:3,latitude:16.251,longitude:-92.131,fixTime:new Date().toISOString(),speed:0,valid:false,attributes:{ignition:true,occupied:false,taxiAvailability:'free'}},
+      {id:4,deviceId:4,latitude:16.251,longitude:-92.131,fixTime:new Date().toISOString(),speed:0,valid:true,attributes:{ignition:true,occupied:false,taxiAvailability:'free'}},
+      {id:5,deviceId:5,latitude:16.251,longitude:-91.99,fixTime:new Date().toISOString(),speed:0,valid:true,outdated:true,attributes:{ignition:false,occupied:false,taxiAvailability:'free'}},
     ]),{status:200});
     throw new Error('Unexpected GPS fixture endpoint '+u.pathname);
   };
