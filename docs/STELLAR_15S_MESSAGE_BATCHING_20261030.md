@@ -31,3 +31,13 @@ La IA puede reconocer una petición directa como «me puede enviar un taxi» y a
 - La configuración del canal Pompeyo Express permaneció habilitada y sin cambios.
 
 No se envió un mensaje real ni se creó un viaje para esta verificación; una prueba de código no sustituye una prueba conversacional con el número conectado.
+
+## Sondeo de cola mientras la sesión está ocupada
+
+La revisión del 31-10-2026 encontró que `taxi_bot_pending()` podía devolver mensajes nuevos de una conversación que aún tenía un turno en curso. `taxi_bot_begin()` ya respondía `busy` y el commit ya invalidaba el resultado viejo cuando detectaba nueva entrada, así que no se duplicaba el viaje; aun así, el sondeo podía ocupar los espacios de la tanda periódica y retrasar otros chats.
+
+La migración `20261031210000_taxi_pending_lease_polling.sql` excluye del sondeo cualquier conversación con lease activo. Cuando el turno se libera —incluida la ruta de superseded— sus mensajes pendientes vuelven a estar disponibles juntos; si el worker se cae, vuelven al sondeo al vencer el lease. El límite por tenant, el silencio de 15 segundos, la idempotencia y los reintentos acotados no cambian.
+
+La prueba SQL enfocada falló antes del cambio porque una sesión ocupada seguía apareciendo como pendiente; pasa con la migración y confirma que otro contacto continúa programable y que el lote original reaparece al liberar el lease. La suite completa pasó: 5,907 pruebas Deno y 125 pruebas Node/SQL/integración, control estático y tipado de entradas, panel y pruebas.
+
+La migración aún no está aplicada en producción: el conector Supabase rechazó la operación por falta de permiso y el CLI no pudo resolver el estado remoto desde la configuración/red actual. No se modificó ningún dato ni configuración del canal.

@@ -45,6 +45,7 @@ const privateReferenceQuoteSql=readFileSync(new URL('../estrella-taxis-backend/s
 const resetMinimumSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261031180000_taxi_conversation_reset_minimum.sql',import.meta.url),'utf8');
 const destinationDialogueSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261031190000_taxi_destination_dialogue.sql',import.meta.url),'utf8');
 const messageBatchingSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261031200000_taxi_15s_message_batching.sql',import.meta.url),'utf8');
+const pendingLeaseSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261031210000_taxi_pending_lease_polling.sql',import.meta.url),'utf8');
 const tenant='11111111-1111-4111-8111-111111111111',other='22222222-2222-4222-8222-222222222222',waba='+529630000001',customer='+529630000002',driverPhone='+529630000003';
 const pompeyo='4cf9acf1-f07e-4a01-9396-eb5bde3e7411';
 function unknownArray(value:unknown):value is unknown[]{return Array.isArray(value);}
@@ -90,6 +91,20 @@ test('15-second debounce SQL: text and GPS from a burst stay together until the 
   const messages=claim.messages;assert.equal(messages.length,batch.length);
   assert.deepEqual(messages.map((message)=>f.obj(message).text),['Buenas tardes','Me puede enviar un taxi','','A esta dirección','','Y voy para esta']);
   assert.equal(await f.scalar('SELECT count(*)::int FROM viajes'),0);assert.equal(await f.scalar('SELECT count(*)::int FROM taxi_bot_offers'),0);
+ }finally{await f.db.close();}
+});
+
+test('queue polling SQL: a newer message waits for its active turn while another customer remains schedulable',async()=>{
+ const f=await fixture();try{
+  await f.prepare();await f.db.exec(pendingLeaseSql);
+  const first=await f.enqueue('Me mandas un taxi',customer),claim=f.obj(await f.begin(first.eventId));
+  assert.equal(claim.state,'proceed');
+  await f.enqueue('Estoy en la otra esquina',customer);
+  const otherCustomer='+529630000004';await f.enqueue('Necesito un taxi',otherCustomer);
+  assert.equal(await f.scalar('SELECT count(*)::int FROM taxi_bot_pending() WHERE customer=$1',[customer]),0,'do not poll fresh work while its conversation lease is active');
+  assert.equal(await f.scalar('SELECT count(*)::int FROM taxi_bot_pending() WHERE customer=$1',[otherCustomer]),1,'a busy chat must not occupy another customer’s worker slot');
+  await f.db.query("UPDATE taxi_bot_sessions SET lease_until=clock_timestamp()-interval '1 second' WHERE tenant_id=$1 AND waba=$2 AND customer=$3",[tenant,waba,customer]);
+  assert.equal(await f.scalar('SELECT count(*)::int FROM taxi_bot_pending() WHERE customer=$1',[customer]),2,'both source events become pollable after the interrupted turn releases');
  }finally{await f.db.close();}
 });
 test('Pompeyo minimum migration: only its reviewed channel receives 55 pesos and a new revision',async()=>{
