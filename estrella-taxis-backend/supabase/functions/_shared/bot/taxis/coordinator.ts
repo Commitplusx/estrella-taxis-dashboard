@@ -52,17 +52,29 @@ function inferLocationRole(d:Draft,allowInference:boolean):'origin'|'destination
   if(!d.destinationDeferred&&( !d.destination||d.destination.source==='written'||Boolean(d.destinationText||d.destinationArea)))return'destination';
   return null;
 }
+function replyNextStep(decision:TaxiDecision,phase:string):TaxiReplyContext['nextStep']{
+  const message=decision.messages[0];
+  if(message.locationRequest==='origin')return'pickup_gps';
+  if(message.locationRequest==='destination'||message.buttons?.some(button=>button.id.startsWith('txd_')))return'destination_optional';
+  if(['location_target_unclear','multiple_locations'].includes(decision.reason)||phase==='location_role')return'location_role';
+  if(phase==='origin')return'pickup_gps';
+  if(phase==='destination'&&!decision.draft.destinationDeferred)return'destination_optional';
+  if(phase==='name'&&!decision.draft.name)return'passenger_name';
+  return'none';
+}
 export async function coordinateTaxi(messages:TaxiInbound[],session:TaxiSession,channel:TaxiChannel,services:TaxiServices,now:number,signal?:AbortSignal):Promise<TaxiDecision> {
   const decision=await decideTaxi(messages,session,channel,services,now,signal);
   assertTaxiTransition(session,messages,decision,now);
-  if(services.question&&['draft','reply'].includes(decision.action)&&decision.messages.length===1){
-    const kind:TaxiQuestion|null=decision.reason==='service_question'?'service_question':decision.reason==='missing_name'?'passenger_name':decision.reason==='missing_destination'?'destination_optional':decision.messages[0].locationRequest==='origin'?'pickup_gps':decision.reason==='active_status'?'active_status':['smalltalk','courtesy'].includes(decision.reason)?'smalltalk':null;
-    if(kind){
-      const d=decision.draft,recent:TaxiSession['history']=[];let size=0;for(const item of session.history.slice(-6).reverse()){if(size+item.content.length>2400)break;recent.unshift(item);size+=item.content.length;}
-      const context:TaxiReplyContext={baseName:channel.name,city:channel.city,hasPickupGps:Boolean(d.origin?.source==='gps'&&d.pickupMessageId),hasName:Boolean(d.name),hasDestination:hasDestination(d),destinationDeferred:d.destinationDeferred===true,phase:conversationPhase({...session,draft:d},now),activeState:session.active?.state??null,recent};
-      let question:string|null=null;try{question=await services.question(kind,messages.map(m=>m.text).filter(Boolean).join('\n'),channel,signal,context);}catch{/* The validated server response remains available if composition fails. */}
-      if(question){if(kind==='service_question'&&decision.messages[0].buttons?.some(b=>b.id.startsWith('txc_')))decision.messages.unshift({to:decision.messages[0].to,text:question});else decision.messages[0]={...decision.messages[0],text:question};}
-    }
+  const outbound=decision.messages.length===1?decision.messages[0]:null,hasConfirmationSummary=decision.messages.some(message=>message.buttons?.some(button=>button.id.startsWith('txc_')));
+  const naturalInput=messages.every(message=>message.type==='text'||message.type==='location');
+  if(services.question&&outbound&&['draft','reply'].includes(decision.action)&&naturalInput&&(!hasConfirmationSummary||decision.reason==='service_question')){
+    const kind:TaxiQuestion=decision.reason==='service_question'?'service_question':decision.reason==='missing_name'?'passenger_name':decision.reason==='missing_destination'?'destination_optional':outbound.locationRequest==='origin'?'pickup_gps':decision.reason==='active_status'?'active_status':['smalltalk','courtesy'].includes(decision.reason)?'smalltalk':'conversation';
+    const d=decision.draft,recent:TaxiSession['history']=[];let size=0;for(const item of session.history.slice(-6).reverse()){if(size+item.content.length>2400)break;recent.unshift(item);size+=item.content.length;}
+    const phase=conversationPhase({...session,draft:d},now);
+    const context:TaxiReplyContext={baseName:channel.name,city:channel.city,hasPickupGps:Boolean(d.origin?.source==='gps'&&d.pickupMessageId),hasName:Boolean(d.name),hasDestination:hasDestination(d),destinationDeferred:d.destinationDeferred===true,phase,activeState:session.active?.state??null,recent,backendReply:hasConfirmationSummary?'El servidor preparó debajo el resumen vigente con tarifa verificada y el botón actual. No cambies ni repitas esos datos.':outbound.text,nextStep:hasConfirmationSummary?'none':replyNextStep(decision,phase)};
+    const current=messages.map(message=>message.type==='location'?'Compartiste un punto de ubicación por WhatsApp.':message.text).filter(Boolean).join('\n');
+    let question:string|null=null;try{question=await services.question(kind,current,channel,signal,context);}catch{/* The server's validated decision and response remain authoritative if composition fails. */}
+    if(question){if(hasConfirmationSummary)decision.messages.unshift({to:outbound.to,text:question});else decision.messages[0]={...outbound,text:question};}
   }
   assertTaxiTransition(session,messages,decision,now);
   return decision;

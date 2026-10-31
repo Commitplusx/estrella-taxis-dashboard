@@ -46,6 +46,15 @@ Deno.test('natural questions: the model phrases only the requested missing field
  assertEquals(parseTaxiQuestion(phrasing('¿A nombre de quién dejamos la solicitud?'),'passenger_name'),'¿A nombre de quién dejamos la solicitud?');
  for(const question of ['Ya quedó registrado tu taxi','¿Confirmamos el viaje por 55 pesos?','¿Tu conductor ya llegó?','¿Me compartes tu destino?','¿Me compartes el pin en la calle 3?']){let rejected=false;try{parseTaxiQuestion(phrasing(question),'pickup_gps');}catch{rejected=true;}assert(rejected);}
 });
+Deno.test('natural conversation: generated wording must keep the server-selected next question',()=>{
+ const context={baseName:'Base sintética',city:'Comitán',hasPickupGps:false,hasName:false,hasDestination:false,destinationDeferred:false,phase:'origin',activeState:null,recent:[],nextStep:'pickup_gps' as const,backendReply:'Pide compartir ubicación GPS para pasar por la persona.'};
+ assertEquals(parseTaxiQuestion(phrasing('Claro 😊 ¿Me compartes tu ubicación con el botón para pasar por ti?'),'conversation',context),'Claro 😊 ¿Me compartes tu ubicación con el botón para pasar por ti?');
+ let rejected=false;try{parseTaxiQuestion(phrasing('Claro, aquí estoy para ayudarte. ¿Qué más necesitas?'),'conversation',context);}catch{rejected=true;}assert(rejected);
+ const destination={...context,phase:'destination',nextStep:'destination_optional' as const,backendReply:'Pregunta a dónde va; puede dejarlo para el conductor.'};
+ assertEquals(parseTaxiQuestion(phrasing('Va 😊 ¿A dónde te llevamos? Si todavía no lo decides, puedes decírselo al conductor después.'),'conversation',destination),'Va 😊 ¿A dónde te llevamos? Si todavía no lo decides, puedes decírselo al conductor después.');
+ const locationRole={...context,phase:'location_role',nextStep:'location_role' as const};
+ assertEquals(parseTaxiQuestion(phrasing('¿El punto es donde pasamos por ti o a dónde te llevamos? 🚕'),'conversation',locationRole),'¿El punto es donde pasamos por ti o a dónde te llevamos? 🚕');
+});
 Deno.test('natural questions: provider failure has one bounded attempt and preserves the server question and draft',async()=>{
  let calls=0;const result=await naturalTaxiQuestion(async()=>{calls++;throw Error('Declared provider outage');},'fixture-key','fixture','pickup_gps','Hola');assertEquals(result,null);assertEquals(calls,1);
  const f=fixture(),s=state();f.services.question=async()=>null;const decision=await f.run(message('Hola'),s);assertEquals(decision.messages[0].locationRequest,'origin');assertEquals(decision.draft.confirmation,null);assertEquals(f.counts().fleet,0);assert(decision.messages[0].text.includes('ubicación'));assert(!decision.messages[0].text.includes('si prefieres'));

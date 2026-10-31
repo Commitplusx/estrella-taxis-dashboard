@@ -76,11 +76,34 @@ Deno.test('friendly phrasing: a grounded short explanation can precede the picku
  const question='Así el chofer puede ubicarte mejor. ¿Me compartes tu ubicación con el botón?';
  assertEquals(parseTaxiQuestion({choices:[{finish_reason:'stop',message:{content:JSON.stringify({question})}}]},'pickup_gps'),question);
 });
+Deno.test('natural conversation: an unclear shared point gets a contextual answer without exposing coordinates or changing state',async()=>{
+ const s=session(),oldPoint={text:'Punto anterior',lat:16.25,lng:-92.13,placeId:null,source:'gps' as const};
+ s.draft={...s.draft,awaitingLocation:'choice',pendingLocation:{place:oldPoint,expiresAt:new Date(now+600000).toISOString()}};
+ const shared={...inbound(''),type:'location' as const,location:{lat:16.25637,lng:-92.12810}};
+ const answer='¿El punto que compartiste es donde pasamos por ti o el lugar a donde vas? 🚕';
+ const f:TaxiServices={...services,question:async(kind,current,_channel,_signal,context)=>{assertEquals(kind,'conversation');assertEquals(current,'Compartiste un punto de ubicación por WhatsApp.');assertEquals(context?.nextStep,'location_role');assertStringIncludes(context?.backendReply??'','¿Este punto es donde pasamos por ti');return answer;}};
+ const result=await coordinateTaxi([shared],s,channel,f,now);
+ assertEquals(result.reason,'location_target_unclear');assertEquals(result.action,'draft');assertEquals(result.draft.awaitingLocation,'choice');assertEquals(result.draft.confirmation,null);assertEquals(result.messages[0].text,answer);assertEquals(result.candidates,[]);
+});
+Deno.test('natural conversation: ambiguous text is rewritten from the backend response without altering the draft',async()=>{
+ const s=session(),pickup={text:'Punto confirmado',lat:16.25,lng:-92.13,placeId:null,source:'gps' as const};
+ s.draft={...s.draft,name:'Mariana',origin:pickup,pickupMessageId:'native',destinationDeferred:true};s.history=[{role:'assistant',content:'El resumen anterior venció.'},{role:'user',content:'No estoy segura.'}];
+ const answer='Claro, no hay prisa. ¿Qué parte del viaje quieres revisar?';
+ const f:TaxiServices={...services,interpret:async()=>({intent:'ambiguous',fields:{}}),question:async(kind,current,_channel,_signal,context)=>{assertEquals(kind,'conversation');assertEquals(current,'No sé qué hacer');assertEquals(context?.nextStep,'none');assertStringIncludes(context?.backendReply??'','corregir');assertEquals(context?.recent.length,2);return answer;}};
+ const result=await coordinateTaxi([inbound('No sé qué hacer')],s,channel,f,now);
+ assertEquals(result.reason,'ambiguous_intent');assertEquals(result.messages[0].text,answer);assertEquals(result.draft.origin,pickup);assertEquals(result.draft.name,'Mariana');assertEquals(result.candidates,[]);
+});
 const pin=()=>({...inbound(''),type:'location' as const,location:{lat:16.25,lng:-92.13}});
 for(const text of ['se lo digo al chofer','Todavía no sé','Prefiero no decirlo ahorita','por ahora no'])Deno.test('optional destination: direct choice is accepted without a magic greeting: '+text,async()=>{
  const s=session(),ask=await coordinateTaxi([pin()],s,channel,services,now);s.draft=ask.draft;
  const result=await coordinateTaxi([inbound(text)],s,channel,services,now);
  assertEquals(result.draft.destinationDeferred,true);assertEquals(result.draft.destination,null);assert(result.draft.confirmation);assertEquals(result.draft.quoteCents,5500);assertEquals(result.action,'draft');assertEquals(result.candidates,[]);
+});
+Deno.test('natural conversation: the server keeps ownership of fare, map links and the current confirmation summary',async()=>{
+ const s=session(),ask=await coordinateTaxi([pin()],s,channel,services,now);s.draft=ask.draft;let composerCalls=0;
+ const f:TaxiServices={...services,question:async()=>{composerCalls++;return'Confirma aquí y ya te mandamos un taxi.';}};
+ const result=await coordinateTaxi([inbound('se lo digo al chofer')],s,channel,f,now);
+ assertEquals(composerCalls,0);assert(result.messages[0].buttons?.[0].id.startsWith('txc_'));assertStringIncludes(result.messages[0].text,'https://maps.google.com/?q=16.25000,-92.13000');assertStringIncludes(result.messages[0].text,'$55.00 MXN');assertStringIncludes(result.messages[0].text,'toca *Confirmar viaje*');assertEquals(result.candidates,[]);
 });
 for(const text of ['¿Puedo decirlo al chofer?','No sé si voy al Centro','Mi amigo dijo se lo digo al chofer','no se lo digo al chofer','se lo digo al chofer, mejor voy al Centro'])Deno.test('optional destination: question, third-party or later correction does not authorize deferral: '+text,()=>assertEquals(defersDestination(text),false));
 Deno.test('optional destination: a superseded choice and a mixed batch cannot skip the current question',async()=>{

@@ -2,7 +2,7 @@ import { record, TrackingError, positiveId } from '../../tracking/contracts.ts';
 import { taxiH3Cell, type H3QuoteScope } from './h3.ts';
 import { parseNeighborhoodArea, streetReference, type NeighborhoodArea } from './neighborhoodContracts.ts';
 export { record };
-export const TAXI_BOT_VERSION='taxi-bot-v11-15s-message-batching';
+export const TAXI_BOT_VERSION='taxi-bot-v12-natural-replies';
 export interface TaxiChannel {
   tenantId:string; waba:string; enabled:boolean; name:string; city:string;
   centerLat:number; centerLng:number; radiusKm:number; dispatcher:string|null;
