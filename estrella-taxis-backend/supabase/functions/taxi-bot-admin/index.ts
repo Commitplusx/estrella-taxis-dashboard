@@ -23,5 +23,6 @@ if (import.meta.main) {
       (Deno.env.get("TAXI_WORKER_SECRET") ?? "").length >= 32 &&
       required.every((key) => (Deno.env.get(key) ?? "").length > 0),
     neighborhoodModelKey:Deno.env.get('DEEPSEEK_API_KEY')??'',
+    simulationRefresh:{url:'https://taxis.estrella-eats.mx/taxi-gps-refresh',secret:Deno.env.get('TAXI_WORKER_SECRET')??''},
   }));
 }

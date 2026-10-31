@@ -17,10 +17,13 @@ import { RequireFeature } from '../components/RequireFeature';
 import { CommandModal } from '../components/CommandModal';
 import { useAuth } from '../context/AuthContext';
 
-import { findOptimalTaxi } from '../../estrella-taxis-backend/supabase/functions/_shared/algorithms/headingMatcher.ts';
+import FleetSimulationPanel from '../components/FleetSimulationPanel';
+import type {SimulationMapTool} from '../components/TaxiSimulationMap';
+import type {TaxiSimulationResult} from '../../estrella-taxis-backend/supabase/functions/_shared/bot/taxis/simulationContracts.ts';
+import{gpsOccupancy}from'../../estrella-taxis-backend/supabase/functions/_shared/bot/taxis/gpsOccupancy.ts';
 import { loadFleetActivity } from '../lib/fleetActivity';
 import { distanceKm } from '../../estrella-taxis-backend/supabase/functions/_shared/tracking/scoring.ts';
-import { positiveId,flag } from '../../estrella-taxis-backend/supabase/functions/_shared/tracking/contracts.ts';
+import { positiveId } from '../../estrella-taxis-backend/supabase/functions/_shared/tracking/contracts.ts';
 import { escapeHtml } from '../lib/escapeHtml';
 
 interface MapTelemetryEvent {id:number;deviceId:number;type:string;eventTime?:string;serverTime?:string;attributes?:{alarm?:string;result?:string}}
@@ -75,13 +78,13 @@ export function generateInfoWindowContent(device: TraccarDevice, pos: TraccarPos
 
   const finalAddress = escapeHtml(liveAddress || (pos.address ? pos.address.split(',')[0] : ''));
   const timeText = formatRelativeTime(pos.serverTime, nowMs);
-  const occupation = flag(pos.attributes?.occupied);
+  const occupation = gpsOccupancy(pos.attributes);
 
   let occupiedStatusHtml = '';
   if (occupation===true) {
-    occupiedStatusHtml = `<div style="margin-top:8px; display:flex; align-items:center; justify-content:center; gap:6px; font-size:11px; color:#991b1b; background:#fee2e2; border:1px solid #fecaca; padding:6px; border-radius:8px; font-weight:700;"><span style="width:8px;height:8px;background:#ef4444;border-radius:50%;box-shadow:0 0 4px #ef4444"></span> TAXI OCUPADO</div>`;
+    occupiedStatusHtml = `<div style="margin-top:8px; display:flex; align-items:center; justify-content:center; gap:6px; font-size:11px; color:#991b1b; background:#fee2e2; border:1px solid #fecaca; padding:6px; border-radius:8px; font-weight:700;"><span style="width:8px;height:8px;background:#ef4444;border-radius:50%;box-shadow:0 0 4px #ef4444"></span> GPS MARCA OCUPADO</div>`;
   } else if(occupation===false) {
-    occupiedStatusHtml = `<div style="margin-top:8px; display:flex; align-items:center; justify-content:center; gap:6px; font-size:11px; color:#166534; background:#dcfce7; border:1px solid #bbf7d0; padding:6px; border-radius:8px; font-weight:700;"><span style="width:8px;height:8px;background:#22c55e;border-radius:50%;box-shadow:0 0 4px #22c55e"></span> TAXI LIBRE</div>`;
+    occupiedStatusHtml = `<div style="margin-top:8px; display:flex; align-items:center; justify-content:center; gap:6px; font-size:11px; color:#166534; background:#dcfce7; border:1px solid #bbf7d0; padding:6px; border-radius:8px; font-weight:700;"><span style="width:8px;height:8px;background:#22c55e;border-radius:50%;box-shadow:0 0 4px #22c55e"></span> GPS MARCA LIBRE</div>`;
   } else {
     occupiedStatusHtml='<div style="margin-top:8px;color:#475569;font-size:12px;text-align:center">Ocupación sin dato</div>';
   }
@@ -129,7 +132,8 @@ export function generateInfoWindowContent(device: TraccarDevice, pos: TraccarPos
 }
 
 export default function MapPage() {
-  const { user, empresaId } = useAuth();
+  const { user, empresaId, userRole } = useAuth();
+  const canSimulate=(userRole==='superadmin'||userRole==='admin_empresa')&&!user?.readonly;
   const companyRef = useRef(empresaId);
 
   const isReadonly = user?.readonly ?? false;
@@ -198,35 +202,23 @@ export default function MapPage() {
   const isSimulatorActiveRef = useRef(false);
   useEffect(() => { isSimulatorActiveRef.current = isSimulatorActive; }, [isSimulatorActive]);
 
-  interface SimResult {
-    passengerLatLng: FleetMapPoint;
-    candidates: { device: TraccarDevice; pos: TraccarPosition; distKm: number; rank: number }[];
-  }
-  const [simResult, setSimResult] = useState<SimResult | null>(null);
+  const [simulationPoint,setSimulationPoint]=useState<FleetMapPoint|null>(null);
+  const simulationTool=useRef<SimulationMapTool>('origin');
   const simElementsRef = useRef<L.LayerGroup | null>(null);
   const clearSimElements = useCallback(() => { simElementsRef.current?.clearLayers(); }, []);
-  const runAiSimulator = useCallback((point: FleetMapPoint) => {
-    const map = leafletMapRef.current;
-    if (!map) return;
-    clearSimElements();
-    const ranking = findOptimalTaxi(devicesRef.current, Array.from(positionsRef.current.values()), point.lat, point.lng);
-    if (!ranking.success) { setSimResult(null); toast.error('No hay unidades disponibles con una señal GPS vigente en 10 km.'); return; }
-    const candidates = ranking.data.flatMap((candidate, index) => {
-      const device = devicesRef.current.find((entry) => entry.id === candidate.deviceId);
-      const pos = positionsRef.current.get(candidate.deviceId);
-      return device && pos ? [{ device, pos, distKm: candidate.distanceKm, rank: index + 1 }] : [];
-    });
-    const group = simElementsRef.current;
-    if (!group) return;
-    L.circleMarker(point, { radius: 8, color: '#fff', fillColor: '#7c3aed', fillOpacity: 1 }).bindTooltip('Punto de recogida').addTo(group);
-    candidates.forEach((candidate, index) => {
-      L.polyline([[candidate.pos.latitude, candidate.pos.longitude], [point.lat, point.lng]], {
-        color: ['#2563eb', '#68788f', '#9c6940'][index % 3], weight: index === 0 ? 4 : 3,
-        opacity: .8, dashArray: '6 6', interactive: false,
-      }).addTo(group);
-    });
-    setSimResult({ passengerLatLng: point, candidates });
-  }, [clearSimElements]);
+  const runAiSimulator=useCallback((point:FleetMapPoint)=>{setSimulationPoint(point);const group=simElementsRef.current;if(group)L.circleMarker(point,{radius:9,color:'#fff',weight:3,fillColor:simulationTool.current==='destination'?'#a42620':'#1d4ed8',fillOpacity:1}).bindTooltip(simulationTool.current==='destination'?'Destino de prueba':simulationTool.current==='taxi'?'Posición simulada':'Origen de prueba').addTo(group);},[]);
+  const simulationResult=useCallback((result:TaxiSimulationResult|null)=>{
+    clearSimElements();const group=simElementsRef.current;if(!group||!result)return;
+    L.circleMarker(result.origin,{radius:9,color:'#fff',weight:3,fillColor:'#1d4ed8',fillOpacity:1}).bindTooltip('Origen',{permanent:true}).addTo(group);
+    if(result.destination)L.circleMarker(result.destination,{radius:9,color:'#fff',weight:3,fillColor:'#a42620',fillOpacity:1}).bindTooltip('Destino',{permanent:true}).addTo(group);
+    for(const unit of result.scenario.units){if(!unit.point)continue;
+      const label=document.createElement('span');label.textContent=unit.name+(unit.changed?' · Simulada':'');
+      if(unit.changed)L.circleMarker(unit.point,{radius:10,color:'#172337',weight:3,fillColor:'#dbeafe',fillOpacity:1}).bindTooltip(label).addTo(group);
+      if(unit.reason==='selected')L.polyline([[unit.point.lat,unit.point.lng],[result.origin.lat,result.origin.lng]],{color:'#2563eb',weight:3,opacity:.8,dashArray:'6 6',interactive:false,className:'fleet-sim-offer-line'}).addTo(group);
+    }
+  },[clearSimElements]);
+  const simulationToolChanged=useCallback((tool:SimulationMapTool)=>{simulationTool.current=tool;},[]);
+  useEffect(()=>{if(!canSimulate){setIsSimulatorActive(false);setSimulationPoint(null);clearSimElements();}},[canSimulate,empresaId,clearSimElements]);
   useEffect(() => {
     const map = leafletMapRef.current;
     if (!map || !mapsLoaded) return;
@@ -240,11 +232,11 @@ export default function MapPage() {
       measurePathRef.current = [];
       measureLayerRef.current?.clearLayers();
       measureLabelRef.current?.remove();
-      toast('Elige un punto de recogida para comparar taxis por cercanía y dirección.', { id: 'sim-instruct', duration: 4000 });
+      setShowEventsPanel(false);setSelectedDevice(null);infoWindowRef.current?.remove();toast('Marca el origen en el mapa y pulsa Simular viaje.', { id: 'sim-instruct', duration: 4000 });
       map.on('click', click);
     } else {
       clearSimElements();
-      setSimResult(null);
+      setSimulationPoint(null);
       toast.dismiss('sim-instruct');
     }
     return () => { map.off('click', click); };
@@ -453,7 +445,7 @@ export default function MapPage() {
     devices.forEach((device) => {
       const p = positions.get(device.id);
       if (!p || !validFleetPoint(p.latitude, p.longitude)) return;
-      const icon = L.divIcon({ className: 'fleet-vehicle-marker', html: fleetMarkerHtml({ name: device.name, category: device.category, status: device.status, speed: p.speed || 0, course: p.course || 0, occupied: flag(p.attributes?.occupied) ?? undefined }), iconSize: [36, 36], iconAnchor: [18, 18] });
+      const icon = L.divIcon({ className: 'fleet-vehicle-marker', html: fleetMarkerHtml({ name: device.name, category: device.category, status: device.status, speed: p.speed || 0, course: p.course || 0, occupied: gpsOccupancy(p.attributes) }), iconSize: [36, 36], iconAnchor: [18, 18] });
       const existing = markersRef.current.get(device.id);
       if (existing) { existing.setLatLng([p.latitude, p.longitude]).setIcon(icon); return; }
       const marker = L.marker([p.latitude, p.longitude], { icon, title: device.name, keyboard: true }).addTo(map);
@@ -544,7 +536,7 @@ export default function MapPage() {
     const marker = markersRef.current.get(device.id);
     if (!marker) return;
     marker.setLatLng([pos.latitude, pos.longitude]);
-    marker.setIcon(L.divIcon({ className: 'fleet-vehicle-marker', html: fleetMarkerHtml({ name: device.name, category: device.category, status: device.status, speed: pos.speed || 0, course: pos.course || 0, occupied: flag(pos.attributes?.occupied) ?? undefined }), iconSize: [36, 36], iconAnchor: [18, 18] }));
+    marker.setIcon(L.divIcon({ className: 'fleet-vehicle-marker', html: fleetMarkerHtml({ name: device.name, category: device.category, status: device.status, speed: pos.speed || 0, course: pos.course || 0, occupied: gpsOccupancy(pos.attributes) }), iconSize: [36, 36], iconAnchor: [18, 18] }));
   }, []);
 
   const handleWsDevices = useCallback((updated: TraccarDevice[]) => {
@@ -733,7 +725,7 @@ export default function MapPage() {
     const newMeasuring = !isMeasuring;
     setIsMeasuring(newMeasuring);
     isMeasuringRef.current = newMeasuring;
-    if (newMeasuring) { isSimulatorActiveRef.current = false; setIsSimulatorActive(false); clearSimElements(); setSimResult(null); }
+    if (newMeasuring) { isSimulatorActiveRef.current = false; setIsSimulatorActive(false); clearSimElements(); setSimulationPoint(null); }
     if (!newMeasuring) {
       clearMeasure();
       if (leafletMapRef.current) leafletMapRef.current.getContainer().style.cursor = '';
@@ -955,8 +947,8 @@ export default function MapPage() {
           </div>
         </RequireFeature>
 
-        {/* Simulador de IA */}
-        <RequireFeature feature="enrutamiento_vectorial">
+        {/* Simulador de asignación de la base */}
+        {canSimulate && <RequireFeature feature="enrutamiento_vectorial">
           <div className="bg-white rounded-xl shadow-lg border border-gray-100 flex flex-col overflow-hidden group relative">
             <button
               onClick={() => setIsSimulatorActive(v => !v)}
@@ -969,7 +961,7 @@ export default function MapPage() {
               Comparar taxis
             </div>
           </div>
-        </RequireFeature>
+        </RequireFeature>}
 
         {/* Cambiar Capa */}
         <div className="bg-white rounded-xl shadow-lg border border-gray-100 flex flex-col overflow-hidden">
@@ -988,57 +980,10 @@ export default function MapPage() {
 
       {/* Toast de Eventos Recientes eliminado por react-hot-toast */}
 
-      {/* ─── Panel del Simulador IA ─── */}
-      {isSimulatorActive && (
-        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-30 bg-white/95 backdrop-blur-md border border-purple-200 rounded-2xl shadow-2xl p-4 min-w-[300px] max-w-xs">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <div className="w-7 h-7 rounded-lg bg-purple-100 flex items-center justify-center">
-                <Brain size={14} className="text-purple-600 animate-pulse" />
-              </div>
-              <div>
-                <p className="text-sm font-bold text-slate-800">Comparar taxis</p>
-                <p className="text-xs text-slate-600">Disponibilidad, cercanía y dirección</p>
-              </div>
-            </div>
-            <button onClick={() => setIsSimulatorActive(false)} className="w-6 h-6 rounded-full hover:bg-gray-100 flex items-center justify-center text-gray-400">
-              <X size={13} />
-            </button>
-          </div>
-
-          {!simResult ? (
-            <div className="flex items-center gap-2 py-2 px-3 bg-purple-50 rounded-xl border border-purple-100">
-              <MapPin size={13} className="text-purple-500 flex-shrink-0" />
-              <p className="text-[11px] text-purple-700 font-medium">Haz clic en el mapa donde está el pasajero</p>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {simResult.candidates.map((c, i) => {
-                const colors = ['text-emerald-600 bg-emerald-50 border-emerald-200', 'text-blue-600 bg-blue-50 border-blue-200', 'text-amber-600 bg-amber-50 border-amber-200'];
-                const medals = ['🥇', '🥈', '🥉'];
-                return (
-                  <div key={c.device.id} className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-xs font-semibold ${colors[i]}`}>
-                    <span className="text-base">{medals[i]}</span>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-bold truncate">{c.device.name}</p>
-                      <p className="text-[10px] opacity-70">
-                        {c.distKm.toFixed(2)} km · en línea recta
-                      </p>
-                    </div>
-                    {i === 0 && <span className="text-xs font-semibold text-blue-800">Candidato 1</span>}
-                  </div>
-                );
-              })}
-              <button
-                onClick={() => { clearSimElements(); setSimResult(null); }}
-                className="w-full mt-1 text-[10px] text-gray-400 hover:text-gray-600 text-center py-1 hover:bg-gray-50 rounded-lg transition-colors"
-              >
-                Elegir otro punto
-              </button>
-            </div>
-          )}
-        </div>
-      )}
+      {isSimulatorActive && canSimulate && <aside className="fleet-simulation-drawer taxi-admin" aria-label="Simulador de asignación en el mapa">
+        <div className="fleet-simulation-toolbar"><strong>Comparar taxis de la base</strong><button type="button" aria-label="Cerrar simulador" onClick={()=>setIsSimulatorActive(false)}><X size={20}/></button></div>
+        <FleetSimulationPanel tenantId={empresaId} point={simulationPoint} onTool={simulationToolChanged} onResult={simulationResult}/>
+      </aside>}
 
       {/* ─── Bottom Sheet for Mobile Info Window ─── */}
       <div

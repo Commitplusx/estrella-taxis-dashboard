@@ -2,6 +2,7 @@
   "extends":"./tsconfig.tracking-tests.json",
   "files":[
     "tests/taxi-bot-database.test.ts",
+    "tests/taxi-simulation-sql.test.ts",
     "tests/stellar-separation.test.ts",
     "tests/stellar-package.test.ts",
     "tests/stellar-config.test.ts",

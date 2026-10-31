@@ -10,6 +10,8 @@ files.push(...['src/lib/taxiQualityClient.ts','src/components/TaxiQualityPanel.t
 files.push(...['src/components/TaxiNeighborhoodsPanel.tsx','tests/taxi-neighborhoods.test.ts','estrella-taxis-backend/supabase/functions/taxi-bot-admin/neighborhoods.ts','estrella-taxis-backend/supabase/functions/_shared/bot/taxis/neighborhoods.ts','estrella-taxis-backend/supabase/functions/_shared/bot/taxis/neighborhoodContracts.ts'].map(f=>resolve(root,f)));
 const failures:string[]=[];
 files.push(resolve(taxi,'gpsRefresh.ts'),resolve(root,'tests/taxi-gps-refresh.test.ts'));
+files.push(...['selection.ts','simulation.ts','simulationContracts.ts'].map(file=>resolve(taxi,file)));
+files.push(...['tests/taxi-simulation.test.ts','tests/taxi-simulation-sql.test.ts','src/components/TaxiSimulationPanel.tsx','src/components/TaxiSimulationMap.tsx','src/lib/taxiSimulationClient.ts','src/lib/taxiSimulationExample.ts','estrella-taxis-backend/supabase/functions/taxi-bot-admin/simulation.ts'].map(file=>resolve(root,file)));
 files.push(resolve(root,'tests/taxi-reset.test.ts'),resolve(root,'tests/taxi-message-budget.test.ts'));
 files.push(...['tests/taxi-gps-booking.test.ts','tests/taxi-contextual-replies.test.ts','tests/taxi-language-hardening.test.ts','tests/fixtures/taxi-contextual-intents.ts','tests/fixtures/taxi-language-hardening.ts','estrella-taxis-backend/supabase/functions/_shared/bot/taxis/conversationReply.ts'].map(file=>resolve(root,file)));
 files.push(resolve(root,'tests/taxi-native-location.test.ts'));

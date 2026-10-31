@@ -1,11 +1,10 @@
 import { FleetApi } from '../../tracking/auth.ts';
 import { requestJson, type Fetcher } from '../../tracking/http.ts';
 import type { TrackingStore } from '../../tracking/store.ts';
-import { findOptimalTaxi, getDistanceFromLatLonInKm } from '../../algorithms/headingMatcher.ts';
-import { gpsOccupancy } from './gpsOccupancy.ts';
+import { getDistanceFromLatLonInKm } from '../../algorithms/headingMatcher.ts';
+import {selectTaxiCandidates} from './selection.ts';
 import {refreshTaxiGps,type GpsRefreshConfig} from './gpsRefresh.ts';
-import type { TraccarDevice, TraccarPosition } from '../../tracking/fleetTypes.ts';
-import { flag, positiveId, TrackingError } from '../../tracking/contracts.ts';
+import { positiveId, TrackingError } from '../../tracking/contracts.ts';
 import { record, text, coord, type Place, type TaxiChannel } from './contracts.ts';
 import type { TaxiServices, LocationResult } from './coordinator.ts';
 import { createTaxiInterpreter } from './interpreter.ts';
@@ -107,16 +106,9 @@ export function createTaxiServices(store:TrackingStore,fetcher:Fetcher,config:{m
       const fleet=new FleetApi(config.traccarUrl,fetcher),session=await fleet.jobSession(config.traccarEmail,config.traccarPassword,signal);
       // A fresh GPS fix can still be usable when Traccar labels the device offline;
       // the driver must accept the WhatsApp offer before any trip is assigned.
-      const devices:TraccarDevice[]=session.devices.filter((d)=>allowed.has(d.id)&&(d.status==='online'||d.status==='offline')).map((d)=>({...d,uniqueId:String(d.id)}));
       const raw=await fleet.get('/positions',session.cookie,signal);
       if(!Array.isArray(raw)||raw.length>10000)throw new TrackingError(502,'taxi_bad_positions','No se pudo validar la flota.');
-      const positions:TraccarPosition[]=[];
-      for(const p of raw){if(!record(p)||!positiveId(p.id)||!positiveId(p.deviceId)||!allowed.has(p.deviceId)||!coord(p.latitude,p.longitude)||typeof p.longitude!=='number'||typeof p.fixTime!=='string')continue;
-        if(p.valid!==true)continue;
-        const ignition=record(p.attributes)?flag(p.attributes.ignition):null,occupied=gpsOccupancy(p.attributes);
-        positions.push({id:p.id,deviceId:p.deviceId,latitude:p.latitude,longitude:p.longitude,fixTime:p.fixTime,valid:true,outdated:p.outdated===true,speed:typeof p.speed==='number'&&Number.isFinite(p.speed)?p.speed:undefined,course:typeof p.course==='number'&&Number.isFinite(p.course)?p.course:undefined,attributes:{ignition,occupied}});
-      }
-      const ranked=findOptimalTaxi(devices,positions,origin.lat,origin.lng,c.radiusKm,Date.now(),{allowIgnitionOff:true,allowOfflineFixAgeMs:2*60*1000});
+      const ranked=selectTaxiCandidates(session.devices,raw,allowed,origin,c.radiusKm,Date.now());
       return ranked.success?ranked.data.map((d)=>({deviceId:d.deviceId,name:d.name})):[];
     }
   };

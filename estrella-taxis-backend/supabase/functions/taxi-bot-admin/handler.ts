@@ -1,5 +1,7 @@
 import {taxiQualityRequest}from"./quality.ts";
 import {dispatchRequest}from './dispatch.ts';
+import {simulationRequest}from './simulation.ts';
+import type {GpsRefreshConfig}from '../_shared/bot/taxis/gpsRefresh.ts';
 import { driverRequest } from './drivers.ts';
 import { accountRequest } from './accounts.ts';
 import { phoneLogin } from './phoneLogin.ts';
@@ -42,6 +44,8 @@ export interface AdminDependencies {
   runtimeReady: boolean;
   neighborhoodModelKey?:string;neighborhoodFetcher?:Fetcher;
   accountManager?:AccountManager;
+  simulationRefresh?:GpsRefreshConfig;
+  simulationFetcher?:Fetcher;
 }
 export function createTaxiAdminHandler(
   deps: AdminDependencies,
@@ -395,6 +399,11 @@ export function createTaxiAdminHandler(
         }),
       );
       const channel = rows.length ? channelFromRow(rows[0]) : null;
+      if(raw.action==='dispatch_simulation'){
+        if(!channel)throw new TrackingError(404,'channel_not_found','Primero guarda el WhatsApp de la base.');
+        const plan=record(tenantRow.paquete)?tenantRow.paquete:null;
+        return json(await simulationRequest(raw,channel,identity,scope.configure,tenantRow.activo===true&&plan?.activo===true&&plan.incluye_whatsapp===true,deps.fleet,deps.store,deps.simulationRefresh,deps.simulationFetcher??fetch,AbortSignal.any([req.signal,AbortSignal.timeout(30000)])));
+      }
       if(raw.action==='dispatch_status'||raw.action==='dispatch_resume'){
         if(!channel)throw new TrackingError(404,'channel_not_found','Primero guarda el WhatsApp de la base.');
         return json(await dispatchRequest(raw,tenant,waba,identity.userId,scope.configure,deps.store));

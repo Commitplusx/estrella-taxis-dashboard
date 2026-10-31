@@ -1,0 +1,134 @@
+.taxi-sim{margin-top:28px;min-width:0;--sim-warning:#92400e;--sim-warning-bg:#fffbeb;--sim-success:#166534}
+.taxi-sim-header{display:flex;align-items:flex-start;justify-content:space-between;gap:24px;margin-bottom:16px}
+.taxi-sim-header h2,.taxi-sim-editor-title h3{display:flex;align-items:center;gap:10px}
+.taxi-sim-header p{max-width:70ch;margin-top:7px}
+.taxi-sim-header .taxi-primary{flex-shrink:0;min-height:44px}
+.taxi-sim-safety{display:flex;align-items:center;flex-wrap:wrap;gap:8px;font-size:14px;margin-bottom:22px!important}
+.taxi-sim-safety svg{color:var(--sim-success);flex-shrink:0}
+.taxi-sim-workspace{display:grid;grid-template-columns:minmax(0,1.8fr) minmax(300px,1fr);gap:22px;align-items:start}
+.taxi-sim-canvas{min-width:0;background:#fff;border:1px solid var(--ta-line);border-radius:14px;overflow:hidden}
+.taxi-sim-map-tools{display:flex;align-items:center;gap:6px;padding:12px;border-bottom:1px solid var(--ta-line);flex-wrap:wrap}
+.taxi-sim-map-tools button,.taxi-sim-view button{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:44px;border:1px solid transparent;border-radius:8px;padding:8px 13px;color:var(--ta-muted);background:transparent;font-weight:600}
+.taxi-sim-map-tools button[aria-pressed=true],.taxi-sim-view button[aria-pressed=true]{background:var(--ta-soft);border-color:#c7d8fc;color:var(--ta-blue)}
+.taxi-sim-map-tools button:hover:not(:disabled),.taxi-sim-view button:hover{background:var(--ta-soft)}
+.taxi-sim-map-wrap{position:relative;isolation:isolate}
+.taxi-sim-map{height:410px;width:100%;z-index:0;cursor:crosshair}
+.taxi-sim-map-hint{position:absolute;top:14px;left:14px;right:14px;z-index:2;max-width:440px;padding:10px 14px;background:#fff;color:var(--ta-ink);border:1px solid var(--ta-line);border-radius:8px;font-size:14px;pointer-events:none}
+.taxi-sim-map-label{font-weight:650;color:var(--ta-ink);border:1px solid var(--ta-line);box-shadow:none}
+.taxi-sim .taxi-sim-fit{position:absolute;bottom:16px;left:14px;z-index:2;background:#fff;min-height:44px}
+.taxi-sim-map-error{position:absolute;inset:auto 12px 74px;z-index:2;background:var(--sim-warning-bg);color:var(--sim-warning);padding:10px;border-radius:8px}
+.taxi-sim-points{display:flex;align-items:flex-start;gap:18px;padding:18px;border-top:1px solid var(--ta-line);font-variant-numeric:tabular-nums}
+.taxi-sim-points>div{flex:1;min-width:0}
+.taxi-sim-points span,.taxi-sim-points strong{display:block;overflow-wrap:anywhere}
+.taxi-sim-points span{font-size:13px;color:var(--ta-muted);margin-bottom:3px}
+.taxi-sim-points strong{font-size:14px;font-weight:650}
+.taxi-sim-points>svg{color:var(--ta-muted);margin-top:18px;flex-shrink:0}
+.taxi-sim-points button{border:0;background:none;color:var(--ta-blue);padding:8px 0;min-height:44px;font-size:13px}
+.taxi-sim-coordinates{padding:16px 18px;border-top:1px solid var(--ta-line)}
+.taxi-sim summary{cursor:pointer;font-weight:600;min-height:32px;color:var(--ta-ink)}
+.taxi-sim summary:focus-visible{outline:3px solid var(--ta-blue);outline-offset:3px}
+.taxi-sim-coordinate-grid,.taxi-sim-edit-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px 12px}
+.taxi-sim-coordinate-grid{margin-top:12px}
+.taxi-sim-coordinate-grid label,.taxi-sim-control{display:flex;flex-direction:column;gap:7px;font-size:13px;font-weight:600;min-width:0;color:var(--ta-ink)}
+.taxi-sim input,.taxi-sim select{width:100%;min-width:0;min-height:44px;border:1px solid #bac6d5;background:#fff;border-radius:8px;padding:10px 11px;font:inherit;font-size:14px;color:var(--ta-ink);caret-color:var(--ta-blue)}
+.taxi-sim input::placeholder{color:#637187}
+.taxi-sim .taxi-sim-field-error{margin-top:10px;color:#a42620;font-size:14px}
+.taxi-sim-values-help{margin-top:10px!important;font-size:12px}
+.taxi-sim-table-wrap:focus-visible{outline:3px solid var(--ta-blue);outline-offset:3px}
+.taxi-sim-editor{background:#fff;border:1px solid var(--ta-line);border-radius:14px;padding:22px;min-width:0;scroll-margin-top:20px}
+.taxi-sim-editor-title{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:20px}
+.taxi-sim .taxi-sim-text-button{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:7px 2px;min-height:44px;color:var(--ta-blue);background:none;border:0;font-size:13px;font-weight:650}
+.taxi-sim-text-button:hover:not(:disabled){text-decoration:underline;text-underline-offset:4px}
+.taxi-sim-editor-empty{padding:16px 0 24px}
+.taxi-sim-editor-empty>svg{color:var(--ta-muted);margin-bottom:14px}
+.taxi-sim-editor-empty h4{font-size:17px;margin:0 0 9px}
+.taxi-sim-editor-empty p{line-height:1.65}
+.taxi-sim-original{display:flex;align-items:center;gap:6px;margin:12px 0 20px!important;font-size:13px}
+.taxi-sim-advanced{margin-top:20px;border-top:1px solid var(--ta-line);padding-top:16px}
+.taxi-sim-advanced>div{margin:14px 0}
+.taxi-sim-advanced>.taxi-sim-control{margin-top:16px}
+.taxi-sim-advanced>p{font-size:13px;margin-top:9px;line-height:1.6}
+.taxi-sim-presets{border-top:1px solid var(--ta-line);padding-top:18px;margin-top:18px}
+.taxi-sim-presets h4{font-size:14px;margin:0 0 12px}
+.taxi-sim-presets>div{display:flex;flex-wrap:wrap;gap:8px}
+.taxi-sim-presets button{min-height:44px;text-align:left;border:1px solid var(--ta-line);border-radius:8px;padding:8px 11px;background:#fff;font-size:13px;color:var(--ta-ink)}
+.taxi-sim-presets button:hover:not(:disabled){background:var(--ta-soft);border-color:#b6caed}
+.taxi-sim-pending,.taxi-sim-error{display:flex;align-items:flex-start;gap:10px;border:1px solid #e4c99a;border-radius:10px;background:var(--sim-warning-bg);color:var(--sim-warning)!important;padding:15px 18px;margin:20px 0!important}
+.taxi-sim-pending{display:block;line-height:1.7}
+.taxi-sim-pending>svg{display:inline;vertical-align:middle;margin-right:8px}
+.taxi-sim-error{background:#fff1f0;color:#a42620!important;border-color:#efc4c1}
+.taxi-sim-error p{color:inherit;margin-bottom:10px}
+.taxi-sim-error>svg{flex-shrink:0;margin-top:2px}
+.taxi-sim-results{margin-top:30px;animation:taxi-sim-reveal .2s ease-out}
+.taxi-sim-result-heading{display:flex;align-items:center;justify-content:space-between;gap:20px;margin-bottom:18px}
+.taxi-sim-result-heading p{font-size:13px;margin-top:6px}
+.taxi-sim-fare{font-size:14px;font-weight:600;color:var(--ta-ink);text-align:right}
+.taxi-sim-comparison{display:grid;grid-template-columns:1fr 1fr;background:#fff;border-block:1px solid var(--ta-line)}
+.taxi-sim-comparison>div{padding:20px 24px;min-width:0}
+.taxi-sim-comparison>div+div{border-left:1px solid var(--ta-line)}
+.taxi-sim-comparison h4{font-size:14px;color:var(--ta-muted);margin:0 0 12px}
+.taxi-sim-comparison ol{display:flex;flex-wrap:wrap;gap:10px 22px;list-style:none;margin:0;padding:0}
+.taxi-sim-comparison li{display:flex;align-items:center;gap:7px;font-weight:650;font-size:15px;overflow-wrap:anywhere}
+.taxi-sim-comparison li>svg{color:var(--ta-blue);flex-shrink:0}
+.taxi-sim-difference{display:flex;align-items:flex-start;gap:8px;margin:13px 0 24px!important;font-size:14px}
+.taxi-sim-difference>svg{color:var(--sim-success);flex-shrink:0;margin-top:2px}
+.taxi-sim-table-tools{display:flex;align-items:center;justify-content:space-between;gap:18px;margin-bottom:14px}
+.taxi-sim-table-description{font-size:13px;max-width:75ch;margin:12px 0!important}
+.taxi-sim-table-cue{font-size:13px;font-weight:600;color:var(--ta-blue)!important;margin-bottom:12px!important}
+.taxi-sim-view{display:flex;gap:5px;flex-wrap:wrap}
+.taxi-sim-search{display:flex;align-items:center;position:relative;max-width:280px;min-width:180px}
+.taxi-sim-search>svg{position:absolute;left:12px;color:var(--ta-muted)}
+.taxi-sim-search input{padding-left:37px}
+.taxi-sim-table-wrap{max-height:550px;overflow:auto;scrollbar-color:#94a3b8 #f1f5f9;scrollbar-width:thin;border:1px solid var(--ta-line);border-radius:12px;background:#fff}
+.taxi-sim-table{width:100%;border-collapse:collapse;font-size:14px;font-variant-numeric:tabular-nums;text-align:left}
+.taxi-sim-table caption{padding:13px 18px;text-align:left;font-size:13px;color:var(--ta-muted);border-bottom:1px solid var(--ta-line)}
+.taxi-sim-table thead{position:sticky;top:0;z-index:1;background:#f1f5f9}
+.taxi-sim-table th,.taxi-sim-table td{padding:14px 16px;border-bottom:1px solid var(--ta-line);vertical-align:middle}
+.taxi-sim-table thead th{font-size:12px;font-weight:650;white-space:normal;min-width:110px}
+.taxi-sim-table tbody th{min-width:170px;font-weight:650}
+.taxi-sim-table tbody th>span{display:flex;align-items:center;gap:8px}
+.taxi-sim-table tbody th small{display:block;font-size:12px;font-weight:400;margin-top:4px}
+.taxi-sim-table tbody tr:last-child>*{border-bottom:0}
+.taxi-sim-selected-row{background:#f3f7ff}
+.taxi-sim-rank{display:inline-flex;align-items:center;justify-content:center;min-width:25px;height:25px;border-radius:6px;background:#e4edff;color:var(--ta-blue);font-size:12px}
+.taxi-sim-decision{display:block;min-width:155px;font-size:13px;color:var(--ta-muted)}
+.taxi-sim-decision.selected{color:var(--ta-blue);font-weight:650}
+.taxi-sim-decision.ranked{color:var(--sim-success)}
+.taxi-sim-explanation{display:flex;align-items:flex-start;gap:8px;font-size:13px;max-width:85ch;margin-top:16px!important;line-height:1.7}
+.taxi-sim-explanation>svg{flex-shrink:0;margin-top:3px}
+.taxi-sim-rounds{margin-top:26px;padding-top:20px;border-top:1px solid var(--ta-line)}
+.taxi-sim-rounds>p{font-size:14px;max-width:80ch;line-height:1.6;margin:9px 0 17px}
+.taxi-sim-rounds ol{list-style:none;padding:0;margin:0;background:#fff}
+.taxi-sim-rounds li{display:flex;gap:24px;padding:14px 0;border-bottom:1px solid var(--ta-line);font-size:14px}
+.taxi-sim-rounds li>strong{min-width:80px}
+.taxi-sim-empty-results{padding:20px;font-size:14px}
+.taxi-sim-loading{margin-top:20px;max-width:640px}
+.taxi-sim-loading p{font-size:14px;margin-top:10px}
+.taxi-sim-loading-bar{display:block;height:6px;background:#cddcf8;border-radius:6px;animation:taxi-sim-pulse 1s ease-in-out infinite}
+.taxi-sim-sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+.taxi-admin .taxi-tabs{overflow-x:auto;scrollbar-width:thin}
+.fleet-simulation-drawer.taxi-admin{position:absolute;top:20px;right:76px;z-index:30;width:min(570px,calc(100% - 100px));max-height:calc(100% - 40px);overflow:auto;min-height:0;background:#fff;border:1px solid var(--ta-line);border-radius:14px;padding:18px;box-shadow:0 10px 30px #0f172a24;scrollbar-width:thin;scrollbar-color:#94a3b8 #f1f5f9}
+.fleet-simulation-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;border-bottom:1px solid var(--ta-line);padding-bottom:10px;margin-bottom:14px}
+.fleet-simulation-toolbar>button{display:flex;align-items:center;justify-content:center;width:44px;height:44px;border-radius:8px;background:#f1f5f9;color:var(--ta-ink);border:0}
+.taxi-sim-external{margin-top:0}
+.taxi-sim-external .taxi-sim-header{display:block}
+.taxi-sim-external .taxi-sim-header h2{font-size:19px}
+.taxi-sim-external .taxi-sim-header .taxi-primary{margin-top:14px;width:100%}
+.taxi-sim-external .taxi-sim-workspace{display:block}
+.taxi-sim-external .taxi-sim-editor{margin-top:16px;padding:16px}
+.taxi-sim-external-hint{font-size:14px;padding:14px 18px}
+.taxi-sim-external .taxi-sim-comparison>div{padding:16px 12px}
+.taxi-sim-external .taxi-sim-comparison ol{display:block}
+.taxi-sim-external .taxi-sim-comparison li+li{margin-top:10px}
+.taxi-sim-external .taxi-sim-table-tools,.taxi-sim-external .taxi-sim-result-heading{flex-wrap:wrap}
+.fleet-sim-offer-line{animation:fleet-sim-direction 1.2s linear 8}
+@keyframes fleet-sim-direction{to{stroke-dashoffset:-24}}
+.fleet-simulation-drawer{animation:fleet-sim-panel-in .22s cubic-bezier(.16,1,.3,1)}
+@keyframes fleet-sim-panel-in{from{clip-path:inset(0 0 10% 0)}to{clip-path:inset(0)}}
+@media(prefers-reduced-motion:reduce){.fleet-sim-offer-line,.fleet-simulation-drawer{animation:none}}
+@media(max-width:639px){.fleet-simulation-drawer.taxi-admin{top:auto;bottom:0;right:0;width:100%;max-height:58%;border-radius:14px 14px 0 0;padding:14px}.taxi-sim-external .taxi-sim-header h2{font-size:18px}}
+@keyframes taxi-sim-reveal{from{opacity:.7;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
+@keyframes taxi-sim-pulse{50%{opacity:.4}}
+@media(max-width:1050px){.taxi-sim-workspace{grid-template-columns:minmax(0,1.3fr) minmax(290px,1fr);gap:16px}.taxi-sim-editor{padding:18px}.taxi-sim-map{height:430px}.taxi-sim-points{flex-wrap:wrap;gap:12px}.taxi-sim-points>svg{display:none}.taxi-sim-points>div{flex-basis:100%}}
+@media(max-width:780px){.taxi-sim-workspace{grid-template-columns:1fr}.taxi-sim-map{height:360px}.taxi-sim-header{flex-direction:column;gap:16px}.taxi-sim-header .taxi-primary{width:100%;justify-content:center}.taxi-sim-editor-empty{padding-block:6px}.taxi-sim-points{display:grid;grid-template-columns:1fr 1fr}.taxi-sim-result-heading{align-items:flex-start;flex-direction:column;gap:12px}.taxi-sim-fare{text-align:left}.taxi-sim-table-tools{align-items:stretch;flex-direction:column;gap:12px}.taxi-sim-search{max-width:none}.taxi-sim-comparison>div{padding:18px 15px}.taxi-sim-comparison ol{flex-direction:column;gap:9px}.taxi-sim-map-hint{font-size:13px;left:10px;right:10px;top:10px}.taxi-sim-map-tools{gap:4px;padding:9px}.taxi-sim-map-tools button{padding-inline:9px}.taxi-sim-rounds li{flex-direction:column;gap:6px}.taxi-sim-safety{line-height:1.65}}
+@media(prefers-reduced-motion:reduce){.taxi-sim-results,.taxi-sim-loading-bar{animation:none}}
