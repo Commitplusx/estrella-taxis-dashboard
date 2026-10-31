@@ -2,14 +2,14 @@ import ts from 'typescript';
 import {readFileSync,readdirSync,statSync}from'node:fs';
 import {resolve,relative}from'node:path';
 const root=resolve(import.meta.dirname,'../..'),taxi=resolve(root,'estrella-taxis-backend/supabase/functions/_shared/bot/taxis');
-const names=['conversationTools.ts','trace.ts','stateMachine.ts','adminContracts.ts','contracts.ts','policy.ts','coordinator.ts','interpreter.ts','services.ts','h3.ts','transport.ts','engine.ts','runtime.ts','prompt.ts','tools.ts'];
+const names=['messageBudget.ts','conversationTools.ts','trace.ts','stateMachine.ts','adminContracts.ts','contracts.ts','policy.ts','coordinator.ts','interpreter.ts','services.ts','h3.ts','transport.ts','engine.ts','runtime.ts','prompt.ts','tools.ts'];
 const files=[...names.map((n)=>resolve(taxi,n)),resolve(root,'tests/taxi-bot-core.test.ts'),resolve(root,'tests/taxi-bot-database.test.ts'),resolve(root,'tests/taxi-bot-services.test.ts'),resolve(root,'tests/taxi-bot-ambiguities.test.ts'),resolve(root,'tests/taxi-bot-h3.test.ts'),resolve(root,'tests/fixtures/taxi-intents.ts'),resolve(root,'estrella-taxis-backend/scripts/run-taxi-worker.ts'),resolve(root,'estrella-taxis-backend/scripts/evaluate-taxi-intents.ts')];
 files.push(...['tests/taxi-admin.test.ts','src/lib/taxiAdminClient.ts','src/lib/taxiAdminPreview.ts','src/pages/TaxiBotAdminPage.tsx','src/components/TaxiChannelForm.tsx','src/components/TaxiZoneMap.tsx','estrella-taxis-backend/supabase/functions/taxi-bot-admin/handler.ts','estrella-taxis-backend/supabase/functions/taxi-bot-admin/index.ts'].map((file)=>resolve(root,file)));
 files.push(...['tests/taxi-bot-trace.test.ts','tests/taxi-bot-quality.test.ts','tests/taxi-bot-state-matrix.test.ts','estrella-taxis-backend/supabase/functions/taxi-bot-admin/quality.ts'].map((file)=>resolve(root,file)));
 files.push(...['src/lib/taxiQualityClient.ts','src/components/TaxiQualityPanel.tsx','estrella-taxis-backend/supabase/functions/_shared/bot/taxis/qualityContracts.ts'].map((file)=>resolve(root,file)));
 files.push(...['src/components/TaxiNeighborhoodsPanel.tsx','tests/taxi-neighborhoods.test.ts','estrella-taxis-backend/supabase/functions/taxi-bot-admin/neighborhoods.ts','estrella-taxis-backend/supabase/functions/_shared/bot/taxis/neighborhoods.ts','estrella-taxis-backend/supabase/functions/_shared/bot/taxis/neighborhoodContracts.ts'].map(f=>resolve(root,f)));
 const failures:string[]=[];
-files.push(resolve(root,'tests/taxi-reset.test.ts'));
+files.push(resolve(root,'tests/taxi-reset.test.ts'),resolve(root,'tests/taxi-message-budget.test.ts'));
 files.push(...['tests/taxi-gps-booking.test.ts','tests/taxi-contextual-replies.test.ts','tests/taxi-language-hardening.test.ts','tests/fixtures/taxi-contextual-intents.ts','tests/fixtures/taxi-language-hardening.ts','estrella-taxis-backend/supabase/functions/_shared/bot/taxis/conversationReply.ts'].map(file=>resolve(root,file)));
 files.push(resolve(root,'tests/taxi-native-location.test.ts'));
 files.push(resolve(root,'tests/taxi-natural-flow.test.ts'));
@@ -33,6 +33,7 @@ files.push(...['tests/taxi-owner.test.ts','src/components/TaxiOwnerPanel.tsx','s
 files.push(...['tests/taxi-dispatch.test.ts','src/components/TaxiDispatchPanel.tsx','src/lib/taxiDispatchClient.ts','estrella-taxis-backend/supabase/functions/taxi-bot-admin/dispatch.ts','estrella-taxis-backend/supabase/functions/_shared/bot/taxis/dispatchContracts.ts'].map(file=>resolve(root,file)));
 files.push(resolve(root,'estrella-taxis-backend/scripts/evaluate-taxi-compound-turns.ts'));
 files.push(resolve(root,'tests/fixtures/taxi-prompt-regressions.ts'));
+files.push(...['src/lib/taxiAppAccess.ts','src/App.tsx','src/components/Sidebar.tsx','src/components/CommandModal.tsx'].map(file=>resolve(root,file)));
 files.push(...['estrella-taxis-backend/supabase/functions/_shared/bot/taxis/contactAdmin.ts','estrella-taxis-backend/supabase/functions/_shared/bot/taxis/driverAdmin.ts','estrella-taxis-backend/supabase/functions/_shared/bot/taxis/channelPhone.ts','estrella-taxis-backend/supabase/functions/taxi-bot-admin/drivers.ts','src/components/TaxiDriversPanel.tsx','src/components/TaxiPhoneField.tsx','tests/taxi-driver-admin.test.ts'].map((file)=>resolve(root,file)));
 files.push(...['tests/stellar-separation.test.ts','tests/stellar-package.test.ts','tests/stellar-config.test.ts','tests/stellar-entrypoints.test.ts','src/lib/stellarBackendConfig.ts','src/lib/supabase.ts','estrella-taxis-backend/scripts/package-stellar-functions.ts','estrella-taxis-backend/supabase/functions/ycloud-webhook/index.ts','estrella-taxis-backend/supabase/functions/process-queue/index.ts'].map((file)=>resolve(root,file)));
 for(const file of files){

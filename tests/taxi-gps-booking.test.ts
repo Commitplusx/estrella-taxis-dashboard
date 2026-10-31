@@ -77,7 +77,7 @@ Deno.test('the natural reply request sends the worked conversation examples with
  const sample=TAXI_REPLY_EXAMPLES[0];let sent=false;
  const result=await naturalTaxiQuestion(async(_url,init)=>{
   const body:unknown=JSON.parse(String(init?.body));assert(record(body)&&Array.isArray(body.messages));
-  const system:unknown=body.messages[0];assert(record(system)&&typeof system.content==='string');assert(system.content.includes(sample.current));assert(TAXI_QUESTION_PROMPT.includes('Ejemplo 1 (destination-before-pickup)'));
+  const system:unknown=body.messages[0];assert(record(system)&&typeof system.content==='string');assert(system.content.includes(sample.current));assert(TAXI_QUESTION_PROMPT.includes('('+sample.id+')'));assert(system.content.includes('missingDetails'));
   const last:unknown=body.messages.at(-1);assert(record(last)&&typeof last.content==='string');const payload:unknown=JSON.parse(last.content);assert(record(payload));assertEquals(payload.current,sample.current);sent=true;
   return new Response(JSON.stringify({choices:[{finish_reason:'stop',message:{content:JSON.stringify({question:sample.response})}}]}),{status:200,headers:{'Content-Type':'application/json'}});
  },'fixture-key','fixture-model','conversation',sample.current,undefined,sample.context);

@@ -1,7 +1,18 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import {taxiAppAccess,type TaxiAppRole}from'../src/lib/taxiAppAccess.ts';
 import { bindTaxiAccount, restoreTrackingUser } from '../src/lib/taxiSession.ts';
 import type { AdminContext } from '../estrella-taxis-backend/supabase/functions/_shared/bot/taxis/adminContracts.ts';
+
+for(const role of ['owner','owner_driver','driver']satisfies TaxiAppRole[])test('application access stays scoped for '+role,()=>{
+ const access=taxiAppAccess(role);assert.equal(access.personal,true);assert.equal(access.ownsTaxi,role!=='driver');
+ for(const route of ['/map','/devices','/drivers'])assert.equal(access.canOpen(route),true);
+ for(const route of ['/dashboard','/reports','/replay','/notifications'])assert.equal(access.canOpen(route),role!=='driver');
+ for(const route of ['/users','/groups','/packages','/bot','/taxi-bot','/zonas-tarifas','/geofences','/maintenance','/settings'])assert.equal(access.canOpen(route),false);
+ assert.equal(access.peopleLabel,role==='driver'?'Mi taxi y turno':'Mi taxi y choferes');assert.equal(access.home,'/drivers');
+});
+test('an unverified application role exposes no route',()=>{const access=taxiAppAccess(null);for(const path of ['/map','/drivers','/users'])assert.equal(access.canOpen(path),false);assert.equal(access.roleLabel,'Sin acceso');});
+for(const role of ['superadmin','admin_empresa','operador']satisfies TaxiAppRole[])test('base role retains its existing route controls: '+role,()=>{assert.equal(taxiAppAccess(role).personal,false);assert.equal(taxiAppAccess(role).canOpen('/map'),true);});
 
 function fixture(actorId: number) {
   let saved: string | null = 'account-B-credential';

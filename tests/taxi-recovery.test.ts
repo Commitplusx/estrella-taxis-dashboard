@@ -92,12 +92,13 @@ for(const cause of ['assent','failed_interpretation','old_button'] as const)Deno
  let quotes=0,submissions=0;
  const services:TaxiServices={interpret:async()=>{throw Error('Declared interpreter outage');},resolve:async()=>{throw Error('No new endpoint');},quote:async()=>{quotes++;return 5500;},candidates:async()=>{throw Error('No current consent');}};
  const input=cause==='old_button'?{...message(''),type:'button' as const,button:'txc_'+token}:message(cause==='assent'?'Sí':'No entendí');
- const result=await coordinateTaxi([input],s,channel,services,now);assertEquals(result.action,'draft');assert(result.draft.confirmation);assertEquals(quotes,1);assertEquals(result.messages.length,2);
- assert(result.messages[0].text.includes(taxiSummary(result.draft)));assert(result.messages[0].text.includes(s.draft.pickupText??''));assert(result.messages[0].text.includes(s.draft.destinationText??''));assertEquals(result.messages[0].buttons,undefined);
- assert(result.messages[1].text.length<=1024);assert(result.messages[1].buttons?.some(button=>button.id==='txc_'+result.draft.confirmation));assert(!/\$|MXN|pesos/.test(result.messages.map(item=>item.text).join('\n')));
+ const result=await coordinateTaxi([input],s,channel,services,now);assertEquals(result.action,'draft');assert(result.draft.confirmation);assertEquals(quotes,1);assertEquals(result.messages.length,1);
+ assertEquals(result.draft.pickupText,s.draft.pickupText);assertEquals(result.draft.destinationText,s.draft.destinationText);
+ assert(result.messages[0].text.includes(taxiSummary(result.draft)));assert(result.messages[0].text.includes('…'));
+ assert(result.messages[0].text.length<=1024);assert(result.messages[0].buttons?.some(button=>button.id==='txc_'+result.draft.confirmation));assert(!/\$|MXN|pesos/.test(result.messages.map(item=>item.text).join('\n')));
  for(const outgoing of result.messages){const persisted=parseOutgoing({id:crypto.randomUUID(),lease:crypto.randomUUID(),tenant_id:channel.tenantId,waba:channel.waba,destination:input.from,body:outgoing});
   const outcome=await sendTaxiMessage(persisted,'fixture-key',async(_url,init)=>{submissions++;const body:unknown=JSON.parse(String(init?.body));assert(body!==null&&typeof body==='object'&&'type' in body);return Response.json({id:'synthetic-provider-ack'});});assertEquals(outcome.state,'accepted');}
- assertEquals(submissions,2);
+ assertEquals(submissions,1);
 });
 for(const length of [1024,1025,4096])Deno.test(`provider boundary enforces an interactive body of ${length} characters without retry`,async()=>{
  const raw={id:crypto.randomUUID(),lease:crypto.randomUUID(),tenant_id:channel.tenantId,waba:channel.waba,destination:'+529630000002',body:{text:'x'.repeat(length),buttons:[{id:'txc_'+token,title:'Confirmar viaje'}]}};

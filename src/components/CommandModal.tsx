@@ -4,6 +4,7 @@ import { X, ShieldAlert, ZapOff, Zap, MapPin, Code } from 'lucide-react';
 import { ConfirmDialog } from './ConfirmDialog';
 import toast from 'react-hot-toast';
 import { useAuth } from '../context/AuthContext';
+import {taxiAppAccess} from '../lib/taxiAppAccess';
 
 const COMMANDS = [
   { value: 'engineStop', label: 'Apagar Motor (Corte de corriente)', icon: <ZapOff size={16} /> },
@@ -13,7 +14,7 @@ const COMMANDS = [
 ];
 
 export function CommandModal({ device, onClose }: { device: TraccarDevice; onClose: () => void; }) {
-  const { user } = useAuth();
+  const { user,userRole } = useAuth();
   const [type, setType] = useState('engineStop');
   const [customData, setCustomData] = useState('');
   const [sending, setSending] = useState(false);
@@ -21,10 +22,11 @@ export function CommandModal({ device, onClose }: { device: TraccarDevice; onClo
   const [sendError, setSendError] = useState<string | null>(null);
 
   const executeSend = async () => {
+    if(taxiAppAccess(userRole).personal){setSendError('Tu acceso permite consultar la unidad. Los comandos los administra la base.');return;}
     setSending(true);
     setSendError(null);
     try {
-      const payload: any = { deviceId: device.id, type };
+      const payload:{deviceId:number;type:string;attributes?:{data:string}} = { deviceId: device.id, type };
       if (type === 'custom') payload.attributes = { data: customData };
       
       const res = await fetch(`${BASE_URL}/commands/send`, {
@@ -58,8 +60,8 @@ export function CommandModal({ device, onClose }: { device: TraccarDevice; onClo
 
       onClose();
       
-    } catch (e: any) {
-      setSendError(e.message || 'Error desconocido al enviar el comando.');
+    } catch (e: unknown) {
+      setSendError(e instanceof Error ? e.message : 'Error desconocido al enviar el comando.');
     } finally {
       setSending(false);
     }

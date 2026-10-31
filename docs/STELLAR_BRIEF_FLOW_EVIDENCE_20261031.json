@@ -1,0 +1,439 @@
+{
+  "date": "2026-10-31",
+  "scope": "Pompeyo taxi customer brevity and existing owner/driver access",
+  "normalCustomerRequestBudget": 5,
+  "extraReplies": "questions, clarifications and changes",
+  "driverOffersCountSeparately": true,
+  "backend": {
+    "project": "izrsxygazsalfhpaualj",
+    "verified": [
+      {
+        "name": "process-queue",
+        "runtimeFilesMatched": 27,
+        "typeOnlyOmitted": [
+          "_shared/tracking/fleetTypes.ts"
+        ]
+      },
+      {
+        "name": "ycloud-webhook",
+        "runtimeFilesMatched": 27,
+        "typeOnlyOmitted": [
+          "_shared/tracking/fleetTypes.ts"
+        ]
+      }
+    ],
+    "evaluatedContractsMatch": true,
+    "evaluatorDeleted": true,
+    "functions": [
+      {
+        "name": "ycloud-webhook",
+        "status": "ACTIVE",
+        "version": 39
+      },
+      {
+        "name": "process-queue",
+        "status": "ACTIVE",
+        "version": 39
+      },
+      {
+        "name": "taxi-bot-admin",
+        "status": "ACTIVE",
+        "version": 33
+      }
+    ],
+    "security": {
+      "attentionBudget": true,
+      "draftCloseGuard": true,
+      "private": true,
+      "receiptGuard": true,
+      "rls": true
+    },
+    "healthBefore": [
+      {
+        "name": "process-queue",
+        "options": 200
+      },
+      {
+        "name": "ycloud-webhook",
+        "options": 200
+      }
+    ],
+    "healthAfter": [
+      {
+        "name": "process-queue",
+        "options": 200
+      },
+      {
+        "name": "ycloud-webhook",
+        "options": 200
+      }
+    ],
+    "migrations": [
+      {
+        "name": "20261031230000_taxi_driver_acceptance_receipts.sql",
+        "sha256": "9f216699a81187388d2b6f0a030f77e34cb73cf3933a0b0bbfe204082e94a4e3"
+      },
+      {
+        "name": "20261031233000_taxi_brief_customer_flow.sql",
+        "sha256": "457786c07d191e4da9a25e63366244e7b98558d30605576a2e81bf20c39ce51a"
+      },
+      {
+        "name": "20261031234000_taxi_brief_recovery_edges.sql",
+        "sha256": "9991621a70f7d505e5f3fee77c47b43182714dcdfb60dd7bebd0e22c0676064b"
+      }
+    ],
+    "runtimeManifest": [
+      {
+        "name": "process-queue",
+        "files": [
+          {
+            "name": "process-queue/index.ts",
+            "sha256": "e318256e7f65af22956aa686bc26ac2548cf7e4ea8be2fb7d3cfb7ae3edcbbb4"
+          },
+          {
+            "name": "_shared/bot/taxis/runtime.ts",
+            "sha256": "9e34e12c293f165be46ba81ed6fe37a68817c713a6576d3361a45787b2a3ba5c"
+          },
+          {
+            "name": "_shared/tracking/http.ts",
+            "sha256": "85764359443be35e8dfbe22dd3e535564bf969444f12292b4e9eff568afe9075"
+          },
+          {
+            "name": "_shared/tracking/contracts.ts",
+            "sha256": "87955c6254674f049d9046d48b1be8f5c4d6226f454b334fa09abf870e2f750c"
+          },
+          {
+            "name": "_shared/tracking/store.ts",
+            "sha256": "0f7fc549903a0439751d37d1e6be96a80a9203858297e7445f14892b2072c069"
+          },
+          {
+            "name": "_shared/tracking/packages.ts",
+            "sha256": "0104cedfa30982a0b38da8e5a75a1120e3311f5ee7e197cf7a8a4f7595e55979"
+          },
+          {
+            "name": "_shared/tracking/companies.ts",
+            "sha256": "e2fffb9d345c2c70c40ee92900cb5fa8d76922d9574861a135060c820d9f5853"
+          },
+          {
+            "name": "_shared/bot/taxis/engine.ts",
+            "sha256": "cd330a1216cea9d7025853a1a663de6aba2efb347d0f99afde622db1f49a4afc"
+          },
+          {
+            "name": "_shared/bot/taxis/trace.ts",
+            "sha256": "3938edb3f093ccba7457d37e95846f4508eb1d60d741f9e350115e996e18c0a6"
+          },
+          {
+            "name": "_shared/bot/taxis/contracts.ts",
+            "sha256": "304f05dd7f9f6090d0a76f36ce66f01bbf101efe9740849fa1d8ad41b8830cdc"
+          },
+          {
+            "name": "_shared/bot/taxis/h3.ts",
+            "sha256": "b85bd35b94323634e1a9a74e2c3fe8ecac941a290e2eb8acf2fc91b9a8517e68"
+          },
+          {
+            "name": "_shared/bot/taxis/neighborhoodContracts.ts",
+            "sha256": "be92dcab9565bd1d8708fc45ee81424d26a28eee367f6106a559c5ee2ca77d12"
+          },
+          {
+            "name": "_shared/bot/taxis/coordinator.ts",
+            "sha256": "6e1bef2d77ca02975e847404c553fad10b0614050d254171a9fb6a8154f06d60"
+          },
+          {
+            "name": "_shared/bot/taxis/stateMachine.ts",
+            "sha256": "41a0a60f59cc375d3a8c01b8a5a184cbf7b79a8b8d8b21e29b2d39081ce20364"
+          },
+          {
+            "name": "_shared/bot/taxis/policy.ts",
+            "sha256": "7e05a4ee8a4f165b705ad1023c753584b67d289bc3253b3765be1816311a53ee"
+          },
+          {
+            "name": "_shared/algorithms/headingMatcher.ts",
+            "sha256": "9cd8c8770886e78a0f32687bed3ccdbd883bf61a198a868280c1888eb8db8ed2"
+          },
+          {
+            "name": "_shared/tracking/fleetTypes.ts",
+            "sha256": "516467f5ce77487e45362a1be606d367b31ce23b79199e433034fe730e00da8d"
+          },
+          {
+            "name": "_shared/bot/taxis/neighborhoods.ts",
+            "sha256": "daef9445359cdc779f361d17cf1ddcbb818bae532c8e437d432fb5248a95a5a0"
+          },
+          {
+            "name": "_shared/bot/taxis/conversationReply.ts",
+            "sha256": "459cad763216f7b17978bf28846adc46999f532d2e3e9a61a6fbf3d807e1da40"
+          },
+          {
+            "name": "_shared/bot/taxis/messageBudget.ts",
+            "sha256": "8c14c80def4bc6d8ca39ce21e5db28f7ac675addc837fcfe8b34c331d1e3d195"
+          },
+          {
+            "name": "_shared/bot/taxis/interpreter.ts",
+            "sha256": "e4837430575cd764ccd52b97df18857db967bf263c98ea0fc43d69357cb5d464"
+          },
+          {
+            "name": "_shared/bot/taxis/conversationTools.ts",
+            "sha256": "d9c83adab42195500e26bfa39f30479f55c87a5269ed6f7037df29e5bd86fd0e"
+          },
+          {
+            "name": "_shared/bot/taxis/transport.ts",
+            "sha256": "3736d49b46c86900a527e7a7661487b65625095a9b0b790d52e3ca2955858a18"
+          },
+          {
+            "name": "_shared/bot/taxis/dispatchContracts.ts",
+            "sha256": "dbea89c59dfb11ad2492a0c94d9d3f95ba7fb9200044fbe3bc99340f659ce64d"
+          },
+          {
+            "name": "_shared/bot/taxis/services.ts",
+            "sha256": "2b7406801e40c67aff14363d81cc645e78309f0ed638a2799d6ca219ad77801b"
+          },
+          {
+            "name": "_shared/tracking/auth.ts",
+            "sha256": "390bf98c7b016e5b7307b8f7669362660c37db79923be273906584ebe856e7fc"
+          },
+          {
+            "name": "_shared/bot/taxis/addressGeocoder.ts",
+            "sha256": "2ec0aaf1b6cbab4ff9fff814e941d674e0e4e58da72f854a4def7583e9934201"
+          },
+          {
+            "name": "process-queue/deno.json",
+            "sha256": "7bd99c63c2313bd63093ce85e3cf5dc0077e2b702ef60b7f66d1019f520a8258"
+          }
+        ],
+        "changed": [
+          "_shared/bot/taxis/contracts.ts",
+          "_shared/bot/taxis/coordinator.ts",
+          "_shared/bot/taxis/stateMachine.ts",
+          "_shared/bot/taxis/conversationReply.ts",
+          "_shared/bot/taxis/messageBudget.ts",
+          "_shared/bot/taxis/interpreter.ts"
+        ],
+        "typeOnlyOmittedBefore": [
+          "_shared/tracking/fleetTypes.ts"
+        ]
+      },
+      {
+        "name": "ycloud-webhook",
+        "files": [
+          {
+            "name": "ycloud-webhook/index.ts",
+            "sha256": "8264deec4e824537a3f3915dd56b2d2b7fd6e6e495de62eaddb6e40e5fe627af"
+          },
+          {
+            "name": "_shared/bot/taxis/runtime.ts",
+            "sha256": "9e34e12c293f165be46ba81ed6fe37a68817c713a6576d3361a45787b2a3ba5c"
+          },
+          {
+            "name": "_shared/tracking/http.ts",
+            "sha256": "85764359443be35e8dfbe22dd3e535564bf969444f12292b4e9eff568afe9075"
+          },
+          {
+            "name": "_shared/tracking/contracts.ts",
+            "sha256": "87955c6254674f049d9046d48b1be8f5c4d6226f454b334fa09abf870e2f750c"
+          },
+          {
+            "name": "_shared/tracking/store.ts",
+            "sha256": "0f7fc549903a0439751d37d1e6be96a80a9203858297e7445f14892b2072c069"
+          },
+          {
+            "name": "_shared/tracking/packages.ts",
+            "sha256": "0104cedfa30982a0b38da8e5a75a1120e3311f5ee7e197cf7a8a4f7595e55979"
+          },
+          {
+            "name": "_shared/tracking/companies.ts",
+            "sha256": "e2fffb9d345c2c70c40ee92900cb5fa8d76922d9574861a135060c820d9f5853"
+          },
+          {
+            "name": "_shared/bot/taxis/engine.ts",
+            "sha256": "cd330a1216cea9d7025853a1a663de6aba2efb347d0f99afde622db1f49a4afc"
+          },
+          {
+            "name": "_shared/bot/taxis/trace.ts",
+            "sha256": "3938edb3f093ccba7457d37e95846f4508eb1d60d741f9e350115e996e18c0a6"
+          },
+          {
+            "name": "_shared/bot/taxis/contracts.ts",
+            "sha256": "304f05dd7f9f6090d0a76f36ce66f01bbf101efe9740849fa1d8ad41b8830cdc"
+          },
+          {
+            "name": "_shared/bot/taxis/h3.ts",
+            "sha256": "b85bd35b94323634e1a9a74e2c3fe8ecac941a290e2eb8acf2fc91b9a8517e68"
+          },
+          {
+            "name": "_shared/bot/taxis/neighborhoodContracts.ts",
+            "sha256": "be92dcab9565bd1d8708fc45ee81424d26a28eee367f6106a559c5ee2ca77d12"
+          },
+          {
+            "name": "_shared/bot/taxis/coordinator.ts",
+            "sha256": "6e1bef2d77ca02975e847404c553fad10b0614050d254171a9fb6a8154f06d60"
+          },
+          {
+            "name": "_shared/bot/taxis/stateMachine.ts",
+            "sha256": "41a0a60f59cc375d3a8c01b8a5a184cbf7b79a8b8d8b21e29b2d39081ce20364"
+          },
+          {
+            "name": "_shared/bot/taxis/policy.ts",
+            "sha256": "7e05a4ee8a4f165b705ad1023c753584b67d289bc3253b3765be1816311a53ee"
+          },
+          {
+            "name": "_shared/algorithms/headingMatcher.ts",
+            "sha256": "9cd8c8770886e78a0f32687bed3ccdbd883bf61a198a868280c1888eb8db8ed2"
+          },
+          {
+            "name": "_shared/tracking/fleetTypes.ts",
+            "sha256": "516467f5ce77487e45362a1be606d367b31ce23b79199e433034fe730e00da8d"
+          },
+          {
+            "name": "_shared/bot/taxis/neighborhoods.ts",
+            "sha256": "daef9445359cdc779f361d17cf1ddcbb818bae532c8e437d432fb5248a95a5a0"
+          },
+          {
+            "name": "_shared/bot/taxis/conversationReply.ts",
+            "sha256": "459cad763216f7b17978bf28846adc46999f532d2e3e9a61a6fbf3d807e1da40"
+          },
+          {
+            "name": "_shared/bot/taxis/messageBudget.ts",
+            "sha256": "8c14c80def4bc6d8ca39ce21e5db28f7ac675addc837fcfe8b34c331d1e3d195"
+          },
+          {
+            "name": "_shared/bot/taxis/interpreter.ts",
+            "sha256": "e4837430575cd764ccd52b97df18857db967bf263c98ea0fc43d69357cb5d464"
+          },
+          {
+            "name": "_shared/bot/taxis/conversationTools.ts",
+            "sha256": "d9c83adab42195500e26bfa39f30479f55c87a5269ed6f7037df29e5bd86fd0e"
+          },
+          {
+            "name": "_shared/bot/taxis/transport.ts",
+            "sha256": "3736d49b46c86900a527e7a7661487b65625095a9b0b790d52e3ca2955858a18"
+          },
+          {
+            "name": "_shared/bot/taxis/dispatchContracts.ts",
+            "sha256": "dbea89c59dfb11ad2492a0c94d9d3f95ba7fb9200044fbe3bc99340f659ce64d"
+          },
+          {
+            "name": "_shared/bot/taxis/services.ts",
+            "sha256": "2b7406801e40c67aff14363d81cc645e78309f0ed638a2799d6ca219ad77801b"
+          },
+          {
+            "name": "_shared/tracking/auth.ts",
+            "sha256": "390bf98c7b016e5b7307b8f7669362660c37db79923be273906584ebe856e7fc"
+          },
+          {
+            "name": "_shared/bot/taxis/addressGeocoder.ts",
+            "sha256": "2ec0aaf1b6cbab4ff9fff814e941d674e0e4e58da72f854a4def7583e9934201"
+          },
+          {
+            "name": "ycloud-webhook/deno.json",
+            "sha256": "111b8af3bd8fefd639c55ca44bb259bf58f834aee48e11b3bc12fbe2d8099c5b"
+          }
+        ],
+        "changed": [
+          "_shared/bot/taxis/contracts.ts",
+          "_shared/bot/taxis/coordinator.ts",
+          "_shared/bot/taxis/stateMachine.ts",
+          "_shared/bot/taxis/conversationReply.ts",
+          "_shared/bot/taxis/messageBudget.ts",
+          "_shared/bot/taxis/interpreter.ts"
+        ],
+        "typeOnlyOmittedBefore": [
+          "_shared/tracking/fleetTypes.ts"
+        ]
+      }
+    ]
+  },
+  "tests": {
+    "deno": 22560,
+    "nodeSql": 183,
+    "fullSuitePassed": true,
+    "finalAttentionSqlAdjustment": {
+      "targetedCases": 26,
+      "passed": 26,
+      "note": "Repeated budget and dispatch cases after the final attention-notice classification change."
+    },
+    "qualityFiles": 116,
+    "strictEntrypointAndPanelTypes": true,
+    "logs": {
+      "fullSuiteSha256": "8008305440691dcd7915985239cdfe36a1573fbb30ff8eec83f7552460059512",
+      "finalSqlTargetsSha256": "1076dc9ffa2491f85d653972b89cdda388384e579291a8af6e07ab1ea9994b91"
+    },
+    "modelEvaluations": [
+      {
+        "suite": "intents",
+        "model": "deepseek-chat",
+        "cases": 24,
+        "passed": 24,
+        "contractHash": "e9d425fda472fe684d9f0394519e25f989504bfc4f8626df3810acb1eccdb2b1",
+        "fixtureHash": "4cd134ba658fef01ae5acea714ed4a4e3a80a064b4974720413ece1ea254afc0",
+        "reportSha256": "d784fd0f6371bf63515f45ded8dc519620aeeb029d56e70f7c58970a9390f4d9",
+        "synthetic": true,
+        "blindAccuracyMeasured": false
+      },
+      {
+        "suite": "replies",
+        "model": "deepseek-chat",
+        "cases": 28,
+        "passed": 28,
+        "contractHash": "95d3cd88c221ac0a4d274ffcd776db3dbdd19daf76a0d806baf753dfab441718",
+        "fixtureHash": "56bfe5b0182448e2af3ed1c8beab6761c5437e4fc4133d7c927675b00a7f1f7e",
+        "reportSha256": "a340cb16246e17db78e6b718569c4c06ea2e8ac363a0c0f0e3b8ce81c3c055fa",
+        "synthetic": true,
+        "blindAccuracyMeasured": false
+      }
+    ],
+    "physicalWhatsAppTested": false
+  },
+  "frontend": {
+    "publicUrl": "https://stellar.estrella-eats.mx",
+    "isolatedBuild": {
+      "entry": "/assets/index-Dsmi_sbe.js",
+      "sha256": "cdbe95495de468d7cfe9c560ab555d3e6930ec256c0d971f267b69121cac2019",
+      "ownerLabel": true,
+      "driverLabel": true
+    },
+    "sourceSelection": "Reviewed staged changes, excluding unrelated local Promotions changes",
+    "publication": "GitHub main with Vercel deployment"
+  },
+  "flutter": {
+    "compiled": false,
+    "apkGenerated": false,
+    "physicalDeviceTested": false,
+    "analyzedFiles": 7,
+    "errors": 0,
+    "warnings": 1,
+    "information": 77,
+    "sourceHashes": [
+      {
+        "path": "lib/screens/main_screen.dart",
+        "sha256": "2c2e0b7a0d3e60d293083204b628c86caf14fb392bc19811a13871464f9fe028"
+      },
+      {
+        "path": "lib/screens/profile_screen.dart",
+        "sha256": "6c08dd727662fbcd920b2c73103b42bf947eaf0a2a52b5401bbf02cbe75c125b"
+      },
+      {
+        "path": "lib/screens/devices_screen.dart",
+        "sha256": "a9da6161655a1c02fd347bd605b405640cbf96c1dfaff65932d194caf86bb06b"
+      },
+      {
+        "path": "lib/screens/map_screen.dart",
+        "sha256": "6e2c5f3c243a91eb954bd9427d0f4c2f2bb65610fd0141f97f13697b06acb2af"
+      },
+      {
+        "path": "lib/services/traccar_service.dart",
+        "sha256": "377bf87c739f91d3319c760df88fab39511fbb07e29d784971ab66acbc925a25"
+      },
+      {
+        "path": "lib/widgets/command_modal.dart",
+        "sha256": "6a89753e798db9330e28370b6c63d12cfcf6693525bd89ee769b3bf695dc0cef"
+      },
+      {
+        "path": "lib/services/taxi_app_access.dart",
+        "sha256": "91aacfcd1c2a1194d82bb2e5f5bcb9e12ed2cadd1f82ee8b2f6d7200fa577930"
+      }
+    ],
+    "reviewPatch": "patches/STELLAR_FLUTTER_ROLES_20261031.patch",
+    "patchSha256": "a689acf5613f355ebb4d068c0298277088357b0601e76ef0c76f623bed08a211",
+    "patchAppliesToFormattedPriorSources": true
+  },
+  "productionContactsShiftsAndAuthorizedCustomersChangedByTests": false
+}

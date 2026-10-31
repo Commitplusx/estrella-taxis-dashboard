@@ -20,7 +20,7 @@ export interface Draft {
   destinationDeferred?:boolean;destinationPrompt?:string|null;
 }
 export interface Trip {id:string;state:'buscando_conductor'|'en_camino'|'completado'|'cancelado'|'cancelado_timeout';taxiName:string|null;dispatchAttention?:boolean}
-export interface TaxiSession {revision:number;mode:'bot'|'human';draft:Draft;active:Trip|null;history:History[]}
+export interface TaxiSession {revision:number;mode:'bot'|'human';draft:Draft;active:Trip|null;history:History[];messageBudget?:{normal:number;extra:number;closed:boolean}}
 export interface History {role:'user'|'assistant';content:string}
 export interface TaxiInbound {
   id:string;from:string;to:string;at:string;type:'text'|'button'|'location'|'unsupported';
@@ -38,6 +38,7 @@ export interface TaxiDecision {
   action:'draft'|'reply'|'reset'|'confirm'|'cancel'|'human'|'driver_accept'|'driver_reject'|'driver_finish';
   draft:Draft;confirmation:string|null;tripId:string|null;offerId:string|null;
   candidates:Candidate[];messages:TaxiMessage[];reason:string;
+  replyClass?:'normal'|'question'|'change';
 }
 export function phone(value:unknown):string|null {
   if(typeof value!=='string' || !/^\+?[0-9 ()-]{8,24}$/.test(value))return null;
@@ -83,6 +84,9 @@ export function parseStoredInbound(m:unknown,now:number):TaxiInbound {
 export function parseSession(value:unknown):TaxiSession {
   if(!record(value)||!Number.isSafeInteger(value.revision)||typeof value.revision!=='number'||value.revision<0||!['bot','human'].includes(String(value.mode))||!record(value.draft)||!Array.isArray(value.history)||value.history.length>12)throw new TrackingError(502,'invalid_taxi_session','La conversación no tiene un estado válido.');
   const d=value.draft;
+  const budget=value.messageBudget;
+  if(budget!==undefined&&(!record(budget)||!Number.isSafeInteger(budget.normal)||typeof budget.normal!=='number'||budget.normal<0||budget.normal>5||!Number.isSafeInteger(budget.extra)||typeof budget.extra!=='number'||budget.extra<0||typeof budget.closed!=='boolean'))throw new TrackingError(502,'invalid_taxi_budget','El estado de mensajes no es válido.');
+  const messageBudget=record(budget)&&typeof budget.normal==='number'&&typeof budget.extra==='number'&&typeof budget.closed==='boolean'?{normal:budget.normal,extra:budget.extra,closed:budget.closed}:undefined;
   // A previously presented summary keeps its fare agreement; empty legacy drafts start unquoted.
   const fareMode=d.fareMode??(d.confirmation!==null||d.quoteCents!==null||d.quoteH3!=null?'quoted':'unquoted');
   if(fareMode!=='quoted'&&fareMode!=='unquoted'||fareMode==='unquoted'&&(d.quoteCents!==null||d.quoteH3!=null))throw new TrackingError(502,'invalid_taxi_fare_mode','El modo de tarifa no corresponde al viaje guardado.');
@@ -117,7 +121,7 @@ export function parseSession(value:unknown):TaxiSession {
   if(d.destinationDeferred===true&&(destination||d.destinationText||destinationArea||awaitingLocation==='destination'))throw new TrackingError(502,'invalid_taxi_destination_choice','El destino pendiente no coincide con su elección.');
   if(originArea&&origin||destinationArea&&destination||originArea&&d.confirmation!==null)throw new TrackingError(502,'invalid_taxi_area','Falta aclarar una colonia del recorrido.');
   if(d.pickupText!==undefined&&d.pickupText!==null&&!text(d.pickupText,400)||d.pickupMessageId!==undefined&&d.pickupMessageId!==null&&!text(d.pickupMessageId,256)||d.destinationText!==undefined&&d.destinationText!==null&&!text(d.destinationText,400)||d.quoteBasis!==undefined&&d.quoteBasis!==null&&d.quoteBasis!=='pickup'&&d.quoteBasis!=='route')throw new TrackingError(502,'invalid_taxi_context','Los datos del recorrido no son válidos.');
-  return {revision:value.revision,mode:value.mode==='human'?'human':'bot',draft:{fareMode,name:d.name===null?null:String(d.name),origin,destination,quoteCents:d.quoteCents===null?null:Number(d.quoteCents),confirmation:d.confirmation===null?null:String(d.confirmation),expiresAt:d.expiresAt===null?null:String(d.expiresAt),awaitingLocation,pendingLocation,quoteH3,...(d.destinationDeferred!==undefined?{destinationDeferred:d.destinationDeferred===true}:{}),...(d.destinationPrompt!==undefined?{destinationPrompt:d.destinationPrompt===null?null:String(d.destinationPrompt)}:{}),...(d.originArea!==undefined?{originArea}:{}),...(d.destinationArea!==undefined?{destinationArea}:{}),...(d.pickupText!==undefined?{pickupText:d.pickupText===null?null:String(d.pickupText)}:{}),...(d.pickupMessageId!==undefined?{pickupMessageId:d.pickupMessageId===null?null:String(d.pickupMessageId)}:{}),...(d.destinationText!==undefined?{destinationText:d.destinationText===null?null:String(d.destinationText)}:{}),...(d.quoteBasis!==undefined?{quoteBasis:d.quoteBasis==='pickup'?'pickup':d.quoteBasis==='route'?'route':null}:{})},active,history};
+  return {revision:value.revision,mode:value.mode==='human'?'human':'bot',draft:{fareMode,name:d.name===null?null:String(d.name),origin,destination,quoteCents:d.quoteCents===null?null:Number(d.quoteCents),confirmation:d.confirmation===null?null:String(d.confirmation),expiresAt:d.expiresAt===null?null:String(d.expiresAt),awaitingLocation,pendingLocation,quoteH3,...(d.destinationDeferred!==undefined?{destinationDeferred:d.destinationDeferred===true}:{}),...(d.destinationPrompt!==undefined?{destinationPrompt:d.destinationPrompt===null?null:String(d.destinationPrompt)}:{}),...(d.originArea!==undefined?{originArea}:{}),...(d.destinationArea!==undefined?{destinationArea}:{}),...(d.pickupText!==undefined?{pickupText:d.pickupText===null?null:String(d.pickupText)}:{}),...(d.pickupMessageId!==undefined?{pickupMessageId:d.pickupMessageId===null?null:String(d.pickupMessageId)}:{}),...(d.destinationText!==undefined?{destinationText:d.destinationText===null?null:String(d.destinationText)}:{}),...(d.quoteBasis!==undefined?{quoteBasis:d.quoteBasis==='pickup'?'pickup':d.quoteBasis==='route'?'route':null}:{})},active,history,...(messageBudget?{messageBudget}:{})};
 }
 export function parseCandidates(raw:unknown):Candidate[] {
   if(!Array.isArray(raw)||raw.length>3)throw new TrackingError(502,'invalid_taxi_candidates','La selección de unidades no es válida.');

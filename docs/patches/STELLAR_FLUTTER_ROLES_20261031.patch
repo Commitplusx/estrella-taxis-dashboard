@@ -1,0 +1,774 @@
+diff --git a/lib/screens/main_screen.dart b/lib/screens/main_screen.dart
+index 69051ec..c3603c3 100644
+--- a/lib/screens/main_screen.dart
++++ b/lib/screens/main_screen.dart
+@@ -16,4 +16,8 @@ import '../widgets/animated_scale_button.dart';
+ import 'package:firebase_messaging/firebase_messaging.dart';
+
++import '../services/taxi_app_access.dart';
++import '../services/taxi_owner_client.dart';
++import 'taxi_owner_screen.dart';
++
+ class MainScreen extends StatefulWidget {
+   const MainScreen({super.key});
+@@ -23,5 +27,58 @@ class MainScreen extends StatefulWidget {
+ }
+
+-class _MainScreenState extends State<MainScreen> {
++class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
++  TaxiAppAccess? _access;
++  String? _accessError;
++  int _accessRequest = 0;
++  Future<void> _loadAccess() async {
++    final request = ++_accessRequest;
++    final tracking = TraccarService();
++    final cookie = tracking.trackingSession;
++    final client = TaxiOwnerClient(session: () => cookie);
++    if (mounted) {
++      setState(() {
++        _access = null;
++        _accessError = null;
++      });
++    }
++    tracking.taxiAccess = null;
++    try {
++      final user = await tracking.getUserSession();
++      if (user == null) {
++        throw const TaxiOwnerException('Inicia sesión otra vez con tu correo.');
++      }
++      final access = await TaxiAppAccess.load(
++        client,
++        administrator: user['administrator'] == true,
++      );
++      if (!mounted ||
++          request != _accessRequest ||
++          cookie != tracking.trackingSession) {
++        return;
++      }
++      tracking.taxiAccess = access;
++      setState(() {
++        _access = access;
++        if (!access.advanced && _currentIndex == 1) _currentIndex = 0;
++        _isMenuExpanded = false;
++      });
++    } catch (error) {
++      if (mounted && request == _accessRequest) {
++        setState(
++          () => _accessError = error is TaxiOwnerException
++              ? error.message
++              : 'No pudimos comprobar tu acceso. Vuelve a intentarlo.',
++        );
++      }
++    } finally {
++      client.close();
++    }
++  }
++
++  @override
++  void didChangeAppLifecycleState(AppLifecycleState state) {
++    if (state == AppLifecycleState.resumed) _loadAccess();
++  }
++
+   int _currentIndex = 0; // Default to Map (index 0)
+   bool _isMenuExpanded = false;
+@@ -33,4 +90,6 @@ class _MainScreenState extends State<MainScreen> {
+   void initState() {
+     super.initState();
++    WidgetsBinding.instance.addObserver(this);
++    _loadAccess();
+     _setupForegroundNotifications();
+     _setupWebSocketNotifications(); // Incluye actualización de nombres de dispositivo
+@@ -41,4 +100,5 @@ class _MainScreenState extends State<MainScreen> {
+   @override
+   void dispose() {
++    WidgetsBinding.instance.removeObserver(this);
+     _wsSubscription?.cancel();
+     super.dispose();
+@@ -189,5 +249,5 @@ class _MainScreenState extends State<MainScreen> {
+
+     // Si la app está abierta, también mostrar banner in-app elegante
+-    if (mounted) {
++    if (context.mounted) {
+       _showInAppBanner(type, deviceName);
+     }
+@@ -301,4 +361,38 @@ class _MainScreenState extends State<MainScreen> {
+   @override
+   Widget build(BuildContext context) {
++    if (_access == null)
++      return Scaffold(
++        body: Center(
++          child: Padding(
++            padding: const EdgeInsets.all(24),
++            child: _accessError == null
++                ? const CircularProgressIndicator()
++                : Column(
++                    mainAxisSize: MainAxisSize.min,
++                    children: [
++                      Text(_accessError!, textAlign: TextAlign.center),
++                      const SizedBox(height: 16),
++                      FilledButton(
++                        onPressed: _loadAccess,
++                        child: const Text('Comprobar acceso'),
++                      ),
++                      TextButton(
++                        onPressed: () async {
++                          await TraccarService().logout();
++                          if (mounted) {
++                            Navigator.pushNamedAndRemoveUntil(
++                              context,
++                              '/',
++                              (route) => false,
++                            );
++                          }
++                        },
++                        child: const Text('Entrar con otra cuenta'),
++                      ),
++                    ],
++                  ),
++          ),
++        ),
++      );
+     return Scaffold(
+       resizeToAvoidBottomInset: false, // Evitar lag del mapa al abrir teclado
+@@ -314,13 +408,14 @@ class _MainScreenState extends State<MainScreen> {
+
+                 // 2. Dashboard (Index 1) - Fade in sobre el mapa
+-                AnimatedOpacity(
+-                  opacity: _currentIndex == 1 ? 1.0 : 0.0,
+-                  duration: const Duration(milliseconds: 300),
+-                  curve: Curves.easeInOut,
+-                  child: IgnorePointer(
+-                    ignoring: _currentIndex != 1,
+-                    child: _screens[1],
++                if (_access!.advanced)
++                  AnimatedOpacity(
++                    opacity: _currentIndex == 1 ? 1.0 : 0.0,
++                    duration: const Duration(milliseconds: 300),
++                    curve: Curves.easeInOut,
++                    child: IgnorePointer(
++                      ignoring: _currentIndex != 1,
++                      child: _screens[1],
++                    ),
+                   ),
+-                ),
+
+                 // 3. Devices (Index 2) - Fade in sobre el mapa
+@@ -513,6 +608,8 @@ class _MainScreenState extends State<MainScreen> {
+         _buildNavItem(0, Icons.map_outlined),
+         const SizedBox(width: 4),
+-        _buildNavItem(1, Icons.bar_chart),
+-        const SizedBox(width: 4),
++        if (_access?.advanced == true) ...[
++          _buildNavItem(1, Icons.bar_chart),
++          const SizedBox(width: 4),
++        ],
+         _buildNavItem(2, Icons.directions_car_outlined),
+         const SizedBox(width: 4),
+@@ -529,41 +626,43 @@ class _MainScreenState extends State<MainScreen> {
+         _buildMenuToggleItem(isClose: true, isContextual: isContextual),
+         const SizedBox(width: 4),
+-        _buildActionItem(
+-          Icons.play_circle_outline,
+-          'Replay',
+-          () async {
+-            setState(() => _activeMenuAction = 'Replay');
+-            await Future.delayed(const Duration(milliseconds: 150));
+-            if (mounted)
+-              await Navigator.push(
+-                context,
+-                _buildSlideUpRoute(
+-                  ReplayScreen(initialDeviceId: _contextualDeviceId),
+-                ),
+-              );
+-            if (mounted) setState(() => _activeMenuAction = null);
+-          },
+-          isActive: _activeMenuAction == 'Replay',
+-          isContextual: isContextual,
+-        ),
++        if (_access?.advanced == true)
++          _buildActionItem(
++            Icons.play_circle_outline,
++            'Replay',
++            () async {
++              setState(() => _activeMenuAction = 'Replay');
++              await Future.delayed(const Duration(milliseconds: 150));
++              if (mounted)
++                await Navigator.push(
++                  context,
++                  _buildSlideUpRoute(
++                    ReplayScreen(initialDeviceId: _contextualDeviceId),
++                  ),
++                );
++              if (mounted) setState(() => _activeMenuAction = null);
++            },
++            isActive: _activeMenuAction == 'Replay',
++            isContextual: isContextual,
++          ),
+         const SizedBox(width: 4),
+-        _buildActionItem(
+-          Icons.description_outlined,
+-          'Reportes',
+-          () async {
+-            setState(() => _activeMenuAction = 'Reportes');
+-            await Future.delayed(const Duration(milliseconds: 150));
+-            if (mounted)
+-              await Navigator.push(
+-                context,
+-                _buildSlideUpRoute(
+-                  ReportsScreen(initialDeviceId: _contextualDeviceId),
+-                ),
+-              );
+-            if (mounted) setState(() => _activeMenuAction = null);
+-          },
+-          isActive: _activeMenuAction == 'Reportes',
+-          isContextual: isContextual,
+-        ),
++        if (_access?.advanced == true)
++          _buildActionItem(
++            Icons.description_outlined,
++            'Reportes',
++            () async {
++              setState(() => _activeMenuAction = 'Reportes');
++              await Future.delayed(const Duration(milliseconds: 150));
++              if (mounted)
++                await Navigator.push(
++                  context,
++                  _buildSlideUpRoute(
++                    ReportsScreen(initialDeviceId: _contextualDeviceId),
++                  ),
++                );
++              if (mounted) setState(() => _activeMenuAction = null);
++            },
++            isActive: _activeMenuAction == 'Reportes',
++            isContextual: isContextual,
++          ),
+         const SizedBox(width: 4),
+         _buildActionItem(
+@@ -583,4 +682,19 @@ class _MainScreenState extends State<MainScreen> {
+           isContextual: isContextual,
+         ),
++        if (_access?.personal == true) ...[
++          const SizedBox(width: 4),
++          _buildActionItem(
++            Icons.local_taxi_outlined,
++            _access!.taxiLabel,
++            () async {
++              await Navigator.push(
++                context,
++                _buildSlideUpRoute(const TaxiOwnerScreen()),
++              );
++              if (mounted) await _loadAccess();
++            },
++            isContextual: isContextual,
++          ),
++        ],
+       ],
+     );
+diff --git a/lib/screens/profile_screen.dart b/lib/screens/profile_screen.dart
+index c6ccaf6..a1dff16 100644
+--- a/lib/screens/profile_screen.dart
++++ b/lib/screens/profile_screen.dart
+@@ -105,4 +105,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
+     final prefs = await SharedPreferences.getInstance();
+     await prefs.setString('estrella_map_type', _mapType);
++    if (TraccarService().taxiAccess?.personal == true) {
++      if (mounted) {
++        setState(() => _savingSettings = false);
++        _showSuccess('Preferencia de mapa guardada.');
++      }
++      return;
++    }
+
+     // Evitar sobreescribir los campos de seguridad enviando parámetros internos
+@@ -177,4 +184,5 @@ class _ProfileScreenState extends State<ProfileScreen> {
+   @override
+   Widget build(BuildContext context) {
++    final access = TraccarService().taxiAccess;
+     if (_loading) {
+       return const Scaffold(
+@@ -212,90 +220,33 @@ class _ProfileScreenState extends State<ProfileScreen> {
+             const SizedBox(height: 24),
+
+-            AnimatedListItem(
+-              index: 1,
+-              child: _buildSection(
+-                title: 'ADMINISTRACIÓN',
+-                children: [
+-                  _buildListTile(
+-                    icon: Icons.map,
+-                    title: 'Geocercas (Zonas)',
+-                    subtitle: 'Configura áreas en el mapa',
+-                    trailing: const Icon(
+-                      Icons.chevron_right,
+-                      size: 20,
+-                      color: Colors.grey,
+-                    ),
+-                    onTap: () {
+-                      Navigator.push(
+-                        context,
+-                        MaterialPageRoute(
+-                          builder: (context) => const GeofencesScreen(),
+-                        ),
+-                      );
+-                    },
+-                  ),
+-                  const Divider(height: 1, indent: 56),
+-                  _buildListTile(
+-                    icon: Icons.car_repair,
+-                    title: 'Mantenimientos',
+-                    subtitle: 'Servicios de rutina',
+-                    trailing: const Icon(
+-                      Icons.chevron_right,
+-                      size: 20,
+-                      color: Colors.grey,
+-                    ),
+-                    onTap: () {
+-                      Navigator.push(
+-                        context,
+-                        MaterialPageRoute(
+-                          builder: (context) => const MaintenanceScreen(),
+-                        ),
+-                      );
+-                    },
+-                  ),
+-                  const Divider(height: 1, indent: 56),
+-                  _buildListTile(
+-                    icon: Icons.layers_outlined,
+-                    title: 'Flotillas',
+-                    subtitle: 'Agrupar vehículos',
+-                    trailing: const Icon(
+-                      Icons.chevron_right,
+-                      size: 20,
+-                      color: Colors.grey,
+-                    ),
+-                    onTap: () {
+-                      Navigator.push(
+-                        context,
+-                        MaterialPageRoute(
+-                          builder: (context) => const GroupsScreen(),
+-                        ),
+-                      );
+-                    },
+-                  ),
+-                  const Divider(height: 1, indent: 56),
+-                  _buildListTile(
+-                    icon: Icons.people_alt_outlined,
+-                    title: 'Usuarios',
+-                    subtitle: 'Administradores y clientes',
+-                    trailing: const Icon(
+-                      Icons.chevron_right,
+-                      size: 20,
+-                      color: Colors.grey,
++            if (access?.nativeAdministrator == true)
++              AnimatedListItem(
++                index: 1,
++                child: _buildSection(
++                  title: 'ADMINISTRACIÓN',
++                  children: [
++                    _buildListTile(
++                      icon: Icons.map,
++                      title: 'Geocercas (Zonas)',
++                      subtitle: 'Configura áreas en el mapa',
++                      trailing: const Icon(
++                        Icons.chevron_right,
++                        size: 20,
++                        color: Colors.grey,
++                      ),
++                      onTap: () {
++                        Navigator.push(
++                          context,
++                          MaterialPageRoute(
++                            builder: (context) => const GeofencesScreen(),
++                          ),
++                        );
++                      },
+                     ),
+-                    onTap: () {
+-                      Navigator.push(
+-                        context,
+-                        MaterialPageRoute(
+-                          builder: (context) => const UsersScreen(),
+-                        ),
+-                      );
+-                    },
+-                  ),
+-                  const Divider(height: 1, indent: 56),
+-                  if (_user?['administrator'] != true)
++                    const Divider(height: 1, indent: 56),
+                     _buildListTile(
+-                      icon: Icons.local_taxi_outlined,
+-                      title: 'Mi taxi y turnos',
+-                      subtitle: 'Choferes, accesos y quién recibe los viajes',
++                      icon: Icons.car_repair,
++                      title: 'Mantenimientos',
++                      subtitle: 'Servicios de rutina',
+                       trailing: const Icon(
+                         Icons.chevron_right,
+@@ -303,16 +254,37 @@ class _ProfileScreenState extends State<ProfileScreen> {
+                         color: Colors.grey,
+                       ),
+-                      onTap: () => Navigator.push(
+-                        context,
+-                        MaterialPageRoute(
+-                          builder: (context) => const TaxiOwnerScreen(),
+-                        ),
++                      onTap: () {
++                        Navigator.push(
++                          context,
++                          MaterialPageRoute(
++                            builder: (context) => const MaintenanceScreen(),
++                          ),
++                        );
++                      },
++                    ),
++                    const Divider(height: 1, indent: 56),
++                    _buildListTile(
++                      icon: Icons.layers_outlined,
++                      title: 'Flotillas',
++                      subtitle: 'Agrupar vehículos',
++                      trailing: const Icon(
++                        Icons.chevron_right,
++                        size: 20,
++                        color: Colors.grey,
+                       ),
++                      onTap: () {
++                        Navigator.push(
++                          context,
++                          MaterialPageRoute(
++                            builder: (context) => const GroupsScreen(),
++                          ),
++                        );
++                      },
+                     ),
+-                  if (_user?['administrator'] == true)
++                    const Divider(height: 1, indent: 56),
+                     _buildListTile(
+-                      icon: Icons.badge_outlined,
+-                      title: 'Conductores',
+-                      subtitle: 'Choferes e iButtons',
++                      icon: Icons.people_alt_outlined,
++                      title: 'Usuarios',
++                      subtitle: 'Administradores y clientes',
+                       trailing: const Icon(
+                         Icons.chevron_right,
+@@ -324,12 +296,59 @@ class _ProfileScreenState extends State<ProfileScreen> {
+                           context,
+                           MaterialPageRoute(
+-                            builder: (context) => const DriversScreen(),
++                            builder: (context) => const UsersScreen(),
+                           ),
+                         );
+                       },
+                     ),
+-                ],
++                    const Divider(height: 1, indent: 56),
++                    if (_user?['administrator'] == true)
++                      _buildListTile(
++                        icon: Icons.badge_outlined,
++                        title: 'Conductores',
++                        subtitle: 'Choferes e iButtons',
++                        trailing: const Icon(
++                          Icons.chevron_right,
++                          size: 20,
++                          color: Colors.grey,
++                        ),
++                        onTap: () {
++                          Navigator.push(
++                            context,
++                            MaterialPageRoute(
++                              builder: (context) => const DriversScreen(),
++                            ),
++                          );
++                        },
++                      ),
++                  ],
++                ),
++              ),
++            if (access?.personal == true)
++              AnimatedListItem(
++                index: 1,
++                child: _buildSection(
++                  title: access!.label,
++                  children: [
++                    _buildListTile(
++                      icon: Icons.local_taxi_outlined,
++                      title: access.taxiLabel,
++                      subtitle: access.ownsTaxi
++                          ? 'Choferes, correos y quién está en turno'
++                          : 'Mi unidad, mis datos y acceso a viajes',
++                      trailing: const Icon(
++                        Icons.chevron_right,
++                        size: 20,
++                        color: Colors.grey,
++                      ),
++                      onTap: () => Navigator.push(
++                        context,
++                        MaterialPageRoute(
++                          builder: (context) => const TaxiOwnerScreen(),
++                        ),
++                      ),
++                    ),
++                  ],
++                ),
+               ),
+-            ),
+             const SizedBox(height: 24),
+
+@@ -363,5 +382,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
+             const SizedBox(height: 24),
+
+-            AnimatedListItem(index: 3, child: _buildSecurityPanel()),
++            if (access != null && !access.personal)
++              AnimatedListItem(index: 3, child: _buildSecurityPanel()),
+             const SizedBox(height: 100),
+           ],
+@@ -421,7 +441,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
+                 ),
+                 const SizedBox(height: 4),
+-                const Text(
+-                  'Requerido para recibir alertas del GPS.',
+-                  style: TextStyle(fontSize: 11, color: Colors.grey),
++                Text(
++                  TraccarService().taxiAccess?.personal == true
++                      ? 'El WhatsApp de viajes se consulta en Mi taxi y turno.'
++                      : 'Requerido para recibir alertas del GPS.',
++                  style: const TextStyle(fontSize: 11, color: Colors.grey),
+                 ),
+                 const SizedBox(height: 16),
+@@ -659,4 +681,5 @@ class _ProfileScreenState extends State<ProfileScreen> {
+         const SizedBox(height: 8),
+         TextField(
++          readOnly: TraccarService().taxiAccess?.personal != false,
+           controller: controller,
+           obscureText: isPassword,
+diff --git a/lib/screens/devices_screen.dart b/lib/screens/devices_screen.dart
+index be3eb12..83a632c 100644
+--- a/lib/screens/devices_screen.dart
++++ b/lib/screens/devices_screen.dart
+@@ -409,19 +409,23 @@ class _DevicesScreenState extends State<DevicesScreen> {
+                                     ),
+                                   ),
+-                                  IconButton(
+-                                    icon: const Icon(
+-                                      Icons.bolt,
+-                                      color: Color(0xFFEF4444),
+-                                      size: 20,
+-                                    ),
+-                                    tooltip: 'Comandos',
+-                                    padding: EdgeInsets.zero,
+-                                    constraints: const BoxConstraints(
+-                                      minWidth: 36,
+-                                      minHeight: 36,
++                                  if (TraccarService()
++                                          .taxiAccess
++                                          ?.nativeAdministrator ==
++                                      true)
++                                    IconButton(
++                                      icon: const Icon(
++                                        Icons.bolt,
++                                        color: Color(0xFFEF4444),
++                                        size: 20,
++                                      ),
++                                      tooltip: 'Comandos',
++                                      padding: EdgeInsets.zero,
++                                      constraints: const BoxConstraints(
++                                        minWidth: 36,
++                                        minHeight: 36,
++                                      ),
++                                      onPressed: () =>
++                                          CommandScreen.show(context, device),
+                                     ),
+-                                    onPressed: () =>
+-                                        CommandScreen.show(context, device),
+-                                  ),
+                                   const Icon(
+                                     Icons.chevron_right,
+diff --git a/lib/screens/map_screen.dart b/lib/screens/map_screen.dart
+index 3e29726..a9d0f5f 100644
+--- a/lib/screens/map_screen.dart
++++ b/lib/screens/map_screen.dart
+@@ -1226,36 +1226,38 @@ class MapScreenState extends State<MapScreen> {
+               Row(
+                 children: [
+-                  Expanded(
+-                    child: ElevatedButton.icon(
+-                      onPressed: () {
+-                        if (device != null) {
+-                          CommandScreen.show(context, device);
+-                        }
+-                      },
+-                      style: ElevatedButton.styleFrom(
+-                        backgroundColor: Colors.white,
+-                        foregroundColor: const Color(0xFFB91C1C),
+-                        elevation: 0,
+-                        shadowColor: Colors.transparent,
+-                        shape: RoundedRectangleBorder(
+-                          borderRadius: BorderRadius.circular(16),
+-                          side: BorderSide(
+-                            color: Colors.red.shade100,
+-                            width: 1.5,
++                  if (TraccarService().taxiAccess?.nativeAdministrator == true)
++                    Expanded(
++                      child: ElevatedButton.icon(
++                        onPressed: () {
++                          if (device != null) {
++                            CommandScreen.show(context, device);
++                          }
++                        },
++                        style: ElevatedButton.styleFrom(
++                          backgroundColor: Colors.white,
++                          foregroundColor: const Color(0xFFB91C1C),
++                          elevation: 0,
++                          shadowColor: Colors.transparent,
++                          shape: RoundedRectangleBorder(
++                            borderRadius: BorderRadius.circular(16),
++                            side: BorderSide(
++                              color: Colors.red.shade100,
++                              width: 1.5,
++                            ),
+                           ),
++                          padding: const EdgeInsets.symmetric(vertical: 14),
+                         ),
+-                        padding: const EdgeInsets.symmetric(vertical: 14),
+-                      ),
+-                      icon: const Icon(Icons.bolt_rounded, size: 20),
+-                      label: const Text(
+-                        'Comandos',
+-                        style: TextStyle(
+-                          fontSize: 14,
+-                          fontWeight: FontWeight.w800,
++                        icon: const Icon(Icons.bolt_rounded, size: 20),
++                        label: const Text(
++                          'Comandos',
++                          style: TextStyle(
++                            fontSize: 14,
++                            fontWeight: FontWeight.w800,
++                          ),
+                         ),
+                       ),
+                     ),
+-                  ),
+-                  const SizedBox(width: 12),
++                  if (TraccarService().taxiAccess?.nativeAdministrator == true)
++                    const SizedBox(width: 12),
+                   Expanded(
+                     child: Container(
+diff --git a/lib/services/traccar_service.dart b/lib/services/traccar_service.dart
+index bcefd40..fb82ca0 100644
+--- a/lib/services/traccar_service.dart
++++ b/lib/services/traccar_service.dart
+@@ -7,4 +7,6 @@ import 'package:web_socket_channel/io.dart';
+ import 'package:firebase_messaging/firebase_messaging.dart';
+
++import 'taxi_app_access.dart';
++
+ class TraccarService {
+   static const String baseUrl = 'https://taxis.estrella-eats.mx/api';
+@@ -14,4 +16,5 @@ class TraccarService {
+   // Read-only session handle for authenticated tracking queries. Never persisted in another service.
+   String? get trackingSession => _cookie;
++  TaxiAppAccess? taxiAccess;
+   IOWebSocketChannel? _channel;
+   bool _isConnecting = false;
+@@ -70,4 +73,5 @@ class TraccarService {
+
+   Future<bool> login(String email, String password) async {
++    taxiAccess = null;
+     try {
+       final response = await http.post(
+@@ -129,4 +133,5 @@ class TraccarService {
+       }
+     } finally {
++      taxiAccess = null;
+       _cookie = null;
+       final prefs = await SharedPreferences.getInstance();
+diff --git a/lib/widgets/command_modal.dart b/lib/widgets/command_modal.dart
+index 6454cd1..f5ed6ea 100644
+--- a/lib/widgets/command_modal.dart
++++ b/lib/widgets/command_modal.dart
+@@ -12,4 +12,14 @@ class CommandScreen extends StatefulWidget {
+
+   static void show(BuildContext context, dynamic device) {
++    if (TraccarService().taxiAccess?.nativeAdministrator != true) {
++      ScaffoldMessenger.of(context).showSnackBar(
++        const SnackBar(
++          content: Text(
++            'Tu acceso permite consultar la unidad; los comandos los administra la base.',
++          ),
++        ),
++      );
++      return;
++    }
+     Navigator.push(
+       context,
+diff --git a/lib/services/taxi_app_access.dart b/lib/services/taxi_app_access.dart
+new file mode 100644
+index 0000000..bf5489b
+--- /dev/null
++++ b/lib/services/taxi_app_access.dart
+@@ -0,0 +1,65 @@
++import 'taxi_owner_client.dart';
++
++enum TaxiAppRole {
++  administrator,
++  baseAdmin,
++  operator,
++  owner,
++  ownerDriver,
++  driver,
++}
++
++class TaxiAppAccess {
++  final TaxiAppRole role;
++  final bool nativeAdministrator;
++  const TaxiAppAccess(this.role, {this.nativeAdministrator = false});
++  bool get ownsTaxi =>
++      role == TaxiAppRole.owner || role == TaxiAppRole.ownerDriver;
++  bool get personal => ownsTaxi || role == TaxiAppRole.driver;
++  bool get advanced => role != TaxiAppRole.driver;
++  String get label => switch (role) {
++    TaxiAppRole.administrator => 'Administrador',
++    TaxiAppRole.baseAdmin => 'Administrador de la base',
++    TaxiAppRole.operator => 'Operador de la base',
++    TaxiAppRole.owner => 'Propietario',
++    TaxiAppRole.ownerDriver => 'Dueño y conductor',
++    TaxiAppRole.driver => 'Conductor',
++  };
++  String get taxiLabel => ownsTaxi ? 'Mi taxi y choferes' : 'Mi taxi y turno';
++  static Future<TaxiAppAccess> load(
++    TaxiOwnerClient client, {
++    required bool administrator,
++  }) async {
++    final context = await client.call({'action': 'context'});
++    final raw = context['accessRole'];
++    final configure = context['canConfigure'];
++    if (configure is! bool) {
++      throw const TaxiOwnerException(
++        'No pudimos comprobar los permisos de tu cuenta.',
++      );
++    }
++    final role = switch (raw) {
++      'owner' => TaxiAppRole.owner,
++      'owner_driver' => TaxiAppRole.ownerDriver,
++      'driver' => TaxiAppRole.driver,
++      null =>
++        administrator && configure
++            ? TaxiAppRole.administrator
++            : configure
++            ? TaxiAppRole.baseAdmin
++            : TaxiAppRole.operator,
++      _ => throw const TaxiOwnerException(
++        'El rol de esta cuenta no está habilitado.',
++      ),
++    };
++    if (raw != null && (administrator || configure)) {
++      throw const TaxiOwnerException(
++        'Los permisos de la cuenta necesitan revisión de la base.',
++      );
++    }
++    return TaxiAppAccess(
++      role,
++      nativeAdministrator: administrator && role == TaxiAppRole.administrator,
++    );
++  }
++}

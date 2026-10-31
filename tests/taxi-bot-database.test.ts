@@ -51,9 +51,73 @@ const messageBatchingSql=readFileSync(new URL('../estrella-taxis-backend/supabas
 const pendingLeaseSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261031210000_taxi_pending_lease_polling.sql',import.meta.url),'utf8');
 const dispatchSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261031210001_taxi_dispatch_rounds.sql',import.meta.url),'utf8');
 const ownerSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261031220000_taxi_owner_shifts.sql',import.meta.url),'utf8');
+const driverReceiptSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261031230000_taxi_driver_acceptance_receipts.sql',import.meta.url),'utf8');
+const briefFlowSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261031233000_taxi_brief_customer_flow.sql',import.meta.url),'utf8');
+const briefRecoverySql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261031234000_taxi_brief_recovery_edges.sql',import.meta.url),'utf8');
 const tenant='11111111-1111-4111-8111-111111111111',other='22222222-2222-4222-8222-222222222222',waba='+529630000001',customer='+529630000002',driverPhone='+529630000003';
 const pompeyo='4cf9acf1-f07e-4a01-9396-eb5bde3e7411';
 function unknownArray(value:unknown):value is unknown[]{return Array.isArray(value);}
+
+for(const order of [['pin','name','destination'],['pin','destination','name'],['name','pin','destination'],['name','destination','pin'],['destination','pin','name'],['destination','name','pin']] as const)test('brief journey SQL: '+order.join(' → ')+' stays within five customer requests through completion',async()=>{
+ const f=await fixture();try{
+  await f.seedH3();const channel:TaxiChannel={tenantId:tenant,waba,enabled:true,name:'Base sintética',city:'Comitán',centerLat:16.25,centerLng:-92.13,radiusKm:20,dispatcher:null,model:'fixture',baseCents:null,perKmCents:null,pricingMode:'h3_zone_max'};
+  const services:TaxiServices={interpret:async text=>text==='Hola'?{intent:'smalltalk',fields:{}}:text==='Soy Mariana'?{intent:'provide',fields:{name:{value:'Mariana',evidence:text}}}:text==='Voy a Terminal'?{intent:'provide',fields:{destination:{value:'Terminal',evidence:text}}}:Promise.reject(Error('Undeclared interpretation: '+text)),resolve:async text=>({kind:'resolved',place:{...f.draft.destination,text}}),quote:async()=>6500,candidates:async()=>[{deviceId:1,name:'Unidad 1'}]};
+  const turn=async(event:Record<string,unknown>)=>{const claim=await f.begin(event.eventId);assert.equal(claim.state,'proceed');assert.ok(Array.isArray(claim.messages));const d=await coordinateTaxi(claim.messages.map(item=>parseStoredInbound(item,Date.now())),parseSession(claim.session),channel,services,Date.now());await f.commit(claim.eventId,claim,{...d});return{d,claim};};
+  const greeting=await turn(await f.enqueue('Hola'));assert.match(greeting.d.messages[0].text,/nombre/);assert.match(greeting.d.messages[0].text,/llevamos/);assert.equal(greeting.d.messages[0].locationRequest,'origin');
+  for(const field of order)await turn(field==='pin'?await f.enqueue('',customer,crypto.randomUUID(),null,{lat:16.25,lng:-92.13}):await f.enqueue(field==='name'?'Soy Mariana':'Voy a Terminal'));
+  const draft=f.obj(await f.scalar('SELECT draft FROM taxi_bot_sessions WHERE customer=$1',[customer]));assert.ok(draft.confirmation);assert.equal(await f.scalar('SELECT count(*)::int FROM viajes'),0);
+  const confirmed=await turn(await f.enqueue('',customer,crypto.randomUUID(),'txc_'+draft.confirmation));assert.equal(confirmed.d.action,'confirm');
+  const offer=f.obj(await f.scalar('SELECT to_jsonb(o)FROM taxi_bot_offers o WHERE device_id=1'));
+  const accepted=await turn(await f.enqueue('',driverPhone,crypto.randomUUID(),'txa_'+offer.id));assert.equal(accepted.d.action,'driver_accept');
+  assert.equal(await f.scalar("SELECT count(*)::int FROM taxi_bot_outbox WHERE destination=$1 AND dedupe_key LIKE 'trip-assigned:%'",[customer]),1);
+  await f.commit(accepted.claim.eventId,accepted.claim,{...accepted.d});
+  await turn(await f.enqueue('',driverPhone,crypto.randomUUID(),'txf_'+offer.id));
+  assert.equal(await f.scalar("SELECT estado FROM viajes"),'completado');
+  const outputs=(await f.db.query<{body:unknown}>('SELECT body FROM taxi_bot_outbox WHERE destination=$1 ORDER BY sequence',[customer])).rows;
+  assert.ok(outputs.length<=5,'actual outbox requests, including assignment and optional closing');assert.ok(outputs.every(item=>asString(f.obj(item.body).text).length<=1024));
+  const budget=f.obj(await f.scalar('SELECT to_jsonb(b)FROM taxi_bot_message_budgets b WHERE customer=$1',[customer]));assert.equal(budget.normal_message_count,outputs.length);assert.equal(budget.extra_message_count,0);assert.equal(budget.message_budget_closed,true);
+  await turn(await f.enqueue('Hola'));const next=f.obj(await f.scalar('SELECT to_jsonb(b)FROM taxi_bot_message_budgets b WHERE customer=$1',[customer]));assert.notEqual(next.message_service_id,budget.message_service_id);assert.equal(next.normal_message_count,1);
+ }finally{await f.db.close();}
+});
+
+test('brief budget SQL: retries are counted once, questions and changes remain answerable, driver outputs are independent',async()=>{
+ const f=await fixture();try{
+  const emit=async(key:string)=>f.scalar('SELECT taxi_bot_emit($1,$2,$3,$4,$5)',[tenant,waba,customer,'Respuesta sintética',key]);
+  for(let i=0;i<4;i++)await emit('reply:synthetic:'+i);
+  await emit('reply:synthetic:0');assert.equal(await f.scalar('SELECT normal_message_count FROM taxi_bot_message_budgets WHERE customer=$1',[customer]),4);
+  await emit('trip-created:synthetic');assert.equal(await f.scalar("SELECT count(*)::int FROM taxi_bot_outbox WHERE dedupe_key='trip-created:synthetic'"),0);
+  await emit('dispatch-attention:synthetic');assert.equal(await f.scalar("SELECT count(*)::int FROM taxi_bot_outbox WHERE dedupe_key='dispatch-attention:synthetic'"),0);
+  await f.db.exec('BEGIN');await f.db.query("SELECT set_config('app.taxi_reply_customer',$1,true),set_config('app.taxi_reply_class','question',true)",[customer]);await emit('reply:question');await f.db.exec('COMMIT');
+  await emit('trip-assigned:synthetic');await emit('trip-finished:synthetic');
+  assert.equal(await f.scalar('SELECT normal_message_count FROM taxi_bot_message_budgets WHERE customer=$1',[customer]),5);assert.equal(await f.scalar('SELECT extra_message_count FROM taxi_bot_message_budgets WHERE customer=$1',[customer]),1);
+  await f.scalar('SELECT taxi_bot_emit($1,$2,$3,$4,$5)',[tenant,waba,driverPhone,'Oferta sintética','offer:synthetic']);assert.equal(await f.scalar('SELECT count(*)::int FROM taxi_bot_message_budgets WHERE customer=$1',[driverPhone]),0);
+  assert.equal(await f.scalar("SELECT has_table_privilege('authenticated','taxi_bot_message_budgets','SELECT')"),false);
+ }finally{await f.db.close();}
+});
+test('brief destination SQL: an explicit text deferral before GPS is accepted, while an unsolicited button cannot defer it',async()=>{
+ const f=await fixture();try{
+  const channel:TaxiChannel={tenantId:tenant,waba,enabled:true,name:'Base sintética',city:'Comitán',centerLat:16.25,centerLng:-92.13,radiusKm:20,dispatcher:null,model:'fixture',baseCents:null,perKmCents:null,pricingMode:'h3_zone_max'};
+  const never=async():Promise<never>=>{throw Error('Explicit deferral before GPS cannot interpret, quote or dispatch');};const services:TaxiServices={interpret:never,resolve:never,quote:never,candidates:never};
+  const event=await f.enqueue('Se lo digo al chofer'),claim=await f.begin(event.eventId);assert.ok(Array.isArray(claim.messages));
+  const d=await coordinateTaxi(claim.messages.map(item=>parseStoredInbound(item,Date.now())),parseSession(claim.session),channel,services,Date.now());assert.equal(d.draft.destinationDeferred,true);assert.equal(d.messages[0].locationRequest,'origin');await f.commit(claim.eventId,claim,{...d});
+  assert.equal(await f.scalar("SELECT draft->>'destinationDeferred' FROM taxi_bot_sessions WHERE customer=$1",[customer]),'true');assert.equal(await f.scalar('SELECT count(*)::int FROM viajes'),0);
+  const forged=await f.enqueue('',customer,crypto.randomUUID(),'txd_'+crypto.randomUUID()),next=await f.begin(forged.eventId);
+  const rejected=await coordinateTaxi([parseStoredInbound(f.obj((await f.scalar('SELECT message FROM taxi_bot_events WHERE id=$1',[forged.eventId]))),Date.now())],parseSession(next.session),channel,services,Date.now());assert.equal(rejected.reason,'stale_destination_choice');
+ }finally{await f.db.close();}
+});
+for(const edge of ['active_change','discard_draft'] as const)test('brief recovery SQL: '+edge+' remains usable after the ordinary budget',async()=>{
+ const f=await fixture();try{
+  await f.prepare();if(edge==='active_change')await f.confirm();
+  await f.db.query("INSERT INTO taxi_bot_message_budgets(tenant_id,waba,customer,normal_message_count)VALUES($1,$2,$3,5)ON CONFLICT(tenant_id,waba,customer)DO UPDATE SET normal_message_count=5",[tenant,waba,customer]);
+  const e=edge==='active_change'?await f.enqueue('Ahora recógeme en otro punto'):await f.enqueue('Cancelar'),c=await f.begin(e.eventId);assert.ok(Array.isArray(c.messages));
+  const never=async():Promise<never>=>{throw Error('This recovery has an explicit server path');};const services:TaxiServices={interpret:never,resolve:never,quote:never,candidates:never};
+  const channel:TaxiChannel={tenantId:tenant,waba,enabled:true,name:'Base sintética',city:'Comitán',centerLat:16.25,centerLng:-92.13,radiusKm:20,dispatcher:null,model:'fixture',baseCents:null,perKmCents:null,pricingMode:'h3_zone_max'};
+  const d=await coordinateTaxi(c.messages.map(m=>parseStoredInbound(m,Date.now())),parseSession(c.session),channel,services,Date.now());assert.equal(d.replyClass,'change');await f.commit(c.eventId,c,{...d});
+  const b=f.obj(await f.scalar('SELECT to_jsonb(b)FROM taxi_bot_message_budgets b WHERE customer=$1',[customer]));assert.equal(b.normal_message_count,5);assert.equal(b.extra_message_count,1);
+  if(edge==='active_change'){assert.equal(d.action,'human');assert.equal(await f.scalar('SELECT estado FROM viajes'),'buscando_conductor');assert.equal(b.message_budget_closed,false);}
+  else{assert.equal(d.reason,'draft_cancelled');assert.equal(b.message_budget_closed,true);await f.scalar('SELECT taxi_bot_emit($1,$2,$3,$4,$5)',[tenant,waba,customer,'Nuevo servicio','reply:new-service']);const next=f.obj(await f.scalar('SELECT to_jsonb(b)FROM taxi_bot_message_budgets b WHERE customer=$1',[customer]));assert.equal(next.normal_message_count,1);assert.notEqual(next.message_service_id,b.message_service_id);}
+ }finally{await f.db.close();}
+});
 
 test('minimum fare SQL: pickup, GPS route and written locality respect the configured base minimum without rewriting source tariffs',async()=>{
  const f=await fixture();try{
@@ -244,9 +308,9 @@ for(const cause of ['expired_button','interpreter_failure','empty_proposal','lon
   const recovered=await turn(cause==='expired_button'?await f.enqueueButton():await f.enqueue('No entendí'));
   assert.equal(recovered.d.action,'draft');assert.ok(recovered.d.draft.confirmation);assert.notEqual(recovered.d.draft.confirmation,f.draft.confirmation);assert.deepEqual(recovered.d.draft.origin,f.draft.origin);assert.deepEqual(recovered.d.draft.destination,cause==='long_review'?null:f.draft.destination);assert.equal(recovered.d.draft.pickupMessageId,f.draft.pickupMessageId);assert.equal(quotes,1);assert.equal(assignments,0);assert.equal(interpretations,cause==='expired_button'?0:1);
   if(cause==='long_review'){
-   assert.equal(recovered.d.messages.length,2);assert.equal(recovered.d.draft.destinationText,'Destino '.repeat(50));
-   const outbox=await f.db.query<{body:unknown}>('SELECT body FROM taxi_bot_outbox WHERE destination=$1 ORDER BY sequence',[customer]);assert.equal(outbox.rows.length,2);
-   assert.equal(f.obj(outbox.rows[0].body).text,recovered.d.messages[0].text);assert.deepEqual(f.obj(outbox.rows[1].body).buttons,recovered.d.messages[1].buttons);
+   assert.equal(recovered.d.messages.length,1);assert.equal(recovered.d.draft.destinationText,'Destino '.repeat(50));
+   const outbox=await f.db.query<{body:unknown}>('SELECT body FROM taxi_bot_outbox WHERE destination=$1 ORDER BY sequence',[customer]);assert.equal(outbox.rows.length,1);
+   assert.equal(f.obj(outbox.rows[0].body).text,recovered.d.messages[0].text);assert.deepEqual(f.obj(outbox.rows[0].body).buttons,recovered.d.messages[0].buttons);
    assert.equal(await f.scalar("SELECT count(*)::int FROM taxi_bot_outbox WHERE CASE WHEN jsonb_typeof(body->'buttons')='array' THEN jsonb_array_length(body->'buttons')>0 ELSE false END AND length(body->>'text')>1024"),0);
   }
   assert.equal(await f.scalar("SELECT draft->>'confirmation' FROM taxi_bot_sessions WHERE customer=$1",[customer]),recovered.d.draft.confirmation);
@@ -665,6 +729,9 @@ async function fixture(options:{legacy?:boolean;seedCoverageBeforeMigration?:boo
     await db.exec(messageBatchingSql);
     await db.exec(dispatchSql);
     await db.exec(ownerSql);
+    await db.exec(driverReceiptSql);
+    await db.exec(briefFlowSql);
+    await db.exec(briefRecoverySql);
   }
   // These legacy protocol fixtures explicitly act as customers too. Driver-only access has separate tests below.
   await db.query('INSERT INTO taxi_bot_allowed_customers(tenant_id,phone)VALUES($1,$2),($1,$3),($1,$4)',[tenant,customer,driverPhone,'+529630000004']);
@@ -1759,6 +1826,22 @@ test('owner SQL: one shift changes the existing taxi recipient; the bot offers i
 });
 test('owner SQL: ending a shift removes the taxi from dispatch eligibility',async()=>{
  const f=await ownerFixture();try{const c=await f.read();assert.equal((await f.shift(null,c.driver?.version??null)).state,'saved');assert.equal((await f.read()).driver?.active,false);assert.equal(await f.scalar('SELECT count(*)::integer FROM taxi_bot_dispatch_eligible($1,$2,$3)WHERE device_id=1',[tenant,waba,[]]),0);}finally{await f.db.close();}
+});
+for(const ownerDriving of [false,true])test('shift acceptance: '+(ownerDriving?'owner driving':'assigned driver')+' accepts once and queues one customer notification',async()=>{
+ const f=await ownerFixture();try{
+  if(ownerDriving){await f.db.query("UPDATE taxi_base_contacts SET role='owner_driver'WHERE id=$1",[ownerId]);await f.db.exec("UPDATE perfiles SET rol='owner_driver'WHERE traccar_user_id=21");}
+  const recipient=ownerDriving?'+529630000021':'+529630000023',contact=ownerDriving?ownerId:nextDriver;
+  assert.equal((await f.shift(contact,(await f.read()).driver?.version??null)).state,'saved');await f.prepare();await f.confirm();
+  const offer=f.obj(await f.scalar('SELECT to_jsonb(o)FROM taxi_bot_offers o WHERE device_id=1'));assert.equal(offer.driver_phone,recipient);
+  const oldDriver=await f.enqueue('botón',driverPhone),oldClaim=await f.begin(oldDriver.eventId);await f.commit(oldDriver.eventId,oldClaim,{...f.decision('driver_accept'),offerId:offer.id});assert.equal(await f.scalar("SELECT count(*)::integer FROM viajes WHERE estado='en_camino'"),0);
+  const event=await f.enqueue('',recipient,crypto.randomUUID(),'txa_'+offer.id),claim=await f.begin(event.eventId),decision={...f.decision('driver_accept'),offerId:offer.id};await f.commit(event.eventId,claim,decision);
+  assert.equal(await f.scalar("SELECT count(*)::integer FROM viajes WHERE estado='en_camino'AND device_id=1"),1);assert.equal(await f.scalar("SELECT count(*)::integer FROM taxi_bot_outbox WHERE destination=$1 AND dedupe_key LIKE 'trip-assigned:%'",[customer]),1);
+  assert.equal((await f.commit(event.eventId,claim,decision)).state,'replay');assert.equal(await f.scalar("SELECT count(*)::integer FROM taxi_bot_outbox WHERE destination=$1 AND dedupe_key LIKE 'trip-assigned:%'",[customer]),1);
+  assert.equal((await f.shift(null,(await f.read()).driver?.version??null)).state,'driver_busy');
+ }finally{await f.db.close();}
+});
+test('driver receipts do not bypass a revoked ordinary customer or change completed text into driver consent',async()=>{
+ const f=await fixture();try{const event=await f.enqueue('Hola'),claim=await f.begin(event.eventId);await f.commit(event.eventId,claim,f.decision('reply'));await f.db.query('DELETE FROM taxi_bot_allowed_customers WHERE phone=$1',[customer]);await assert.rejects(f.commit(event.eventId,claim,f.decision('driver_accept')),/taxi_customer_not_authorized/);assert.equal(await f.scalar('SELECT count(*)::integer FROM viajes'),0);assert.equal(await f.scalar('SELECT count(*)::integer FROM taxi_bot_offers'),0);}finally{await f.db.close();}
 });
 test('owner SQL: stale or repeated shift commands cannot undo a newer shift or create another taxi',async()=>{
  const f=await ownerFixture();try{const first=await f.read(),request=crypto.randomUUID();const receipt=await f.shift(nextDriver,first.driver?.version??null,request);assert.equal(receipt.state,'saved');assert.equal((await f.shift(firstDriver,first.driver?.version??null)).state,'revision_conflict');const second=await f.read();assert.equal((await f.shift(firstDriver,second.driver?.version??null)).state,'saved');assert.deepEqual(await f.shift(nextDriver,first.driver?.version??null,request),receipt);assert.equal((await f.read()).driver?.phone,driverPhone);assert.equal(await f.scalar('SELECT count(*)::integer FROM taxi_owner_operations'),2);}finally{await f.db.close();}

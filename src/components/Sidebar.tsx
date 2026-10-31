@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { Map, Users, BarChart3, Settings, Car, LogOut, Bell, Play, Layers, UserCheck, Hexagon, ChevronRight, Wrench, X, Activity, Bot, Package, ShoppingBag, UtensilsCrossed, Pill, Store, LayoutDashboard, ClipboardList, Receipt } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import {taxiAppAccess} from '../lib/taxiAppAccess';
 
 import { RequireFeature } from './RequireFeature';
 import { type Feature } from '../hooks/useFeature';
@@ -15,6 +16,7 @@ export default function Sidebar({ onClose }: SidebarProps) {
 
   const isSuperadmin = userRole === 'superadmin';
   const personal = ['owner','driver','owner_driver'].includes(userRole ?? '');
+  const access=taxiAppAccess(userRole);
   const tipoNegocio = empresaData?.tipo_negocio || (isSuperadmin ? 'taxi' : 'otro');
   const isTaxi = isSuperadmin || tipoNegocio === 'taxi';
 
@@ -72,7 +74,7 @@ export default function Sidebar({ onClose }: SidebarProps) {
     { to: '/dashboard', icon: <BarChart3 size={18} />, label: 'Dashboard' },
     { to: '/devices', icon: <Car size={18} />, label: 'Mis Taxis' },
     { to: '/zonas-tarifas', icon: <Hexagon size={18} />, label: 'Zonas y tarifas' },
-  ].filter(item => !personal || ['/map','/devices'].includes(item.to));
+  ].filter(item => access.canOpen(item.to));
 
   const taxiToolsItems: { to: string; icon: React.ReactNode; label: string; feature?: Feature }[] = [
     { to: '/connections', icon: <Activity size={16} />, label: 'Conexiones' },
@@ -81,11 +83,11 @@ export default function Sidebar({ onClose }: SidebarProps) {
     { to: '/geofences', icon: <Hexagon size={16} />, label: 'Geocercas' },
     { to: '/maintenance', icon: <Wrench size={16} />, label: 'Mantenimientos' },
     { to: '/notifications', icon: <Bell size={16} />, label: 'Notificaciones' },
-  ].filter(() => !personal);
+  ].filter(item=>access.canOpen(item.to));
 
   const taxiAdminItems: { to: string; icon: React.ReactNode; label: string; always?: boolean; roles?: string[]; feature?: Feature }[] = [
     { to: '/groups', icon: <Layers size={16} />, label: 'Grupos', always: true },
-    { to: '/drivers', icon: <UserCheck size={16} />, label: 'Conductores', always: true },
+    { to: '/drivers', icon: <UserCheck size={16} />, label: access.peopleLabel, always: true },
     { to: '/taxi-bot', icon: <Bot size={16} />, label: 'Bot de WhatsApp', always: true },
     ...(isSuperadmin ? [{ to: '/catalog', icon: <ShoppingBag size={16} />, label: 'Catálogo Global', roles: ['superadmin'] }] : []),
     { to: '/bot', icon: <Bot size={16} />, label: 'Bases y canales', roles: ['superadmin', 'admin_empresa'] },
@@ -336,7 +338,7 @@ export default function Sidebar({ onClose }: SidebarProps) {
                 {user?.name || 'Usuario'}
               </p>
               <p className="text-[10px] font-medium text-gray-400 truncate capitalize">
-                {userRole === 'superadmin' ? 'Super Administrador' : userRole === 'admin_empresa' ? 'Admin de Empresa' : 'Operador'}
+                {access.roleLabel}
               </p>
             </div>
           </button>

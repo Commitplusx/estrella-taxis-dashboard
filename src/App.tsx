@@ -1,4 +1,5 @@
 import React, {lazy,Suspense} from 'react';
+import {taxiAppAccess} from './lib/taxiAppAccess';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { AuthProvider, useAuth } from './context/AuthContext';
@@ -30,7 +31,7 @@ const TaxiBotAdminPage=lazy(()=>import('./pages/TaxiBotAdminPage'));
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { user, userRole } = useAuth();
   const location = useLocation();
-  if (user && ['owner','driver','owner_driver'].includes(userRole ?? '') && !['/drivers','/map','/devices'].includes(location.pathname)) return <Navigate to="/drivers" replace />;
+  if(user&&!taxiAppAccess(userRole).canOpen(location.pathname))return <Navigate to={taxiAppAccess(userRole).home} replace/>;
   return user ? <>{children}</> : <Navigate to="/login" replace />;
 }
 

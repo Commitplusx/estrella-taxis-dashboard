@@ -72,7 +72,8 @@ export function assertTaxiTransition(
   if(d.draft.fareMode==='unquoted'&&(d.draft.quoteCents!==null||d.draft.quoteH3!==null))fail();
   if(d.draft.destinationDeferred===true&&s.draft.destinationDeferred!==true){
     const event=messages[0];
-    if(d.action!=='draft'||messages.length!==1||s.draft.awaitingLocation!=='destination'||!s.draft.destinationPrompt||!s.draft.expiresAt||Date.parse(s.draft.expiresAt)<=now||hasDestination(d.draft)||!(event.type==='button'&&event.button==='txd_'+s.draft.destinationPrompt||event.type==='text'&&defersDestination(event.text)))fail();
+    const currentButton=s.draft.awaitingLocation==='destination'&&Boolean(s.draft.destinationPrompt)&&Boolean(s.draft.expiresAt)&&Date.parse(s.draft.expiresAt??'')>now&&event.type==='button'&&event.button==='txd_'+s.draft.destinationPrompt;
+    if(d.action!=='draft'||messages.length!==1||hasDestination(d.draft)||!(currentButton||event.type==='text'&&defersDestination(event.text)))fail();
   }
   if (d.messages.some((m) => m.locationRequest && (
     !['draft','reset'].includes(d.action) || s.mode !== 'bot' ||
