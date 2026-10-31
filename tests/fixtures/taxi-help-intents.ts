@@ -24,4 +24,11 @@ export const TAXI_HELP_CASES:readonly TaxiContextCase[]=[
  {id:'fare-and-latest-destination',context:'review',message:'Ya no voy al Centro; mejor a la Terminal. ¿Cuánto sale?',expected:{intent:'quote',fields:{destination:['Terminal']}}},
  {id:'destination-and-passenger-name',context:'origin',message:'Me llevas al Hospital, a nombre de Jorge',expected:{intent:'provide',fields:{destination:['Hospital'],name:['Jorge']}}},
  {id:'confirm-button-explanation',context:'review',message:'Si te pongo que sí, ¿ya queda pedido?',expected:{intent:'question',fields:{}}},
+ {id:'pickup-and-gps-question',context:'origin',message:'Estoy por el mercado, ¿sí necesitas que mande el pin?',expected:{intent:'question',fields:{origin:['por el mercado','el mercado']}}},
+ {id:'route-and-summary-question',context:'origin',message:'Pasa por mí en El Piedrón y llévame a la Terminal; ¿me enseñas el resumen antes?',expected:{intent:'question',fields:{origin:['El Piedrón'],destination:['la Terminal','Terminal']}}},
+ {id:'name-and-next-step-question',context:'name',message:'Soy Jorge, ¿qué más te hace falta?',expected:{intent:'question',fields:{name:['Jorge']}}},
+ {id:'destination-fare-question',context:'destination',message:'Voy a la Terminal, ¿cuánto me cobrarían?',expected:{intent:'quote',fields:{destination:['la Terminal','Terminal']}}},
+ {id:'corrected-destination-fare-question',context:'review',message:'Ya no al Centro, mejor a la Terminal. ¿Cuánto sale?',expected:{intent:'quote',fields:{destination:['la Terminal','Terminal']}}},
+ {id:'scheduled-ride-needs-base',context:'review',message:'¿Me puedes dejar un taxi para mañana a las seis?',expected:{intent:'human',fields:{}}},
+ {id:'cancel-request-is-not-a-direct-mutation',context:'review',message:'Cancélalo, por favor',expected:{intent:'ambiguous',fields:{}}},
 ];

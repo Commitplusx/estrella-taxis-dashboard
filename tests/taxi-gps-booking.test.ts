@@ -59,6 +59,10 @@ Deno.test('natural conversation: generated wording must keep the server-selected
 for(const example of TAXI_REPLY_EXAMPLES)Deno.test('reply prompt example stays inside the server response contract: '+example.id,()=>{
  assertEquals(parseTaxiQuestion(phrasing(example.response),example.purpose,example.context),example.response);
 });
+Deno.test('natural reply examples cover expanded cases without duplicate identifiers',()=>{
+ const ids=TAXI_REPLY_EXAMPLES.map(example=>example.id);
+ assert(ids.length>=17);assertEquals(new Set(ids).size,ids.length);
+});
 Deno.test('the natural reply request sends the worked conversation examples with the current turn',async()=>{
  const sample=TAXI_REPLY_EXAMPLES[0];let sent=false;
  const result=await naturalTaxiQuestion(async(_url,init)=>{

@@ -15,6 +15,9 @@ for(const item of TAXI_LANGUAGE_CASES.filter(item=>item.expected.intent==='provi
  for(const key of ['name','origin','destination','pickupReference'] as const){const value=item.expected.fields[key]?.[0];if(value)fields[key]={value,evidence:item.message};}
  assertEquals(parseInterpretation({intent:item.expected.intent,fields},item.message),{intent:item.expected.intent,fields});
 });
+for(const item of TAXI_LANGUAGE_CASES.filter(item=>item.expected.intent==='ambiguous'))Deno.test('non-mutating language fixture contract: '+item.id,()=>{
+ assertEquals(parseInterpretation({intent:'ambiguous',fields:{}},item.message),{intent:'ambiguous',fields:{}});
+});
 
 for(const item of [
  {text:'voy a Pilita Seca y no llevo equipaje',key:'destination',value:'Pilita Seca'},

@@ -43,3 +43,15 @@ El resumen de confirmación ya no muestra el precio por defecto. El servidor con
 Motor: `taxi-bot-v15-asked-fare-summary`. Verificación local: 5,907 pruebas Deno, 124 pruebas Node/SQL/integración, control de calidad del bot y tipos aprobados.
 
 Publicado el 31-10-2026 en `izrsxygazsalfhpaualj`: `process-queue` v29 y `ycloud-webhook` v29, ambos conservan `verify_jwt=false`. Después del despliegue, descargué el código activo a una carpeta temporal y comprobé SHA-256 de los cuatro archivos compartidos modificados: `contracts.ts` `4E4935443FE8625098B569B783FA36BE7EC244FCFC62DF2328AC607D1F2E39FA`, `coordinator.ts` `0F2F71436407AAD8B25A2EAB6C143944C1970661E679A97706669E06E9D06A17`, `interpreter.ts` `56482B4F85DD1A6EF1AE3E4679622A27372CD162890327FACF0F25292FCBF5E5` y `neighborhoods.ts` `DAEF9445359CDC779F361D17CF1DDCBB818BAE532C8E437D432FB5248A95A5A0`; coinciden con el candidato. OPTIONS respondió 200 en ambos endpoints. No se envió una conversación de prueba por WhatsApp.
+
+## Más casos de lenguaje natural, 31-10-2026
+
+La suite sintética quedó en 64 casos de lenguaje y 30 de dudas y servicio. Añadí expresiones dictadas con errores, origen y destino en una frase, referencias de acceso, correcciones junto con preguntas de precio, respuestas de nombre mezcladas con dudas y solicitudes programadas. También se prueba que un «sí» por texto no confirma ni que un mensaje de cancelar ejecute una mutación: el intérprete aclara y el servidor conserva el botón y las transiciones autorizadas.
+
+El intérprete conserva 16 diálogos de herramientas y el redactor natural incluye 17 ejemplos de respuesta con contexto y paso siguiente. Las respuestas de tarifa, resumen, ubicación y disponibilidad siguen viniendo del servidor; los ejemplos no autorizan viajes.
+
+Verificación local: 5,937 pruebas Deno, 125 pruebas Node/SQL/integración, control de calidad de 93 archivos y comprobaciones de tipos aprobados. Son casos sintéticos fijos, no un conjunto ciego ni una evaluación en vivo del proveedor. No se envió un WhatsApp real.
+
+Versión del motor: `taxi-bot-v16-natural-turn-cases`.
+
+Publicado el 31-10-2026 en `izrsxygazsalfhpaualj`: `process-queue` v30 y `ycloud-webhook` v30, ambos con `verify_jwt=false`. Descargué el código activo y los tres archivos compartidos del bot coinciden por SHA-256: `contracts.ts` `B6D46931961766737D7AFECAEC9C37A77035D19B7D8608C1778AC422D7E53420`, `conversationReply.ts` `42F3928955308627D0DDBD93E31FCF2415BED12582403841210AE008A6B34FE5` e `interpreter.ts` `41160740B166403D66A446FAC83FBAFCBBE975782FB6EB17C3FAEFE8DA4B6F65`. Los dos endpoints respondieron HTTP 200 a OPTIONS. No se envió un mensaje real por WhatsApp.

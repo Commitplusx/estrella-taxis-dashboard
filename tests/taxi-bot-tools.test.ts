@@ -142,12 +142,17 @@ Deno.test("interpreter few-shot dialogues all satisfy the strict taxi tool contr
       const result = parseTaxiToolCompletion({
         choices: [{ finish_reason: "tool_calls", message }],
       }, current);
-      assert(result.intent !== "ambiguous", "A few-shot answer must be a valid current interpretation.");
+      if (result.intent === "ambiguous") {
+        assert(
+          message.tool_calls[0].function.name === "aclarar_solicitud",
+          "An example that abstains must use the explicit clarification tool.",
+        );
+      }
       current = null;
       parsed++;
     }
   }
-  assert(parsed >= 8, "The interpreter prompt must retain its varied examples.");
+  assert(parsed >= 16, "The interpreter prompt must retain its expanded examples.");
   assert(current === null, "Every synthetic customer example must have a matching tool answer.");
 });
 

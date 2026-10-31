@@ -35,6 +35,12 @@ export const TAXI_CONTEXT_CASES: readonly TaxiContextCase[] = [
   {id:'colloquial-destination',context:'origin',message:'oye bro voy pa la Pilita Seca',expected:{intent:'provide',fields:{destination:['la Pilita Seca','Pilita Seca']}}},
   {id:'reference-after-pin',context:'name',message:'es el portón azul',expected:{intent:'provide',fields:{pickupReference:['es el portón azul','el portón azul','portón azul']}}},
   {id:'reference-current-review',context:'review',message:'estoy frente a la cancha',expected:{intent:'provide',fields:{pickupReference:['estoy frente a la cancha','frente a la cancha']}}},
+  {id:'pickup-voice-with-reference',context:'origin',message:'toy aquí por el mercado, junto a la entrada de atrás',expected:{intent:'provide',fields:{origin:['por el mercado, junto a la entrada de atrás','el mercado, junto a la entrada de atrás']}}},
+  {id:'destination-business-entrance',context:'origin',message:'voy al hospital, por la entrada de urgencias',expected:{intent:'provide',fields:{destination:['hospital, por la entrada de urgencias','Hospital, por la entrada de urgencias','el hospital, por la entrada de urgencias']}}},
+  {id:'pickup-and-destination-colloquial',context:'origin',message:'pásame a buscar a El Piedrón y me dejas en la Terminal',expected:{intent:'provide',fields:{origin:['El Piedrón'],destination:['la Terminal','Terminal']}}},
+  {id:'name-and-latest-destination-correction',context:'review',message:'Soy Ana. Ya no al Centro, mejor al Hospital.',expected:{intent:'provide',fields:{name:['Ana'],destination:['Hospital','al Hospital']}}},
+  {id:'text-yes-is-not-confirm-button',context:'review',message:'Sí, todo está bien',expected:{intent:'ambiguous',fields:{}}},
+  {id:'cancel-text-needs-server-check',context:'review',message:'Mejor cancélalo',expected:{intent:'ambiguous',fields:{}}},
 ];
 
 export function taxiContextSession(context: TaxiContext): TaxiSession {
