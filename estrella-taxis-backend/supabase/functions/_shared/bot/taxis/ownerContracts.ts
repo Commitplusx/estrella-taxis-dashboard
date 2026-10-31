@@ -1,6 +1,8 @@
 import{record,positiveId,uuid,TrackingError}from '../../tracking/contracts.ts';
-import{parseBaseContact,parseContactId,type BaseContact}from './contactAdmin.ts';
-import{parseBotDriver,type BotDriver}from './driverAdmin.ts';
+import { parseBaseContact, parseContactId } from './contactAdmin.ts';
+import type { BaseContact } from './contactAdmin.ts';
+import { parseBotDriver } from './driverAdmin.ts';
+import type { BotDriver } from './driverAdmin.ts';
 import{phone}from './contracts.ts';
 export interface OwnerPending{requestId:string;contactId:string;expected:string|null;name:string;phone:string;email:string|null;review:boolean}
 export interface OwnerContext{owner:BaseContact;tenantId:string;waba:string;deviceId:number;drivers:BaseContact[];driver:BotDriver|null;busy:boolean;pending:OwnerPending[]}
