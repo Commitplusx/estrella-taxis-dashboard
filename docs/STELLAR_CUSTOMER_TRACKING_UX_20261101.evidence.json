@@ -1,0 +1,269 @@
+{
+  "date": "2026-11-01",
+  "project": "Stellar Tracking",
+  "supabaseProject": "izrsxygazsalfhpaualj",
+  "publication": {
+    "status": "published_and_enabled",
+    "githubCodeCommit": "caa40bd95fe5a874eb99996c4c5bb455626aacf7",
+    "githubPushVerified": true,
+    "vercelState": "success",
+    "vercelProject": "deiffs-projects/estrella-taxis-dashboard",
+    "vercelDeployment": "8sFYzvMwRKN8n1QHYH1EP17Rv4Za",
+    "migration": "20261101180000",
+    "migrationMethod": "management_query_with_atomic_history_after_rollback_rehearsal",
+    "channelWabaSuffix": "2491",
+    "channelRevision": 8,
+    "customerTrackingButtonEnabled": true,
+    "productionQaMessagesSent": 0,
+    "productionQaTripsCreated": 0
+  },
+  "functions": [
+    {
+      "name": "ycloud-webhook",
+      "version": 51,
+      "status": "ACTIVE",
+      "verifyJwt": false
+    },
+    {
+      "name": "process-queue",
+      "version": 55,
+      "status": "ACTIVE",
+      "verifyJwt": false
+    },
+    {
+      "name": "track-position",
+      "version": 5,
+      "status": "ACTIVE",
+      "verifyJwt": false
+    },
+    {
+      "name": "driver-trip",
+      "version": 1,
+      "status": "ACTIVE",
+      "verifyJwt": false
+    }
+  ],
+  "deployedRuntimeMatches": [
+    {
+      "name": "process-queue",
+      "runtimeModulesMatched": 33
+    },
+    {
+      "name": "ycloud-webhook",
+      "runtimeModulesMatched": 32
+    },
+    {
+      "name": "track-position",
+      "runtimeModulesMatched": 9
+    }
+  ],
+  "tests": {
+    "fullSqlMatrix": 191,
+    "denoTyped": 22666,
+    "staticFiles": 163,
+    "customerUiStrictTypecheck": "passed",
+    "sqlTestsStrictTypecheck": "passed",
+    "entrypointDenoCheck": "passed",
+    "build": "passed",
+    "globalTypecheck": "preexisting_errors_outside_changed_files"
+  },
+  "browser": [
+    {
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "synthetic": true,
+      "noGoogleLinks": true,
+      "noOverflow": true,
+      "stalePickupCopyCorrect": true,
+      "consoleErrors": 0,
+      "pollingRecoveryAndTerminal": "verified"
+    },
+    {
+      "viewport": {
+        "width": 1280,
+        "height": 900
+      },
+      "synthetic": true,
+      "noGoogleLinks": true,
+      "noOverflow": true,
+      "stalePickupCopyCorrect": true,
+      "consoleErrors": 0,
+      "pollingRecoveryAndTerminal": "not_repeated"
+    }
+  ],
+  "productionBrowser": {
+    "productionBrowser": true,
+    "syntheticData": true,
+    "osmMapLoaded": true,
+    "noGoogleRequests": true,
+    "noGoogleLinks": true,
+    "stalePickupMessageCorrect": true,
+    "noOverflow": true,
+    "pageErrors": 0
+  },
+  "liveTripReadOnlyApi": {
+    "http": 200,
+    "unit": "Unidad 0540",
+    "driverIsSeparate": true,
+    "hasPickup": true,
+    "state": "en_camino",
+    "positionLabel": "Unidad 0540"
+  },
+  "liveActivation": {
+    "channel_enabled": true,
+    "configured_unit": "Unidad 0540",
+    "customer_tracking_button_enabled": true,
+    "driver_web_enabled": true,
+    "pending_messages": 0,
+    "revision": 8,
+    "sending_messages": 0,
+    "trip": {
+      "driver_is_separate": true,
+      "state": "en_camino",
+      "unit": "Unidad 0540"
+    },
+    "uncertain_messages": 0,
+    "offer_body_md5": "d4d72cbab51417dad5cd5d7d904c4a09",
+    "offer_definition_md5": "cb595438742cb4aa1a32d370594d45d6"
+  },
+  "consumer": {
+    "name": "stellar-taxi-bot",
+    "status": "online",
+    "restarts": 0
+  },
+  "review": {
+    "finalDisposition": "ship",
+    "incumbentSystemPreserved": true,
+    "newWhatsAppCtaPhysicalDeliveryTest": false,
+    "alreadySentMessageRewritten": false,
+    "roadRoutingOrEtaClaimed": false,
+    "pollIntervalSeconds": 5,
+    "publicFleetSubscription": false
+  },
+  "sourceHashes": [
+    {
+      "path": ".impeccable/surfaces/src-pages-trackpage-tsx.md",
+      "sha256": "45970ae81b644060c9f6e3a4fff0080fd6762061682c7f73793613f429219db4"
+    },
+    {
+      "path": "docs/STELLAR_CUSTOMER_TRACKING_UX_20261101.md",
+      "sha256": "497aca0c50d82cb1da73c6c64865cd0e37f14b113e4ee2e887f222129423081c"
+    },
+    {
+      "path": "estrella-taxis-backend/scripts/check-taxi-bot-quality.ts",
+      "sha256": "e4983ebafff4ce1f1a8d71ec5ec94c9e8de3f7663f58390f00aa8c82eb186114"
+    },
+    {
+      "path": "estrella-taxis-backend/scripts/package-stellar-functions.ts",
+      "sha256": "5ee756e2218977309881b73c9da81124013a67a42463d552ac3056b50f33ebb5"
+    },
+    {
+      "path": "estrella-taxis-backend/scripts/test-taxi-bot.ps1",
+      "sha256": "bd83838f458dd65ea7190d85b27d3e9db72c0525e1d7af0268559610b6134b65"
+    },
+    {
+      "path": "estrella-taxis-backend/supabase/functions/_shared/bot/taxis/transport.ts",
+      "sha256": "d93d3f7faea27f1b165726859ab565aa2a367e9cbba38c91c204c3371ad980cb"
+    },
+    {
+      "path": "estrella-taxis-backend/supabase/functions/_shared/bot/taxis/tripLinks.ts",
+      "sha256": "30e23e7b4bfc75d0f4caea9e60fa4409432374c3656f21d9b7ac6059e112da35"
+    },
+    {
+      "path": "estrella-taxis-backend/supabase/functions/track-position/handler.ts",
+      "sha256": "99bbbd944c169c010b86b71ba827a5fbd255832b7af20c04b54ff22202181309"
+    },
+    {
+      "path": "estrella-taxis-backend/supabase/migrations/20261101180000_taxi_customer_tracking_ux.sql",
+      "sha256": "251e9bf993f6497ff1f2cc284058b41bd0a59c19b9cc1d7bcdfd00ff57c4ca2c"
+    },
+    {
+      "path": "src/components/CustomerTripMap.tsx",
+      "sha256": "1547e07959a74aeb109afdec1feef5030ee46afc1da26172f6e1c59ffb274e26"
+    },
+    {
+      "path": "src/lib/publicTaxiTracking.ts",
+      "sha256": "4a382e6154431b404d28625965d981928539ed688478ef066153ca4311445813"
+    },
+    {
+      "path": "src/lib/taxiTrackingContracts.ts",
+      "sha256": "1934232b5acca049be5c6057a5e0a81514a7acf7b71d7d050ae67ec62e58fe8e"
+    },
+    {
+      "path": "src/lib/taxiTrackingPresentation.ts",
+      "sha256": "3441ec7582c3a7ebc26939fe7183200aa6bad9465ab07e07fd033172674679b1"
+    },
+    {
+      "path": "src/pages/TrackPage.tsx",
+      "sha256": "ccfc1f4e35bb27f55ffd7b264c101d29cb4863d087cff5ab1bf0cb48debc1953"
+    },
+    {
+      "path": "src/pages/customerTrip.css",
+      "sha256": "0aa1cf35d03d359ac1e3808478e0f6b79378a14a23e39b09c849351b08ff681b"
+    },
+    {
+      "path": "tests/taxi-bot-database.test.ts",
+      "sha256": "7838d6eb0373445dc450cdccb68f6462ebc65de0e0cbbf546ebed9bf687f2f9c"
+    },
+    {
+      "path": "tests/taxi-driver-trip-web.test.ts",
+      "sha256": "c5a2c855afcef79c39ff3f8a8f530d7a181e555e00650269786cbf2c7d99658d"
+    },
+    {
+      "path": "tests/taxi-live-tracking.test.ts",
+      "sha256": "2caacacef7978107de611fe887822899c6f48b81281f881beb148579a7c34724"
+    },
+    {
+      "path": "tsconfig.customer-trip.json",
+      "sha256": "59780ad6cd3bfa4b9c68e50c9b3753aef81ad90f742ab0fb8f34642a499e763d"
+    },
+    {
+      "path": "vercel.json",
+      "sha256": "46a730e44acf3097d7ebee7c46bb5b97448483f177072d8755aa75f685007c14"
+    }
+  ],
+  "logHashes": [
+    {
+      "name": "stellar-customer-ux-full-sql.log",
+      "sha256": "20bf9f959fb14723dcf293b404f813157bbcefb8e354ccde12d8266a55e2942b"
+    },
+    {
+      "name": "stellar-customer-ux-deno.log",
+      "sha256": "d2b13d9395b7d878acf1125b854d2ccde37cbc94a32d52331f5b21c7addf09c5"
+    },
+    {
+      "name": "stellar-customer-ux-build.log",
+      "sha256": "5fd40d25ee086de0fdea5f84af3eb821f59d35f8bd4a2ab528919facc6bc88b6"
+    },
+    {
+      "name": "stellar-customer-ux-browser.json",
+      "sha256": "ac1d300fcd9431e93d9162c1c76f0ab3a79fdaeae8ebc431634f9e6ca593f7d2"
+    },
+    {
+      "name": "stellar-customer-ux-live-browser.json",
+      "sha256": "dd9b535347ec58979f73f2a65c4f438c853558ae0b13208709fdeee929f7e165"
+    },
+    {
+      "name": "stellar-customer-ux-live-api.json",
+      "sha256": "77e7e0c4d5bd0ab2ad509a90172bc64f8f00dd4789c2e13a3c436e05b99a1938"
+    },
+    {
+      "name": "stellar-customer-ux-activation.json",
+      "sha256": "13d509c02d80f728e9b7ff4245dbfff7f0920ef6f9fbb3de46a0c30df71f2b23"
+    },
+    {
+      "name": "stellar-customer-ux-health.json",
+      "sha256": "70a53b56fa17b7ec4e38e06ce41eeece8b2e2dd5084d034d0ea65fafd6e51b2e"
+    },
+    {
+      "name": "stellar-customer-ux-consumer.json",
+      "sha256": "e0c436903dbb29b0746b10350d8fd373e666d12aec51723176f7d07a150e5e83"
+    },
+    {
+      "name": "stellar-customer-ux-migration-applied.json",
+      "sha256": "53c4ee22261cb46f06c831c86c3a8fc38dfcd37ace041e1cf07cd576fd809db0"
+    }
+  ]
+}
