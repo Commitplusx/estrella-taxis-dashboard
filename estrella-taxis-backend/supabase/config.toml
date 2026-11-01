@@ -466,3 +466,9 @@ entrypoint = "./functions/manage-catalog/index.ts"
 
 [functions.taxi-bot-admin]
 verify_jwt = false
+
+# The trip token is a capability; only the assigned unit's public location is returned.
+[functions.track-position]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/track-position/index.ts"

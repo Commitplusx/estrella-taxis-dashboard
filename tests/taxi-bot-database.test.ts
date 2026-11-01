@@ -59,6 +59,7 @@ const sharedDriverSql=readFileSync(new URL('../estrella-taxis-backend/supabase/m
 const currentTraceIntentsSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261031235900_taxi_trace_current_intents.sql',import.meta.url),'utf8');
 const sequentialOffersSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261101001000_taxi_sequential_offers.sql',import.meta.url),'utf8');
 const batchRoundsSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261101002000_taxi_three_round_batches.sql',import.meta.url),'utf8');
+const trackingLinkSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261101025802_taxi_customer_live_tracking.sql',import.meta.url),'utf8');
 const tenant='11111111-1111-4111-8111-111111111111',other='22222222-2222-4222-8222-222222222222',waba='+529630000001',customer='+529630000002',driverPhone='+529630000003';
 const pompeyo='4cf9acf1-f07e-4a01-9396-eb5bde3e7411';
 function unknownArray(value:unknown):value is unknown[]{return Array.isArray(value);}
@@ -791,6 +792,7 @@ async function fixture(options:{legacy?:boolean;seedCoverageBeforeMigration?:boo
     await db.exec(currentTraceIntentsSql);
     await db.exec(sequentialOffersSql);
     await db.exec(batchRoundsSql);
+    await db.exec(trackingLinkSql);
   }
   // These legacy protocol fixtures explicitly act as customers too. Driver-only access has separate tests below.
   await db.query('INSERT INTO taxi_bot_allowed_customers(tenant_id,phone)VALUES($1,$2),($1,$3),($1,$4)',[tenant,customer,driverPhone,'+529630000004']);
@@ -1316,10 +1318,17 @@ test('taxi status notifications match trip state from request through assignment
     await f.prepare();await f.confirm();
     assert.match(String(await f.scalar("SELECT body->>'text'FROM taxi_bot_outbox WHERE dedupe_key LIKE 'trip-created:%'")),/^🚕 Tu solicitud quedó registrada/);
     assert.match(String(await f.scalar("SELECT body->>'text'FROM taxi_bot_outbox WHERE dedupe_key LIKE 'offer:%'")),/^🚕/);
+    assert.equal(await f.scalar("SELECT count(*)::int FROM taxi_bot_outbox WHERE dedupe_key LIKE 'trip-assigned:%'"),0,'A tracking link is not sent before a driver accepts.');
     const offer=(await f.db.query<Record<string,unknown>>('SELECT id FROM taxi_bot_offers WHERE device_id=1')).rows[0];assert.ok(offer);
     const accepted=await f.enqueue('botón',driverPhone),acceptClaim=await f.begin(accepted.eventId);
     await f.commit(accepted.eventId,acceptClaim,{...f.decision('driver_accept'),offerId:offer.id});
     const assigned=String(await f.scalar("SELECT body->>'text'FROM taxi_bot_outbox WHERE dedupe_key LIKE 'trip-assigned:%'"));assert.match(assigned,/^🚕/);assert.match(assigned,/😊/);
+    const trackingToken=String(await f.scalar("SELECT token FROM viajes WHERE estado='en_camino'"));assert.match(trackingToken,/^[0-9a-f-]{36}$/i);
+    assert.match(assigned,new RegExp(`https://stellar\\.estrella-eats\\.mx/track/${trackingToken}`));assert.doesNotMatch(assigned,/tarifa|precio|\+529630000002/i);
+    const driverReceipt=String(await f.scalar("SELECT body->>'text'FROM taxi_bot_outbox WHERE dedupe_key LIKE 'driver-assigned:%'"));
+    const pickupLat=String(await f.scalar("SELECT round(origen_lat::numeric,6)::text FROM viajes WHERE estado='en_camino'"));
+    const pickupLng=String(await f.scalar("SELECT round(origen_lng::numeric,6)::text FROM viajes WHERE estado='en_camino'"));
+    assert.match(driverReceipt,new RegExp(`https://maps\\.google\\.com/\\?q=${pickupLat},${pickupLng}`));
     const finished=await f.enqueue('botón',driverPhone),finishClaim=await f.begin(finished.eventId);
     await f.commit(finished.eventId,finishClaim,{...f.decision('driver_finish'),offerId:offer.id});
     const completion=String(await f.scalar("SELECT body->>'text'FROM taxi_bot_outbox WHERE dedupe_key LIKE 'trip-finished:%'"));assert.match(completion,/^🚕/);assert.match(completion,/😊/);
