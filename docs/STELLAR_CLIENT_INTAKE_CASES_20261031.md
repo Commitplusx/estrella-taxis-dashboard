@@ -1,5 +1,7 @@
 # Recepción de clientes: pin, nombre y referencias por mensajes separados
 
+Publicación posterior: [guardado de solicitudes y destino escrito](STELLAR_CUSTOMER_FLOW_FIX_20261031.md), worker/webhook v48. Las versiones y mediciones v47 de este documento corresponden a la entrega anterior.
+
 Se ampliaron los recorridos de Pompeyo a partir de ejemplos de atención aportados por el administrador. Las pruebas usan pasajeros, cuentas y coordenadas sintéticos; no reproducen conversaciones privadas completas ni contactan clientes o choferes.
 
 ## Comportamiento publicado

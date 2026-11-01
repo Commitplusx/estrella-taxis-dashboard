@@ -1,6 +1,6 @@
 # Despacho: treinta minutos de GPS y de detención
 
-Publicación posterior de conversación: [recepción de clientes](STELLAR_CLIENT_INTAKE_CASES_20261031.md), worker/webhook v47. La política de GPS y detención de esta entrega no cambió; las versiones v45 descritas abajo son su publicación original.
+Publicación posterior de conversación: [guardado de solicitudes y destino escrito](STELLAR_CUSTOMER_FLOW_FIX_20261031.md), worker/webhook v48. La política de GPS y detención de esta entrega no cambió; las versiones v45 descritas abajo son su publicación original.
 
 La regla solicitada por Pompeyo permite taxis libres con GPS válido de hasta 30 minutos y excluye al taxi que lleva **más de 30 minutos detenido**, aunque siga enviando puntos nuevos. Al observar movimiento puede volver a competir. Siguen siendo obligatorios el turno activo, WhatsApp válido, ausencia de otro viaje, permisos del canal/plan, base y radio. Esta entrega no habilita turnos ni cambia teléfonos.
 
