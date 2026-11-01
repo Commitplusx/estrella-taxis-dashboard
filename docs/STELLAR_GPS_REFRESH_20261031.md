@@ -2,7 +2,7 @@
 
 ## Estado vigente
 
-Política vigente posterior: [treinta minutos y detención persistente](STELLAR_DISPATCH_IDLE_POLICY_20261031.md), worker/webhook v45 y administrador v37. El puente conserva la detención sin renovarla al importar GPS.
+Política vigente posterior: [treinta minutos y detención persistente](STELLAR_DISPATCH_IDLE_POLICY_20261031.md). Publicación actual de [conversación con clientes](STELLAR_CLIENT_INTAKE_CASES_20261031.md): worker/webhook v47 y administrador v37. El puente conserva la detención sin renovarla al importar GPS.
 
 Historial del simulador: su primera integración usó el mismo refresco y selector con worker/webhook v43 y administrador v35; ver [Simulador de asignación](STELLAR_DISPATCH_SIMULATION_20261031.md). La evidencia y prueba física descritas abajo corresponden al despliegue original, anterior a la política vigente.
 

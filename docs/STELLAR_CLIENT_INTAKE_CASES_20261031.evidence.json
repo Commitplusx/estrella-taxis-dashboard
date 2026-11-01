@@ -1,0 +1,104 @@
+{
+  "date": "2026-11-01T00:21:48.104Z",
+  "codeCommit": "0053aadd09a081264d258823019d2ccc9772a7c6",
+  "project": "izrsxygazsalfhpaualj",
+  "functions": [
+    {
+      "name": "ycloud-webhook",
+      "version": 47,
+      "status": "ACTIVE"
+    },
+    {
+      "name": "process-queue",
+      "version": 47,
+      "status": "ACTIVE"
+    },
+    {
+      "name": "taxi-bot-admin",
+      "version": 37,
+      "status": "ACTIVE"
+    }
+  ],
+  "verification": [
+    {
+      "name": "process-queue",
+      "files": 31,
+      "hashesMatch": true,
+      "options": 200
+    },
+    {
+      "name": "ycloud-webhook",
+      "files": 31,
+      "hashesMatch": true,
+      "options": 200
+    }
+  ],
+  "syntheticModelEvaluation": {
+    "caseSourceSha256": "eae05932364704eba5c358784cab6ac1aa8b6baed2c8228fdc592b9abd072216",
+    "before": {
+      "suite": "intake",
+      "passed": 4,
+      "total": 8,
+      "failures": [
+        "pin-bare-full-name-and-two-references",
+        "bare-full-name-before-pin",
+        "saved-pin-name-reference-in-later-batch",
+        "saved-pin-detail-is-not-destination"
+      ],
+      "synthetic": true,
+      "blindAccuracyMeasured": false,
+      "model": "deepseek-chat",
+      "fixtureHash": "19d6f2d99f1296d08c59dbc8b62afbdb1549a11acd25d9f43aa91d33b513e6b4",
+      "contractHash": "e9d425fda472fe684d9f0394519e25f989504bfc4f8626df3810acb1eccdb2b1"
+    },
+    "after": {
+      "suite": "intake",
+      "passed": 8,
+      "total": 8,
+      "failures": [],
+      "synthetic": true,
+      "blindAccuracyMeasured": false,
+      "model": "deepseek-chat",
+      "fixtureHash": "9494286bce627fb5906e721a3fffd5b2a9818f61c5857be7e60122b8e9123de7",
+      "contractHash": "8f2aa0bd53e43d2bc85898b063dc1aacc3a6f4250a9955eded28dfc64bb33ffe"
+    },
+    "regressions": {
+      "suite": "regression",
+      "passed": 24,
+      "total": 24,
+      "failures": [],
+      "synthetic": true,
+      "blindAccuracyMeasured": false,
+      "model": "deepseek-chat",
+      "fixtureHash": "4cd134ba658fef01ae5acea714ed4a4e3a80a064b4974720413ece1ea254afc0",
+      "contractHash": "8f2aa0bd53e43d2bc85898b063dc1aacc3a6f4250a9955eded28dfc64bb33ffe"
+    },
+    "replies": {
+      "suite": "replies",
+      "passed": 30,
+      "total": 30,
+      "failures": [],
+      "synthetic": true,
+      "blindAccuracyMeasured": false,
+      "model": "deepseek-chat",
+      "fixtureHash": "1a7f1466918439d7049334686974b21896f713c865eb610fb05efa05ef3e12fb",
+      "contractHash": "2cb3a9756f846e3167c7562f40db0743500dc168ec26c56fa6a492e84ffc6d11"
+    },
+    "developmentCases": true,
+    "blindAccuracyMeasured": false
+  },
+  "tests": {
+    "fullDeno": 22835,
+    "qualityFiles": 142,
+    "typechecked": true
+  },
+  "authorization": {
+    "authorizedCount": 1,
+    "enabled": true,
+    "requestedCustomerAllowed": true
+  },
+  "temporaryEvaluatorDeleted": true,
+  "physicalCustomerTest": false,
+  "whatsAppMessagesSentByEvaluation": 0,
+  "tripsCreatedByEvaluation": 0
+}
