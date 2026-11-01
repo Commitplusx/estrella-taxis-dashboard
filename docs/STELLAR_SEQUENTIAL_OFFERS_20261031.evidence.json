@@ -1,0 +1,115 @@
+{
+  "date": "2026-11-01T01:00:34.121Z",
+  "codeCommit": "d963fbdec7ecdeb256cceb5f4df9d802899d2bb1",
+  "project": "izrsxygazsalfhpaualj",
+  "migration": "20261101001000",
+  "migrationSha256": "e2d2a2886288d215929f6c9585dac79f21e199280c2a71ccc13a4a6b6eae1991",
+  "runtime": {
+    "edgeFunctionsUnchanged": true,
+    "processQueueVersion": 48,
+    "webhookVersion": 48,
+    "adminVersion": 37,
+    "vpsRestarted": false,
+    "apkChanged": false
+  },
+  "sql": {
+    "checkedAt": "2026-11-01T00:56:43.017922+00:00",
+    "channel": {
+      "enabled": true,
+      "waba_last4": "2491"
+    },
+    "functions": [
+      {
+        "name": "taxi_bot_dispatch_complete",
+        "signature": "taxi_bot_dispatch_complete(uuid,uuid,jsonb,text)",
+        "sourceMd5": "b6f0c232b9f2ea1a4d7a9a1455ba78eb",
+        "grantsUnchanged": true
+      },
+      {
+        "name": "taxi_bot_dispatch_delivery_changed",
+        "signature": "taxi_bot_dispatch_delivery_changed()",
+        "sourceMd5": "47a8ba503566ce73be158fe898e8d6a1",
+        "grantsUnchanged": true
+      },
+      {
+        "name": "taxi_bot_dispatch_eligible",
+        "signature": "taxi_bot_dispatch_eligible(uuid,text,integer[])",
+        "sourceMd5": "bccbc8ecf27b9eb24b8d7086d7cb49cb",
+        "grantsUnchanged": true
+      },
+      {
+        "name": "taxi_bot_dispatch_offer",
+        "signature": "taxi_bot_dispatch_offer(uuid,jsonb,integer)",
+        "sourceMd5": "9f0d46f376502380e1ae3f878f51cfff",
+        "grantsUnchanged": true
+      },
+      {
+        "name": "taxi_bot_dispatch_start",
+        "signature": "taxi_bot_dispatch_start(uuid,jsonb,boolean)",
+        "sourceMd5": "373812d60267c134f8f9b23b39a39ff4",
+        "grantsUnchanged": true
+      }
+    ],
+    "hashesMatch": true,
+    "activeOffers": 0
+  },
+  "messagePreview": [
+    {
+      "result": {
+        "has_minute": true,
+        "has_pickup_map": true,
+        "has_price": false,
+        "has_raw_location_label": false,
+        "length": 208,
+        "within_interactive_limit": true
+      }
+    }
+  ],
+  "policy": {
+    "parallelOffersPerTrip": 1,
+    "responseSeconds": 60,
+    "firstProviderAcknowledgementStartsWindow": true,
+    "repeatedCallbacksExtendWindow": false,
+    "lateCallbacksReviveExpiredOffer": false,
+    "explicitRejectionAdvancesImmediately": true,
+    "driverOfferShowsFare": false,
+    "refreshGpsEachRound": true,
+    "maxRounds": 4,
+    "maxScans": 12
+  },
+  "tests": {
+    "before": {
+      "passed": 0,
+      "failed": 3
+    },
+    "sequentialFocused": {
+      "passed": 5,
+      "failed": 0
+    },
+    "dispatchRegressions": {
+      "passed": 24,
+      "failed": 0
+    },
+    "fullSql": {
+      "passed": 168,
+      "failed": 0
+    },
+    "deno": {
+      "passed": 275,
+      "failed": 0
+    },
+    "typechecked": true,
+    "qualityFiles": 142
+  },
+  "verification": {
+    "sqlDryRunRolledBack": true,
+    "liveHashesMatch": true,
+    "grantsUnchanged": true,
+    "processQueueOptions": 200,
+    "webhookOptions": 200,
+    "productionDataRewritten": false,
+    "productionOffersCreatedByChecks": 0,
+    "whatsAppMessagesSentByChecks": 0,
+    "physicalDriverAcceptanceWithNewPolicy": false
+  }
+}

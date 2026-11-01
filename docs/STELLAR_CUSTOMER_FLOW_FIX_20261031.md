@@ -1,5 +1,7 @@
 # Atención del cliente: guardado de solicitudes y destino escrito
 
+Despacho posterior: [ofertas de una en una y espera de un minuto](STELLAR_SEQUENTIAL_OFFERS_20261031.md). La recepción y el resumen de esta entrega permanecen en v48.
+
 Estado publicado: código `6eb1712` en `main`; `process-queue` y `ycloud-webhook` **v48 ACTIVE** en el proyecto independiente `izrsxygazsalfhpaualj`. El administrador continúa en v37. Migración puntual `20261031235900_taxi_trace_current_intents` aplicada y registrada.
 
 ## Silencio al pedir taxi
