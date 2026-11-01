@@ -301,7 +301,7 @@ export default function TaxiBotAdminPage(
         result.state === "queued"
           ? "Mensaje en cola. Revisa abajo si WhatsApp lo acepta o entrega."
           : command.action === "configure" && command.payload.enabled === false
-          ? "Bot pausado en el servidor. Las respuestas y ofertas nuevas se detendrán."
+          ? "Bot pausado. Los mensajes en cola se reanudarán al activarlo; un envío iniciado podría llegar."
           : command.action === "configure" && command.payload.enabled === true
           ? "Bot activado en el servidor."
           : zonesChanged
@@ -590,7 +590,7 @@ export default function TaxiBotAdminPage(
             </button>
             <small>
               {channel.enabled
-                ? "Pausa respuestas y ofertas nuevas. Un mensaje ya enviado a WhatsApp aún podría llegar."
+                ? "Pausa respuestas y ofertas nuevas. Conserva la cola para reanudarla; un envío iniciado aún podría llegar."
                 : context?.runtimeReady === true
                 ? "Activa la atención automática de este canal."
                 : "El servidor todavía no está listo para activar el bot."}
