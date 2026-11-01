@@ -836,6 +836,41 @@ async function fixture(options:{legacy?:boolean;seedCoverageBeforeMigration?:boo
   return{db,scalar,obj,enqueue,enqueueButton,begin,decision,commit,prepare,confirm,draft,seedH3,admin};
 }
 function asString(value:unknown):string{if(typeof value!=='string')throw new TypeError('Expected a string field from the SQL fixture.');return value;}
+const targetedTestSql=readSql(new URL('../deployment/stellar/target-next-test-trip.sql',import.meta.url),'utf8');
+async function armFixtureTarget(f:Awaited<ReturnType<typeof fixture>>,expired=false){
+ await f.db.exec(targetedTestSql);
+ await f.db.query("INSERT INTO taxi_bot_test_targets(tenant_id,waba,customer,device_id,armed_at,expires_at)VALUES($1,$2,$3,2,clock_timestamp()-CASE WHEN $4 THEN interval '1 hour'ELSE interval '0 seconds'END,clock_timestamp()+CASE WHEN $4 THEN interval '-30 minutes'ELSE interval '29 minutes'END)",[tenant,waba,customer,expired]);
+}
+test('targeted test dispatch: only the next confirmed customer trip is pinned; no early trip, no spill to another taxi or second service',async()=>{
+ const f=await fixture();try{
+  await armFixtureTarget(f);await f.prepare();assert.equal(await f.scalar('SELECT count(*)::int FROM viajes'),0);
+  await f.confirm(customer,[{deviceId:1,name:'Other unit'}]);
+  assert.deepEqual((await f.db.query<{device_id:number}>('SELECT device_id FROM taxi_bot_offers')).rows,[{device_id:2}]);
+  const trip=asString(await f.scalar('SELECT id::text FROM viajes'));
+  assert.equal(await f.scalar('SELECT taxi_bot_dispatch_offer($1,$2,2)',[trip,[{deviceId:1}]]),0);
+  assert.equal(await f.scalar('SELECT count(*)::int FROM taxi_bot_offers'),1);
+  assert.equal(await f.scalar('SELECT trip_id::text FROM taxi_bot_test_targets'),trip);
+  const offer=asString(await f.scalar('SELECT id::text FROM taxi_bot_offers'));
+  for(const[action,prefix]of[['driver_accept','txa_'],['driver_finish','txf_']]){const e=await f.enqueue('','+529630000004',crypto.randomUUID(),prefix+offer),claim=await f.begin(e.eventId);await f.commit(e.eventId,claim,{...f.decision(action),offerId:offer});}
+  assert.equal(await f.scalar('SELECT estado FROM viajes'),'completado');
+  f.draft.confirmation=crypto.randomUUID();await f.prepare();await f.confirm(customer,[{deviceId:1,name:'Normal unit'}]);
+  assert.equal(await f.scalar('SELECT device_id FROM taxi_bot_offers WHERE trip_id<>$1',[trip]),1);
+ }finally{await f.db.close();}
+});
+test('targeted test dispatch: expired rules do not affect a confirmed trip and private policy has no public grants',async()=>{
+ const f=await fixture();try{
+  await armFixtureTarget(f,true);await f.prepare();await f.confirm(customer,[{deviceId:1,name:'Normal unit'}]);
+  assert.equal(await f.scalar('SELECT device_id FROM taxi_bot_offers'),1);assert.equal(await f.scalar('SELECT trip_id FROM taxi_bot_test_targets'),null);
+  for(const role of['anon','authenticated','service_role']){assert.equal(await f.scalar("SELECT has_table_privilege($1,'taxi_bot_test_targets','SELECT')",[role]),false);assert.equal(await f.scalar("SELECT has_function_privilege($1,'taxi_bot_test_candidates(uuid,jsonb,integer)','EXECUTE')",[role]),false);}
+ }finally{await f.db.close();}
+});
+test('targeted test dispatch: unavailable target cannot create an offer and never falls through to the next ranked taxi',async()=>{
+ const f=await fixture();try{
+  await armFixtureTarget(f);await f.db.exec('UPDATE conductores SET activo=false WHERE device_id=2');await f.prepare();await f.confirm(customer,[{deviceId:1,name:'Other unit'}]);
+  assert.equal(await f.scalar('SELECT count(*)::int FROM taxi_bot_offers'),0);assert.equal(await f.scalar('SELECT consumed_at IS NOT NULL FROM taxi_bot_test_targets'),true);
+  const trip=asString(await f.scalar('SELECT id::text FROM viajes'));assert.equal(await f.scalar('SELECT taxi_bot_dispatch_offer($1,$2,2)',[trip,[{deviceId:1}]]),0);
+ }finally{await f.db.close();}
+});
 
 async function driverWebFixture(){
  const f=await fixture();await f.prepare();await f.db.exec('UPDATE taxi_bot_channels SET driver_web_enabled=true');await f.confirm(customer,[{deviceId:1,name:'Unidad 1'}]);
