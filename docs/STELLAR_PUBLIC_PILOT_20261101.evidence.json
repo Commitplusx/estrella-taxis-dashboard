@@ -1,0 +1,183 @@
+{
+  "date": "2026-11-01",
+  "project": "Stellar Tracking",
+  "supabaseProject": "izrsxygazsalfhpaualj",
+  "publication": {
+    "status": "published_and_enabled",
+    "githubCodeCommit": "bbee01713af32fe2cbdd0e90d8582806354ba7e2",
+    "githubPushVerified": true,
+    "vercelState": "success",
+    "vercelProject": "deiffs-projects/estrella-taxis-dashboard",
+    "vercelDeployment": "7SrdaBVjgRKNeWhwWYtZhpseaBPQ",
+    "migration": "20261101190000",
+    "adminVersion": 41,
+    "channelWabaSuffix": "2491",
+    "accessRevision": 15,
+    "channelRevision": 8,
+    "publicEnabled": true,
+    "activationRequest": "52a7c0b9-44da-4e27-8b52-4d602f948d14",
+    "productionQaMessagesSent": 0,
+    "productionQaTripsCreated": 0
+  },
+  "tests": {
+    "fullSqlMatrix": 196,
+    "denoTypedContracts": 5563,
+    "staticFiles": 163,
+    "strictFrontendAndSqlTests": "passed",
+    "activeVariantDenoCheck": "passed",
+    "build": "passed"
+  },
+  "tileNetworkLocal": {
+    "production": false,
+    "syntheticTrip": true,
+    "realTileNetwork": true,
+    "visibleTileCount": 9,
+    "allTilesHttp200": true,
+    "allTileReferrersOriginOnly": true,
+    "documentKeepsNoReferrer": true,
+    "noGoogleLinks": true,
+    "pageErrors": 0
+  },
+  "tileNetworkProduction": {
+    "production": true,
+    "syntheticTrip": true,
+    "realTileNetwork": true,
+    "visibleTileCount": 9,
+    "allTilesHttp200": true,
+    "allTileReferrersOriginOnly": true,
+    "documentKeepsNoReferrer": true,
+    "noGoogleLinks": true,
+    "pageErrors": 0
+  },
+  "accessBrowser": {
+    "synthetic": true,
+    "mobile": true,
+    "openModeHonest": true,
+    "restrictAndOpenSaved": true,
+    "uncertainRetryReusesRequestId": true,
+    "noOverflow": true,
+    "pageErrors": 0
+  },
+  "sourceVerification": {
+    "runtimeModulesMatched": 39,
+    "changedRuntimeModules": [
+      "_shared/bot/taxis/customerAccess.ts",
+      "taxi-bot-admin/handler.ts"
+    ],
+    "activeVariantPreserved": true
+  },
+  "activation": {
+    "access_revision": 15,
+    "authorized_list_count": 1,
+    "channel_enabled": true,
+    "channel_revision": 8,
+    "dispatch_paused": false,
+    "invalid_phone_rejected": true,
+    "migration_recorded": true,
+    "new_customer_allowed": true,
+    "new_customer_recipient_allowed": true,
+    "offer_definition_md5": "cb595438742cb4aa1a32d370594d45d6",
+    "pending_messages": 0,
+    "public_enabled": true,
+    "public_taxi_bases": 1,
+    "sending_messages": 0,
+    "uncertain_messages": 0
+  },
+  "consumer": {
+    "name": "stellar-taxi-bot",
+    "status": "online",
+    "restarts": 0
+  },
+  "liveAdmin": {
+    "preflight": 200,
+    "unauthenticatedPost": 401
+  },
+  "sourceHashes": [
+    {
+      "path": "docs/STELLAR_CLIENT_INTAKE_CASES_20261031.md",
+      "sha256": "30602bae4b012206dc7e4fbffe138920f39b288c6f94ec44f5aaf3b1b8c162dd"
+    },
+    {
+      "path": "docs/STELLAR_PUBLIC_PILOT_20261101.md",
+      "sha256": "ed8478b69b1d49cff02cd4ec37da58d396a3e6b0945d073881c3da2409271c88"
+    },
+    {
+      "path": "estrella-taxis-backend/supabase/functions/_shared/bot/taxis/customerAccess.ts",
+      "sha256": "b716214c709bcb87a8b0dbc3f55f3d9fd56247d9b120c15f52dd6d03d5668c69"
+    },
+    {
+      "path": "estrella-taxis-backend/supabase/functions/taxi-bot-admin/handler.ts",
+      "sha256": "4f4a22c1074b2a674c1238b3872d8ffb53106d44487c9472ec0bf972b365f85f"
+    },
+    {
+      "path": "estrella-taxis-backend/supabase/migrations/20261101190000_taxi_public_pilot.sql",
+      "sha256": "41cdad4fca28cc2adea1699898a930cd26ddfa8bd8e252e2844ab282ed8e98f7"
+    },
+    {
+      "path": "src/components/CustomerTripMap.tsx",
+      "sha256": "add8acbeb1e7b482df1ad9b4e24397e03173ae6a62bdb13386b7f0b60aedb95e"
+    },
+    {
+      "path": "src/components/DriverTripMap.tsx",
+      "sha256": "bcdb10588d4739830c93421806e1da3f02451dd1fee7abb8e709806ed5db03d6"
+    },
+    {
+      "path": "src/components/TaxiCustomerAccessPanel.tsx",
+      "sha256": "e4b07770825ebc43f8124e30c7fa6f592da69a69767c5585d0f9360fc70bbf09"
+    },
+    {
+      "path": "src/pages/TaxiBotAdminPage.tsx",
+      "sha256": "9e35bb4fcbaee6e4411d8810007b20a948efdd0d1951bf4733e6981e00dce7e2"
+    },
+    {
+      "path": "tests/taxi-bot-database.test.ts",
+      "sha256": "86c2ce5cde5a907b1ad8afb1503f8b1d7f931242ff7e3ecd746a05b9fcd14784"
+    },
+    {
+      "path": "tests/taxi-customer-access.test.ts",
+      "sha256": "c822ceb48506131c8974198540fbb552900111d73cc045736e3dce3d465ad3f9"
+    }
+  ],
+  "logHashes": [
+    {
+      "name": "stellar-public-pilot-full-sql.log",
+      "sha256": "5e8b2d4f7ac851021f783bb287f8e1c6e581ac0a3cf99b85e2684008ac2e54eb"
+    },
+    {
+      "name": "stellar-public-pilot-deno.log",
+      "sha256": "720fc323717267b6364f027375a77d13b2443c9622f446c95f83864bcb87b19b"
+    },
+    {
+      "name": "stellar-public-pilot-build.log",
+      "sha256": "52cedd61d7a56c818f12f92879bb2c2611571d6b6a152a28902a74b6271c7096"
+    },
+    {
+      "name": "stellar-public-pilot-map-local.json",
+      "sha256": "45a9d59b66db01bcfa841a01a3e0b1017bae39e68817e1f934fd40f516fed445"
+    },
+    {
+      "name": "stellar-public-pilot-map-live.json",
+      "sha256": "a48e49693c314df1855c7cd6bc4aaf76eb85f0b4efb7f614320f02f34d25361c"
+    },
+    {
+      "name": "stellar-public-pilot-access-browser.json",
+      "sha256": "7600bb2c4575f1d22836e5c4bf57aab328aabe88a9a26d8b1f1aea9cb4a97401"
+    },
+    {
+      "name": "stellar-public-pilot-source-verification.json",
+      "sha256": "c2b2219d4d402517d4d58a7bdd9439830cb974a3f14017cb621e662c777df35d"
+    },
+    {
+      "name": "stellar-public-pilot-rehearsal.json",
+      "sha256": "13a192ae9c3be9c4334f9e1bb8fa2908ea8110105cf241835286f329253c5592"
+    },
+    {
+      "name": "stellar-public-pilot-activation.json",
+      "sha256": "855eaea232db0034285c8be06893e253352020863f607ec6e0b50bf4f3bd9ca2"
+    },
+    {
+      "name": "stellar-public-pilot-health.json",
+      "sha256": "cee362846eacf1677d5e6a282d8954cd8453257fb4653d6da4672fbf3316ab95"
+    }
+  ]
+}
