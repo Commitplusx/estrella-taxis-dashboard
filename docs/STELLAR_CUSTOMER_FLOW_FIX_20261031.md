@@ -25,6 +25,8 @@ Un detalle posterior puede precisar el destino escrito vigente y sustituye el bo
 - Se descargaron de nuevo ambas funciones: los **31 módulos** de ejecución de cada una coinciden por SHA-256 y ambas responden OPTIONS 200. Sólo cambiaron coordinador, intérprete y máquina de estados; se conservó la variante activa de autenticación de cada paquete.
 - El evaluador temporal se eliminó y se verificó su ausencia. Estas comprobaciones no enviaron WhatsApp ni crearon viajes reales. El acceso continúa restringido al único autorizado terminado en **9156**.
 
+Comprobación real posterior: el administrador confirmó que el resumen ya aparece correctamente. La lectura de backend conservó pin y nombre, Liverpool como destino y ninguna referencia de recogida con Liverpool. El resumen tenía el botón vigente, no mostraba categorías internas ni importe y WhatsApp lo reportó leído. Esta comprobación cubre recepción y resumen; no acredita una prueba nueva de oferta, aceptación del chofer ni asignación del viaje.
+
 El algoritmo de asignación, el refresco de Wialon, el puente y la APK no cambiaron. Al confirmar se revalida la tarifa y se consulta la flota; sólo la aceptación real del chofer acredita asignación y habilita el aviso al cliente.
 
 ## Recuperación

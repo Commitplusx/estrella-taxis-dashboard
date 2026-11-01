@@ -377,7 +377,29 @@
     "requestedCustomerAllowed": true
   },
   "temporaryEvaluatorDeleted": true,
-  "physicalCustomerTestAfterRelease": false,
+  "physicalCustomerTestAfterRelease": true,
   "whatsAppMessagesSentByChecks": 0,
-  "tripsCreatedByChecks": 0
+  "tripsCreatedByChecks": 0,
+  "physicalCustomerTestScope": "intake-and-review-only",
+  "customerConfirmedCorrectSummary": true,
+  "driverOfferOrAcceptanceTestAfterRelease": false,
+  "liveReviewObservation": {
+    "checked_at": "2026-11-01T00:46:14.049567+00:00",
+    "reply": {
+      "created_at": "2026-11-01T00:45:44.300589+00:00",
+      "fare_visible": false,
+      "has_confirmation_button": true,
+      "internal_categories_visible": false,
+      "state": "read"
+    },
+    "session": {
+      "awaiting": null,
+      "destination_mentions_liverpool": true,
+      "has_current_confirmation": true,
+      "has_name": true,
+      "has_pickup": true,
+      "pickup_note_mentions_liverpool": false,
+      "updated_at": "2026-11-01T00:45:44.327811+00:00"
+    }
+  }
 }
