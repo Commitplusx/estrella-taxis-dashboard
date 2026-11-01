@@ -4,7 +4,7 @@ import{emptyDraft,parseSession,type TaxiChannel,type TaxiInbound,type TaxiSessio
 import{parseTaxiToolCompletion}from'../estrella-taxis-backend/supabase/functions/_shared/bot/taxis/conversationTools.ts';
 import{parseTaxiQuestion}from'../estrella-taxis-backend/supabase/functions/_shared/bot/taxis/conversationReply.ts';
 import{taxiH3Scope}from'../estrella-taxis-backend/supabase/functions/_shared/bot/taxis/h3.ts';
-import{defersDestination,locationRole,locationRoleConflict,refersToSharedLocation}from'../estrella-taxis-backend/supabase/functions/_shared/bot/taxis/policy.ts';
+import{defersDestination,locationRole,locationRoleConflict,refersToSharedLocation,parseInterpretation}from'../estrella-taxis-backend/supabase/functions/_shared/bot/taxis/policy.ts';
 const now=Date.parse('2026-10-30T23:00:00Z');
 const channel:TaxiChannel={tenantId:'11111111-1111-4111-8111-111111111111',waba:'+529630000001',enabled:true,name:'Base sintética',city:'Comitán',centerLat:16.25,centerLng:-92.13,radiusKm:20,dispatcher:null,model:'fixture',baseCents:5500,perKmCents:null,pricingMode:'h3_zone_max'};
 const inbound=(text:string):TaxiInbound=>({id:crypto.randomUUID(),from:'+529630000002',to:channel.waba,at:new Date(now).toISOString(),type:'text',text,button:null,location:null});
@@ -55,6 +55,18 @@ Deno.test('service questions: the interpreter can propose a question while retai
 Deno.test('natural taxi request: the interpreter identifies a booking request without inventing an address or confirming a ride',()=>{
  const result=parseTaxiToolCompletion(completion('solicitar_taxi',{}),'Buenas tardes\nMe puede enviar un taxi');
  assertEquals(result.intent,'request');assertEquals(result.fields,{});
+});
+for(const phase of ['first_detail','legacy_clarification','review_detail'] as const)Deno.test('written destination: '+phase+' reaches review without asking for internal fare categories',async()=>{
+ const s=session();s.draft={...s.draft,name:'Mariana',origin:{text:'Pin guardado',lat:16.25,lng:-92.13,placeId:null,source:'gps'},pickupMessageId:'native-pickup'};
+ const oldConfirmation=crypto.randomUUID();
+ if(phase!=='first_detail')s.draft={...s.draft,destinationText:'plaza',awaitingLocation:phase==='legacy_clarification'?'destination':null,confirmation:phase==='review_detail'?oldConfirmation:null,expiresAt:phase==='review_detail'?new Date(now+600000).toISOString():null};
+ const text=phase==='first_detail'?'Voy para plaza\nEn Liverpool':'En Liverpool';
+ const destination=phase==='first_detail'?{value:'plaza En Liverpool',evidence:text}:{value:'En Liverpool',evidence:text,refines:'plaza'};
+ const expected=phase==='first_detail'?'plaza En Liverpool':'plaza, En Liverpool';let quotes=0;
+ const area={label:'Plaza Las Flores',category:'cash_a' as const,version:'a'.repeat(32),cents:5500,cell:null,priceSource:'reference' as const};
+ const f:TaxiServices={...services,interpret:async current=>parseInterpretation({intent:'provide',fields:{destination}},current),resolve:async query=>{assertEquals(query,expected);return{kind:'ambiguous',labels:['Plaza Las Flores (Cash A)','Plaza Las Flores (otros puntos)'],neighborhoods:[area,{...area,category:'otro_punto',version:'b'.repeat(32),cents:6500}]};},quote:async(origin,destination,_channel,_signal,selectedArea)=>{quotes++;assertEquals(destination,origin);assertEquals(selectedArea,null);return 5500;},candidates:never};
+ const d=await coordinateTaxi([inbound(text)],s,channel,f,now);
+ assertEquals(d.action,'draft');assert(d.draft.confirmation);assert(d.draft.confirmation!==oldConfirmation);assertEquals(d.draft.destinationText,expected);assertEquals(d.draft.destination,null);assertEquals(d.draft.destinationArea,null);assertEquals(d.draft.quoteBasis,'pickup');assertEquals(d.draft.pickupMessageId,'native-pickup');assertEquals(quotes,1);assertEquals(d.messages.length,1);assert(!d.messages[0].locationRequest);assert(!/Cash A|otros puntos|cuál corresponde|\$|MXN/i.test(d.messages[0].text));assertStringIncludes(d.messages[0].text,expected);assertEquals(d.candidates,[]);
 });
 Deno.test('natural taxi request: text-only request asks for the pickup naturally and keeps the GPS requirement',async()=>{
  const s=session(),answer='¿Me compartes tu ubicación con el botón y a dónde te llevamos? Si prefieres, el destino se lo dices al chofer. 🚕';

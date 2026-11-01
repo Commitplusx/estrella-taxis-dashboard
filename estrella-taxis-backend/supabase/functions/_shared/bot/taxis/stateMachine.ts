@@ -43,9 +43,11 @@ export function taxiProgress(s:TaxiSession,now:number){
   return {phase,hasPickupGps:Boolean(d.origin?.source==='gps'&&d.pickupMessageId),hasPassengerName:Boolean(d.name),missing:[...(!d.origin||d.origin.source!=='gps'||!d.pickupMessageId?['pickup_gps']:[]),...(!hasDestination(d)&&d.destinationDeferred!==true?['destination_choice']:[]),...(!d.name?['passenger_name']:[]),...(d.fareMode!=='quoted'||d.quoteCents===null?['server_fare']:[])],destinationOptional:true,destinationDeferred:d.destinationDeferred===true,confirmation:'current_button_only',hasPickupNote:Boolean(d.pickupText),hasDestination:hasDestination(d),canRequest:phase==='review'&&d.fareMode==='quoted'&&d.quoteCents!==null};
 }
 export function hasDestination(d:TaxiSession['draft']):boolean{return Boolean(d.destination||d.destinationText||d.destinationArea);}
-/** The backend owns the unresolved place; the model only proposes how a current detail relates to it. */
+/** The backend owns the written place; a later detail may refine it before booking. */
 export function pendingLocalityContext(s:TaxiSession):{field:'origin'|'destination';query:string}|null{
-  const field=s.draft.awaitingLocation;
+  const d=s.draft;
+  if(!s.active&&d.awaitingLocation===null&&d.destinationText&&!d.destination&&!d.destinationArea&&!d.destinationDeferred)return{field:'destination',query:d.destinationText};
+  const field=d.awaitingLocation;
   if(field!=='origin'&&field!=='destination')return null;
   const query=field==='origin'?s.draft.pickupText:s.draft.destinationText;
   if(!query||field==='origin'&&s.draft.origin||field==='destination'&&(s.draft.destination||s.draft.destinationArea||s.draft.destinationDeferred===true))return null;

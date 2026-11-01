@@ -95,7 +95,6 @@ function replyNextStep(decision:TaxiDecision,phase:string):TaxiReplyContext['nex
   if(phase==='name'&&!decision.draft.name)return'passenger_name';
   return'none';
 }
-interface PendingLocalityAnswer {field:'origin'|'destination';query:string;answer:string;combined:string}
 export async function coordinateTaxi(messages:TaxiInbound[],session:TaxiSession,channel:TaxiChannel,services:TaxiServices,now:number,signal?:AbortSignal):Promise<TaxiDecision> {
   const decision=await decideTaxi(messages,session,channel,services,now,signal);
   constrainTaxiConversation(session,decision,messages);
@@ -148,6 +147,7 @@ async function decideTaxi(messages:TaxiInbound[],session:TaxiSession,channel:Tax
     if(phase==='origin'||phase==='destination'){
       const area=phase==='origin'?d.originArea:d.destinationArea;
       if(phase==='destination'&&!hasDestination(d))return askDestination(d,reason);
+      if(phase==='destination')return prepareSummary({...d,awaitingLocation:null},reason);
       const body=area
         ?phase==='origin'?`Ubico ${localityDisplayName(area)}. Comparte el pin GPS de recogida con el botón; conservo la dirección escrita como referencia.`:`Ubico ${localityDisplayName(area)}. ¿Qué calle o referencia tiene el destino? Su pin es opcional.`
         :phase==='origin'?'Necesito el pin GPS donde te recogemos. Usa el botón; conservo la dirección escrita como referencia.':'El destino es opcional. Si quieres precisarlo, dime a qué colonia o dirección vas; su pin es opcional.';
@@ -268,7 +268,6 @@ async function decideTaxi(messages:TaxiInbound[],session:TaxiSession,channel:Tax
   let interpretation:Interpretation;
   let interpretationIssue:'interpretation_failed'|'ambiguous_intent'|'unclear_name'|'pickup_reference_too_long'|null=null;
   const interpretationSession=changed?{...session,draft:d}:session,pendingLocality=pendingLocalityContext(interpretationSession);
-  let localityAnswer:PendingLocalityAnswer|null=null;
   try{
     interpretation=current&&!(selectedRole&&roleOnly&&native.length)?await services.interpret(current,interpretationSession,channel,signal,undefined,turn):{intent:'provide',fields:{}};
   }
@@ -309,8 +308,7 @@ async function decideTaxi(messages:TaxiInbound[],session:TaxiSession,channel:Tax
     const proposed=interpretation.fields[field];if(proposed?.refines===undefined)continue;
     if(!pendingLocality||pendingLocality.field!==field||pendingLocality.query!==proposed.refines)return requestLocation(session.draft,pendingLocality?.field??field,'ambiguous_intent','No pude relacionar esa referencia con el lugar pendiente. ¿Me confirmas el lugar y una referencia?');
     const query=pendingLocality.query,answer=proposed.value,combined=normalize(query)===normalize(answer)?query:`${query}, ${answer}`;
-    if(combined.length>400)return clarifyPending('ambiguous_intent');
-    localityAnswer={field,query,answer,combined};
+    if(combined.length>400)return{...reply('Ese detalle es demasiado largo. Conservé el destino anterior sin cambiar el recorrido.','ambiguous_intent'),action:'draft',draft:{...session.draft,confirmation:null,expiresAt:null}};
     interpretation={...interpretation,fields:{...interpretation.fields,[field]:{value:combined,evidence:proposed.evidence}}};
   }
   const repeatedPickup=interpretation.fields.origin?restatesKnownPickup(d,interpretation.fields.origin.value,interpretation.fields.origin.evidence):false;
@@ -326,9 +324,6 @@ async function decideTaxi(messages:TaxiInbound[],session:TaxiSession,channel:Tax
   if(interpretation.fields.name){
     d.name=interpretation.fields.name.value;changed=true;
   }
-  const unresolved:('origin'|'destination')[]=[];
-  const recognized:Partial<Record<'origin'|'destination',NeighborhoodArea[]>>={};
-  const referenceConflicts:Partial<Record<'origin'|'destination',string>>={};
   for(const field of ['origin','destination'] as const) {
     const requested=interpretation.fields[field];if(!requested)continue;
     if((native.length||resolvedPendingRole===field)&&refersToSharedLocation(requested.value))continue;
@@ -341,11 +336,21 @@ async function decideTaxi(messages:TaxiInbound[],session:TaxiSession,channel:Tax
     d.destinationText=requested.value;d.destinationDeferred=false;d.destinationPrompt=null;
     let resolved:LocationResult;try{resolved=await services.resolve(requested.value,channel,signal,d[areaKey]);}catch{resolved={kind:'unavailable'};}
     d[areaKey]=null;
-    if(resolved.kind==='resolved'&&within(resolved.place,channel)){d[field]=resolved.place;if(d.awaitingLocation===field)d.awaitingLocation=null;}
-    else {d[field]=null;if(resolved.kind==='reference_conflict')referenceConflicts[field]=resolved.label;if(resolved.kind==='ambiguous'&&resolved.neighborhoods?.length){recognized[field]=resolved.neighborhoods;if(resolved.neighborhoods.length===1)d[areaKey]=resolved.neighborhoods[0];else unresolved.push(field);}if(localityAnswer?.field===field&&!unresolved.includes(field))unresolved.push(field);if(d.awaitingLocation===field)d.awaitingLocation=null;}
+    if(resolved.kind==='resolved'){
+      if(!within(resolved.place,channel))return human('outside_service_area','El destino queda fuera de la cobertura actual. La base debe revisar ese servicio.');
+      d[field]=resolved.place;
+    }else{
+      // The passenger already gave a destination. Catalog categories and failed
+      // geocoding cannot turn optional destination GPS into a collection loop.
+      // Keep the literal text, select no ambiguous area, and quote the pickup
+      // when the server cannot verify a unique destination tariff.
+      d[field]=null;
+      if(resolved.kind==='ambiguous'&&resolved.neighborhoods?.length===1)d[areaKey]=resolved.neighborhoods[0];
+    }
+    if(d.awaitingLocation===field)d.awaitingLocation=null;
   }
   if(pickupNote!==null){d.pickupText=pickupNote;changed=true;}
-  if(d.awaitingLocation==='choice'&&!d.pendingLocation&&!unresolved.length&&(interpretation.fields.origin||interpretation.fields.destination))d.awaitingLocation=!d.origin?'origin':!d.destination?'destination':null;
+  if(d.awaitingLocation==='choice'&&!d.pendingLocation&&(interpretation.fields.origin||interpretation.fields.destination))d.awaitingLocation=!d.origin?'origin':!hasDestination(d)?'destination':null;
   if(native.length){
     const preview:Draft={...d},planned:{target:'origin'|'destination';place:Place;messageId:string}[]=[];
     let unclear:{place:Place;messageId:string}|null=null;
@@ -373,29 +378,14 @@ async function decideTaxi(messages:TaxiInbound[],session:TaxiSession,channel:Tax
       if(item.target==='origin')d.pickupMessageId=item.messageId;
       else{d.destinationText=null;d.destinationDeferred=false;}
       d.destinationPrompt=null;d.awaitingLocation=null;d.pendingLocation=null;changed=true;
-      const resolvedIndex=unresolved.indexOf(item.target);if(resolvedIndex>=0)unresolved.splice(resolvedIndex,1);
     }
   }
   if(changed){d.confirmation=null;d.expiresAt=null;d.quoteCents=null;d.quoteH3=null;}
   if(interpretationIssue)return clarifyPending(interpretationIssue,d);
   if(pendingLocality&&!interpretation.fields[pendingLocality.field]&&d.awaitingLocation===pendingLocality.field){
+    if(pendingLocality.field==='destination'&&hasDestination(d))return prepareSummary({...d,awaitingLocation:null},interpretation.intent==='question'?'service_question':'summary');
     return requestLocation(d,pendingLocality.field,interpretation.intent==='question'?'service_question':'locality_still_pending',`Sigo con ${pendingLocality.query} como ${pendingLocality.field==='destination'?'destino':'referencia de dónde pasamos por ti'}. ¿Me das una calle o referencia para ubicar ese punto? ${pendingLocality.field==='destination'?'Su pin es opcional.':'Comparte también el pin donde pasamos por ti.'}`);
   }
-  if(unresolved.length===1){
-    const field=unresolved[0],areas=recognized[field];
-    if(localityAnswer?.field===field){
-      const detail=areas?.length
-        ?`La tarifa cambia según cuál de estas opciones corresponde: ${areas.map(localityDisplayName).join(' o ')}.`
-        :'Todavía no logro ubicarlo con certeza para calcular la tarifa.';
-      return requestLocation(d,field,'location_clarification_followup',`¡Gracias! Ya anoté ${localityAnswer.answer} como referencia de ${localityAnswer.query}. ${detail} ¿Cuál corresponde? Si te queda más fácil, comparte el pin del destino; es opcional. 🚕`);
-    }
-    const conflict=referenceConflicts[field];if(conflict)return requestLocation(d,field,'neighborhood_reference_conflict',`La ubicación que encontré no cae en ${conflict}. ¿Me confirmas la colonia o me das otra calle o referencia? Si prefieres, comparte el pin.`);
-    if(areas?.length===1)return requestLocation(d,field,'neighborhood_reference_required',`Ubico ${localityDisplayName(areas[0])}. ¿En qué calle o con qué referencia ${field==='origin'?'te recogemos':'queda el destino'}? También puedes compartir el pin, si prefieres.`);
-    if(areas?.length)return requestLocation(d,field,'neighborhood_ambiguous',`Encontré estas opciones: ${areas.map(localityDisplayName).join(', ')}. ¿Cuál es? Después dime la calle o una referencia.`);
-    return requestLocation(d,field,'unresolved_location',`Para ubicar bien ${field==='origin'?'la recogida':'el destino'}, ¿me pasas calle, número y colonia? Si te queda más fácil, también puedes compartir el punto con el botón.`);
-  }
-  if(unresolved.length>1){const field=unresolved.find(value=>referenceConflicts[value]);if(field)return requestLocation(d,field,'neighborhood_reference_conflict',`La ubicación que encontré no cae en ${referenceConflicts[field]}. ¿Me confirmas la colonia o me das otra calle o referencia? Si prefieres, comparte el pin.`);}
-  if(unresolved.length)return {...reply('No pude ubicar con certeza la recogida y el destino. ¿Cuál es la dirección donde te recogemos?','unresolved_location'),action:'draft',draft:{...d,awaitingLocation:'choice',pendingLocation:null}};
   if(interpretation.intent==='question'){
     if(changed)return prepareSummary(d,'service_question');
     if(!d.origin||d.origin.source!=='gps')return requestLocation(d,'origin','service_question');

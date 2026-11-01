@@ -56,9 +56,59 @@ const briefFlowSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migr
 const briefRecoverySql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261031234000_taxi_brief_recovery_edges.sql',import.meta.url),'utf8');
 const phoneLoginSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261031235000_taxi_phone_login.sql',import.meta.url),'utf8');
 const sharedDriverSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261031235100_taxi_shared_driver_turns.sql',import.meta.url),'utf8');
+const currentTraceIntentsSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261031235900_taxi_trace_current_intents.sql',import.meta.url),'utf8');
 const tenant='11111111-1111-4111-8111-111111111111',other='22222222-2222-4222-8222-222222222222',waba='+529630000001',customer='+529630000002',driverPhone='+529630000003';
 const pompeyo='4cf9acf1-f07e-4a01-9396-eb5bde3e7411';
 function unknownArray(value:unknown):value is unknown[]{return Array.isArray(value);}
+
+test('trace contract SQL: current request intent and reference-conflict results are durably valid; unknown values stay rejected',async()=>{
+ const f=await fixture();try{
+  const step={phase:'interpret',outcome:'ok',durationMs:1,inputHash:'a'.repeat(64),outputHash:'b'.repeat(64),code:'ok'};
+  const packet={version:'taxi-trace-v1',durationMs:1,steps:[{...step,intent:'request',fields:[]}],interpretationPrivate:{intent:'request',fields:{}}};
+  assert.equal(await f.scalar('SELECT taxi_bot_trace_packet_valid($1)',[packet]),true);
+  const conflict={...packet,steps:[{...step,phase:'resolve',resolution:'reference_conflict'}],interpretationPrivate:null};
+  assert.equal(await f.scalar('SELECT taxi_bot_trace_packet_valid($1)',[conflict]),true);
+  for(const invalid of [
+   {...packet,steps:[{...step,intent:'invented'}]},
+   {...packet,interpretationPrivate:{intent:'invented',fields:{}}},
+   {...conflict,steps:[{...step,phase:'resolve',resolution:'invented'}]},
+   {...packet,interpretationPrivate:{intent:'request',fields:{name:{value:42,evidence:'42'}}}},
+  ])assert.equal(await f.scalar('SELECT taxi_bot_trace_packet_valid($1)',[invalid]),false);
+  for(const role of ['anon','authenticated','service_role'])assert.equal(await f.scalar('SELECT has_function_privilege($1,$2,$3)',[role,'taxi_bot_trace_packet_valid(jsonb)','EXECUTE']),false);
+ }finally{await f.db.close();}
+});
+for(const withPin of [false,true])test('trace contract SQL: a direct taxi request '+(withPin?'with':'without')+' a pin commits its reply and releases the session',async()=>{
+ const f=await fixture();try{
+  const event=await f.enqueue('Necesito un taxi');if(withPin)await f.enqueue('',customer,crypto.randomUUID(),null,{lat:16.25,lng:-92.13});
+  const claim=await f.begin(event.eventId);assert.equal(claim.state,'proceed');assert.ok(Array.isArray(claim.messages));
+  const session=parseSession(claim.session),trace=new TaxiTurnTrace(session,Date.now());
+  const never=async():Promise<never>=>{throw Error('Request intake must not quote, resolve or dispatch yet');};
+  const services:TaxiServices={interpret:async current=>{assert.equal(current,'Necesito un taxi');return{intent:'request',fields:{}};},quote:never,resolve:never,candidates:never};
+  const channel:TaxiChannel={tenantId:tenant,waba,enabled:true,name:'Base sintética',city:'Comitán',centerLat:16.25,centerLng:-92.13,radiusKm:20,dispatcher:null,model:'fixture',baseCents:5500,perKmCents:null,pricingMode:'h3_zone_max'};
+  const decision=await coordinateTaxi(claim.messages.map(message=>parseStoredInbound(message,Date.now())),session,channel,trace.services(services),Date.now());
+  assert.equal(decision.action,'draft');assert.equal(decision.messages.length,1);assert.equal(decision.draft.confirmation,null);assert.equal(Boolean(decision.draft.pickupMessageId),withPin);
+  const result=await f.commit(claim.eventId,claim,{...decision,audit:trace.packet(decision)});assert.equal(result.state,'committed');
+  assert.equal(await f.scalar('SELECT count(*)::int FROM taxi_bot_events WHERE state=\'completed\''),withPin?2:1);
+  assert.equal(await f.scalar('SELECT count(*)::int FROM taxi_bot_sessions WHERE lease IS NOT NULL'),0);
+  assert.equal(await f.scalar('SELECT count(*)::int FROM taxi_bot_turn_traces WHERE state=\'committed\''),1);
+  assert.equal(await f.scalar('SELECT count(*)::int FROM taxi_bot_outbox WHERE destination=$1 AND state=\'pending\'',[customer]),1);
+  assert.equal(await f.scalar('SELECT count(*)::int FROM viajes'),0);
+  await f.commit(claim.eventId,claim,{...decision,audit:trace.packet(decision)});
+  assert.equal(await f.scalar('SELECT count(*)::int FROM taxi_bot_outbox'),1);
+ }finally{await f.db.close();}
+});
+for(const resolution of ['ambiguous','unavailable','reference_conflict'] as const)test('written destination SQL: '+resolution+' stores the text and verifies pickup pricing without a classification loop',async()=>{
+ const f=await fixture();try{
+  await f.prepare();await f.db.exec('UPDATE taxi_bot_channels SET base_cents=5500');
+  const channel:TaxiChannel={tenantId:tenant,waba,enabled:true,name:'Base sintética',city:'Comitán',centerLat:16.25,centerLng:-92.13,radiusKm:20,dispatcher:null,model:'fixture',baseCents:5500,perKmCents:null,pricingMode:'h3_zone_max'};
+  const area={label:'Plaza Las Flores',category:'cash_a' as const,version:'a'.repeat(32),cents:5500,cell:null,priceSource:'reference' as const};let scans=0;
+  const services:TaxiServices={interpret:async current=>parseInterpretation({intent:'provide',fields:{destination:{value:'plaza En Liverpool',evidence:current}}},current),resolve:async()=>resolution==='ambiguous'?{kind:'ambiguous',labels:['Cash A','otros puntos'],neighborhoods:[area,{...area,category:'otro_punto',version:'b'.repeat(32),cents:6500}]}:resolution==='reference_conflict'?{kind:'reference_conflict',label:'Plaza Las Flores'}:{kind:'unavailable'},quote:async(origin,destination,_channel,_signal,chosen)=>{assert.deepEqual(destination,origin);assert.equal(chosen,null);const cell=taxiH3Scope(origin,origin).originCell,quote=f.obj(await f.scalar('SELECT taxi_bot_h3_quote($1,$2,$3,$3)',[tenant,waba,cell]));assert.equal(quote.state,'priced');assert.equal(typeof quote.cents,'number');return Number(quote.cents);},candidates:async()=>{scans++;return[];}};
+  const turn=async(event:Record<string,unknown>)=>{const claim=await f.begin(event.eventId);assert.equal(claim.state,'proceed');assert.ok(Array.isArray(claim.messages));const session=parseSession(claim.session),trace=new TaxiTurnTrace(session,Date.now()),decision=await coordinateTaxi(claim.messages.map(message=>parseStoredInbound(message,Date.now())),session,channel,trace.services(services),Date.now());await f.commit(claim.eventId,claim,{...decision,audit:trace.packet(decision)});return decision;};
+  const review=await turn(await f.enqueue('Voy para plaza\nEn Liverpool'));
+  assert.ok(review.draft.confirmation);assert.equal(review.draft.destinationText,'plaza En Liverpool');assert.equal(review.draft.destinationArea,null);assert.equal(review.draft.quoteCents,5500);assert.equal(review.draft.quoteBasis,'pickup');assert.equal(review.messages.length,1);assert.doesNotMatch(review.messages[0].text,/Cash A|otros puntos|\$|MXN/);assert.equal(scans,0);assert.equal(await f.scalar('SELECT count(*)::int FROM viajes'),0);
+  const confirmation=await turn(await f.enqueue('',customer,crypto.randomUUID(),'txc_'+review.draft.confirmation));assert.equal(confirmation.action,'confirm');assert.equal(scans,1);assert.equal(await f.scalar('SELECT count(*)::int FROM viajes'),1);assert.equal(await f.scalar('SELECT destino FROM viajes'),'plaza En Liverpool');assert.equal(await f.scalar('SELECT count(*)::int FROM taxi_bot_offers'),0);
+ }finally{await f.db.close();}
+});
 
 for(const order of [['pin','name','destination'],['pin','destination','name'],['name','pin','destination'],['name','destination','pin'],['destination','pin','name'],['destination','name','pin']] as const)test('brief journey SQL: '+order.join(' → ')+' stays within five customer requests through completion',async()=>{
  const f=await fixture();try{
@@ -363,9 +413,9 @@ test('semantic clarification SQL: pending locality, identity and a new destinati
    const decision=await coordinateTaxi(claim.messages.map(item=>parseStoredInbound(item,Date.now())),s,channel,trace.services(services),Date.now());const audit=trace.packet(decision);
    assert.equal(await f.scalar('SELECT taxi_bot_trace_packet_valid($1)',[audit]),true);await f.commit(claim.eventId,claim,{...decision,audit});return decision;
   };
-  const pending=await turn(await f.enqueue('Voy a Plaza Las Flores'));assert.equal(pending.draft.confirmation,null);assert.equal(pending.draft.awaitingLocation,'destination');
-  const identity=await turn(await f.enqueue('Soy Jorge'));assert.equal(identity.draft.name,'Jorge');assert.equal(identity.draft.destinationText,'Plaza Las Flores');assert.equal(identity.draft.confirmation,null);assert.equal(identity.draft.pickupMessageId,f.draft.pickupMessageId);
-  const detail=await turn(await f.enqueue('Liverpool'));assert.equal(detail.draft.destinationText,'Plaza Las Flores, Liverpool');assert.equal(detail.draft.confirmation,null);assert.equal(detail.draft.name,'Jorge');
+  const pending=await turn(await f.enqueue('Voy a Plaza Las Flores'));assert.ok(pending.draft.confirmation);assert.equal(pending.draft.awaitingLocation,null);assert.equal(pending.draft.quoteBasis,'pickup');assert.doesNotMatch(pending.messages[0].text,/Cash A|otros puntos/);
+  const identity=await turn(await f.enqueue('Soy Jorge'));assert.equal(identity.draft.name,'Jorge');assert.equal(identity.draft.destinationText,'Plaza Las Flores');assert.ok(identity.draft.confirmation);assert.notEqual(identity.draft.confirmation,pending.draft.confirmation);assert.equal(identity.draft.pickupMessageId,f.draft.pickupMessageId);
+  const detail=await turn(await f.enqueue('Liverpool'));assert.equal(detail.draft.destinationText,'Plaza Las Flores, Liverpool');assert.ok(detail.draft.confirmation);assert.notEqual(detail.draft.confirmation,identity.draft.confirmation);assert.equal(detail.draft.name,'Jorge');
   assert.equal(await f.scalar("SELECT count(*)::int FROM taxi_bot_turn_traces WHERE packet#>>'{steps,0,code}'='proposed_destination_refinement'"),1);
   const changed=await turn(await f.enqueue('Me llevan al Hospital'));assert.equal(changed.draft.destinationText,'Hospital');assert.equal(changed.draft.pickupMessageId,f.draft.pickupMessageId);assert.ok(changed.draft.confirmation);
   const named=await turn(await f.enqueue('El nombre es Ana'));assert.equal(named.draft.name,'Ana');assert.equal(named.draft.destinationText,'Hospital');assert.notEqual(named.draft.confirmation,changed.draft.confirmation);assert.deepEqual(named.draft.origin,f.draft.origin);
@@ -736,6 +786,7 @@ async function fixture(options:{legacy?:boolean;seedCoverageBeforeMigration?:boo
     await db.exec(briefRecoverySql);
     await db.exec(phoneLoginSql);
     await db.exec(sharedDriverSql);
+    await db.exec(currentTraceIntentsSql);
   }
   // These legacy protocol fixtures explicitly act as customers too. Driver-only access has separate tests below.
   await db.query('INSERT INTO taxi_bot_allowed_customers(tenant_id,phone)VALUES($1,$2),($1,$3),($1,$4)',[tenant,customer,driverPhone,'+529630000004']);

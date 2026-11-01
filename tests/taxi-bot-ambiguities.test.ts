@@ -20,13 +20,13 @@ function pendingDestination():TaxiSession{
 for(const text of ['Soy Jorge','Me llamo Jorge'])Deno.test('semantic clarification: an identity answer cannot be appended to a pending destination: '+text,async()=>{
   const s=pendingDestination(),f=fixture({intent:'provide',fields:{name:{value:'Jorge',evidence:text}}});
   f.services.resolve=async()=>{throw Error('A passenger name must not be geocoded.');};
-  const d=await f.run(text,s);equal(f.counts().calls,1);equal(d.draft.name,'Jorge');equal(d.draft.destinationText,s.draft.destinationText);equal(d.draft.origin,s.draft.origin);equal(d.draft.pickupMessageId,s.draft.pickupMessageId);equal(d.draft.confirmation,null);equal(f.counts().candidates,0);
+  const d=await f.run(text,s);equal(f.counts().calls,1);equal(d.draft.name,'Jorge');equal(d.draft.destinationText,s.draft.destinationText);equal(d.draft.origin,s.draft.origin);equal(d.draft.pickupMessageId,s.draft.pickupMessageId);assert(d.draft.confirmation);equal(f.counts().quotes,1);equal(f.counts().candidates,0);
 });
-Deno.test('semantic clarification: the AI can acknowledge a name naturally while preserving a pending destination',async()=>{
+Deno.test('semantic clarification: a name completes a written destination without another reference question',async()=>{
   const s=pendingDestination(),f=fixture({intent:'provide',fields:{name:{value:'Jorge',evidence:'Soy Jorge'}}});let composed=false;
   const reply='¡Gracias, Jorge! Para ubicar tu destino en Plaza Las Flores, ¿me das una referencia? Su pin es opcional. 😊';
   f.services.question=async(kind,_current,_channel,_signal,context)=>{composed=true;equal(kind,'conversation');assert(context?.backendReply?.includes('Plaza Las Flores'));equal(context?.hasPickupGps,true);equal(context?.nextStep,'destination_optional');return reply;};
-  const d=await f.run('Soy Jorge',s);assert(composed);equal(d.messages[0].text,reply);equal(d.draft.name,'Jorge');equal(d.draft.destinationText,'Plaza Las Flores');equal(d.draft.confirmation,null);equal(d.draft.pickupMessageId,s.draft.pickupMessageId);
+  const d=await f.run('Soy Jorge',s);assert(!composed,'The protected review must not become another collection question');assert(d.messages[0].text.includes('¡Listo, Jorge!'));equal(d.draft.name,'Jorge');equal(d.draft.destinationText,'Plaza Las Flores');assert(d.draft.confirmation);equal(d.draft.pickupMessageId,s.draft.pickupMessageId);equal(f.counts().candidates,0);
 });
 for(const text of ['Voy para Hospital','Me llevan al Hospital'])Deno.test('semantic clarification: a new explicit destination replaces a pending locality: '+text,async()=>{
   const s=pendingDestination(),f=fixture({intent:'provide',fields:{destination:{value:'Hospital',evidence:text}}});let query='';
@@ -65,10 +65,10 @@ for(const rejected of [null,false,{},'', 'x'.repeat(401),' Plaza Las Flores','Pl
 for(const key of ['name','pickupReference'])Deno.test('semantic clarification: only endpoints can refine a pending locality: '+key,()=>{
   let failed=false;try{parseInterpretation({intent:'provide',fields:{[key]:{value:'Jorge',evidence:'Soy Jorge',refines:'Plaza Las Flores'}}},'Soy Jorge');}catch{failed=true;}assert(failed);
 });
-for(const setup of ['different_query','no_pending','already_resolved','other_endpoint','too_long'] as const)Deno.test('semantic clarification: stale or invalid refinements cannot partially edit a route: '+setup,async()=>{
+for(const setup of ['different_query','missing_written_destination','already_resolved','other_endpoint','too_long'] as const)Deno.test('semantic clarification: stale or invalid refinements cannot partially edit a route: '+setup,async()=>{
   const s=pendingDestination();let refines='Plaza Las Flores';
   if(setup==='different_query')refines='Otra Plaza';
-  if(setup==='no_pending')s.draft.awaitingLocation=null;
+  if(setup==='missing_written_destination'){s.draft.awaitingLocation=null;s.draft.destinationText=null;}
   if(setup==='already_resolved')s.draft.destination=state().draft.destination;
   if(setup==='other_endpoint')s.draft.awaitingLocation='origin';
   if(setup==='too_long'){refines='a'.repeat(397);s.draft.destinationText=refines;}
@@ -80,12 +80,12 @@ Deno.test('semantic clarification: identity and place detail apply together afte
   const s=pendingDestination();s.history=[{role:'assistant',content:'¿Qué referencia tiene el lugar al que vas?'}];
   const text='Liverpool\nSoy Jorge',f=fixture({intent:'provide',fields:{name:{value:'Jorge',evidence:'Soy Jorge'},destination:{value:'Liverpool',evidence:'Liverpool',refines:'Plaza Las Flores'}}});let query='';
   f.services.resolve=async(value)=>{query=value;return{kind:'unavailable'};};
-  const d=await f.run(text,parseSession(JSON.parse(JSON.stringify(s))));equal(query,'Plaza Las Flores, Liverpool');equal(d.draft.name,'Jorge');equal(d.draft.origin,s.draft.origin);equal(d.draft.destinationText,query);equal(d.draft.confirmation,null);equal(f.counts().quotes,0);equal(f.counts().candidates,0);
+  const d=await f.run(text,parseSession(JSON.parse(JSON.stringify(s))));equal(query,'Plaza Las Flores, Liverpool');equal(d.draft.name,'Jorge');equal(d.draft.origin,s.draft.origin);equal(d.draft.destinationText,query);assert(d.draft.confirmation);equal(f.counts().quotes,1);equal(f.counts().candidates,0);
 });
 for(const failure of ['ambiguous','outage'] as const)Deno.test('semantic clarification: '+failure+' cannot bypass interpretation and invent a locality continuation',async()=>{
   const s=pendingDestination(),f=fixture({intent:'ambiguous',fields:{}});if(failure==='outage')f.services.interpret=async()=>{throw Error('Declared outage');};
   f.services.resolve=async()=>{throw Error('No query without a valid semantic proposal.');};
-  const d=await f.run('Liverpool',s);equal(d.draft.destinationText,s.draft.destinationText);equal(d.draft.origin,s.draft.origin);equal(d.draft.confirmation,null);equal(f.counts().candidates,0);
+  const d=await f.run('Liverpool',s);equal(d.draft.destinationText,s.draft.destinationText);equal(d.draft.origin,s.draft.origin);assert(d.draft.confirmation);assert(d.messages[0].text.includes('No pude aplicar tu último mensaje'));equal(f.counts().quotes,1);equal(f.counts().candidates,0);
 });
 Deno.test('ambiguity audit: a later correction in another bubble defeats an earlier cropped origin',()=>{
   let rejected=false;try{parseInterpretation({intent:'provide',fields:{origin:{value:'Centro',evidence:'Centro'}}},'Recógeme en Centro.\nNo, mejor Terminal.');}catch{rejected=true;}assert(rejected,'El intérprete no puede imponer la dirección anterior tras una corrección posterior.');
@@ -95,10 +95,10 @@ Deno.test('ambiguity audit: a model-declared clarification refines the exact pen
   const restored=parseSession(JSON.parse(JSON.stringify(s)));let resolvedQuery='';f.services.resolve=async(text)=>{resolvedQuery=text;return{kind:'resolved',place:{text:'Liverpool, Plaza Las Flores',lat:16.255,lng:-92.135,placeId:'fixture-liverpool',source:'written'}};};
   const d=await f.run('Liverpool',restored);equal(f.counts().calls,1);equal(resolvedQuery,'Plaza Las Flores, Liverpool');equal(d.draft.destination,null);equal(d.draft.destinationText,'Liverpool, Plaza Las Flores');equal(d.draft.quoteBasis,'pickup');assert(d.draft.confirmation);assert(d.messages[0]?.text.includes('Liverpool, Plaza Las Flores'));
 });
-Deno.test('ambiguity audit: unresolved destination clarification keeps the specific tariff choice in context',async()=>{
+Deno.test('ambiguity audit: catalog ambiguity keeps the literal destination and a pickup quote without asking for tariff categories',async()=>{
   const f=fixture({intent:'provide',fields:{destination:{value:'Liverpool',evidence:'Liverpool',refines:'Plaza Las Flores'}}}),s=pendingDestination();
   const cashA={label:'Plaza Las Flores',category:'cash_a' as const,version:'a'.repeat(32),cents:5500,cell:null,priceSource:'reference' as const};const other={...cashA,category:'otro_punto' as const,version:'b'.repeat(32)};let resolvedQuery='';f.services.resolve=async(text)=>{resolvedQuery=text;return{kind:'ambiguous',labels:['Plaza Las Flores (Cash A)','Plaza Las Flores (otros puntos)'],neighborhoods:[cashA,other]};};
-  const d=await f.run('Liverpool',s);equal(resolvedQuery,'Plaza Las Flores, Liverpool');equal(d.reason,'location_clarification_followup');equal(d.draft.destinationText,'Plaza Las Flores, Liverpool');assert(d.messages[0]?.text.includes('Liverpool'));assert(d.messages[0]?.text.includes('Cash A'));assert(d.messages[0]?.text.includes('otros puntos'));assert(d.messages[0]?.text.includes('tarifa'));assert(!d.messages[0]?.text.includes('El destino es opcional'));
+  const d=await f.run('Liverpool',s);equal(resolvedQuery,'Plaza Las Flores, Liverpool');equal(d.reason,'summary');equal(d.draft.destinationText,'Plaza Las Flores, Liverpool');assert(d.messages[0]?.text.includes('Liverpool'));assert(!/Cash A|otros puntos|tarifa/.test(d.messages[0].text));equal(d.draft.destinationArea,null);equal(d.draft.quoteBasis,'pickup');assert(d.draft.confirmation);equal(f.counts().quotes,1);equal(f.counts().candidates,0);
 });
 Deno.test('ambiguity audit: an explicit new destination replaces the unresolved place instead of being appended',async()=>{
   const current='No, mejor voy al Hospital',f=fixture({intent:'provide',fields:{destination:{value:'Hospital',evidence:current}}}),s=state();s.draft={...s.draft,destination:null,destinationText:'Plaza Las Flores',destinationArea:null,destinationDeferred:false,destinationPrompt:null,awaitingLocation:'destination',quoteCents:null,quoteH3:null,confirmation:null,expiresAt:null};s.history=[{role:'assistant',content:'Encontré estas opciones: Plaza Las Flores (Cash A), Plaza Las Flores (otros puntos). ¿Cuál es?'}];let resolvedQuery='';f.services.resolve=async(text)=>{resolvedQuery=text;return{kind:'resolved',place:{text:'Hospital, Comitán',lat:16.255,lng:-92.135,placeId:'fixture-hospital',source:'written'}};};

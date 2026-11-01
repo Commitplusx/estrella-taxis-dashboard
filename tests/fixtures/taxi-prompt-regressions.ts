@@ -9,8 +9,12 @@ function state(phase:'origin'|'destination'|'name'|'review',bothSame=false):Taxi
  return s;
 }
 const pendingDestination=():TaxiSession=>{const s=state('destination');s.draft.destinationText='Plaza Las Flores';s.history=[{role:'assistant',content:'¿Qué punto de Plaza Las Flores: Cash A u otros puntos?'}];return s;};
-/** Frozen synthetic development cases. Used to refine instructions; never a blind accuracy cohort. */
+const writtenDestination=():TaxiSession=>{const s=state('review');s.draft={...s.draft,destination:null,destinationText:'plaza',destinationArea:null};return s;};
+/** Versioned synthetic development cases. Used to refine instructions; never a blind accuracy cohort. */
 export const TAXI_PROMPT_CASES:readonly TaxiPromptCase[]=[
+ {id:'name-and-fragmented-destination-business',session:state('destination'),message:'A nombre de Mariana\nVoy para plaza\nEn Liverpool',expected:{intent:'provide',fields:{name:['Mariana'],destination:['plaza En Liverpool','plaza en Liverpool']}}},
+ {id:'written-destination-later-business-detail',session:writtenDestination(),message:'En Liverpool',expected:{intent:'provide',fields:{destination:['En Liverpool','Liverpool']}}},
+ {id:'destination-business-and-explicit-pickup-reference',session:state('destination'),message:'Voy para plaza\nEn Liverpool\nEstoy frente al portón azul',expected:{intent:'provide',fields:{destination:['plaza En Liverpool','plaza en Liverpool'],pickupReference:['frente al portón azul','al portón azul','portón azul']}}},
  {id:'short-correction-destination',session:state('destination'),message:'No en Centro, mejor en Hospital',expected:{intent:'provide',fields:{destination:['Hospital']}}},
  {id:'short-correction-pickup',session:state('origin'),message:'No en Centro, mejor en Hospital',expected:{intent:'provide',fields:{origin:['Hospital']}}},
  {id:'unscoped-correction-review',session:state('review'),message:'No, mejor Hospital',expected:{intent:'ambiguous',fields:{}}},
@@ -38,5 +42,5 @@ export const TAXI_PROMPT_CASES:readonly TaxiPromptCase[]=[
 ];
 export function matchesTaxiPrompt(actual:import('../../estrella-taxis-backend/supabase/functions/_shared/bot/taxis/contracts.ts').Interpretation,item:TaxiPromptCase):boolean{
  const keys=['origin','destination','name','pickupReference']as const;
- return actual.intent===item.expected.intent&&keys.every(key=>{const expected=item.expected.fields[key],field=actual.fields[key];return expected?Boolean(field&&expected.includes(field.value)&&(item.id!=='refine-place-and-name'||key!=='destination'||field.refines==='Plaza Las Flores')&&(item.id!=='replace-pending-place'||!field.refines)):!field;});
+ return actual.intent===item.expected.intent&&keys.every(key=>{const expected=item.expected.fields[key],field=actual.fields[key];return expected?Boolean(field&&expected.includes(field.value)&&(item.id!=='refine-place-and-name'||key!=='destination'||field.refines==='Plaza Las Flores')&&(item.id!=='written-destination-later-business-detail'||key!=='destination'||field.refines==='plaza')&&(item.id!=='replace-pending-place'||!field.refines)):!field;});
 }
