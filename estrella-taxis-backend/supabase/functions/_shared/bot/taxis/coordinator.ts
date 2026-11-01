@@ -288,9 +288,17 @@ async function decideTaxi(messages:TaxiInbound[],session:TaxiSession,channel:Tax
     const explicit=new RegExp('\\b(?:me llamo|soy|a nombre de|(?:mi |el )?nombre (?:es|sera)|(?:el |la )?pasajer[oa] (?:es|sera))\\s+'+chosen+'(?:\\b|$)').test(normalize(interpretation.fields.name.evidence));
     const askedName=session.history.at(-1)?.role==='assistant'&&/\b(?:a nombre|tu nombre|nombre del pasajero)\b/i.test(session.history.at(-1)?.content??'');
     const contextualAnswer=(conversationPhase(session,now)==='name'||askedName)&&!d.name;
-    if(!explicit&&!contextualAnswer){
+    // A complete personal name in its own bubble can accompany the first pickup pin.
+    // The model still proposes the role; a place, instruction or quoted phrase is not a name.
+    const bare=interpretation.fields.name.value.trim(),bareKey=normalize(bare),evidenceKey=normalize(interpretation.fields.name.evidence).replace(/[.!]+$/,'');
+    const nativePickupName=!d.name&&!d.origin&&native.length===1&&!locationRoleConflict(native[0].context)&&locationRole(native[0].context)!=='destination'&&
+      /^[\p{L}][\p{L}'’\-]*(?:\s+[\p{L}][\p{L}'’\-]*){1,5}$/u.test(bare)&&
+      !/^(?:a|al|en|el|la|los|las|por|para|frente|junto|calle|avenida|av|barrio|colonia|fracc|fraccionamiento|fabrica|plaza|parque|hospital|terminal|san|santa|necesito|quiero|solicito|buenas|buenos|hola|gracias|me|es|soy|estoy|voy|vamos)\b/.test(bareKey)&&
+      evidenceKey===bareKey&&messages.some(m=>m.type==='text'&&normalize(m.text).replace(/[.!]+$/,'')===bareKey);
+    if(!explicit&&!contextualAnswer&&!nativePickupName){
       if(!native.length)return clarifyPending('unclear_name',d);
-      interpretationIssue='unclear_name';interpretation={intent:'provide',fields:{}};
+      const fields={...interpretation.fields};delete fields.name;
+      interpretationIssue='unclear_name';interpretation={intent:'provide',fields};
     }
   }
   // A model-proposed continuation must target the exact unresolved place in this durable session.
@@ -345,7 +353,7 @@ async function decideTaxi(messages:TaxiInbound[],session:TaxiSession,channel:Tax
       const point=item.message.location;if(!point)continue;
       const place:Place={text:`Ubicación compartida (${point.lat.toFixed(5)}, ${point.lng.toFixed(5)})`,lat:point.lat,lng:point.lng,placeId:null,source:'gps'};
       const explicit=locationRole(item.context),conflict=locationRoleConflict(item.context);
-      const target=conflict?null:explicit??inferLocationRole(preview,interpretationIssue===null&&planned.length===0&&(!preview.origin||preview.origin.source!=='gps'));
+      const target=conflict?null:explicit??inferLocationRole(preview,(interpretationIssue===null||interpretationIssue==='unclear_name')&&planned.length===0&&(!preview.origin||preview.origin.source!=='gps'));
       if(target&&interpretation.fields[target]&&(textPositions[target]??-1)>messages.indexOf(item.message)&&!(target==='origin'&&repeatedPickup)&&!refersToSharedLocation(interpretation.fields[target]?.value??''))continue;
       if(!within(place,channel))return human('outside_service_area','La ubicación queda fuera de la zona configurada. La base debe confirmar ese servicio.');
       if(!target){unclear={place,messageId:item.message.id};break;}
