@@ -44,20 +44,25 @@ export default function CustomerTripMap(
   },
 ) {
   const { taxi, viaje } = snapshot;
+  const tileCycleFailed = useRef(false);
   return (
     <MapContainer
       center={[viaje.origen_lat ?? 16.25, viaje.origen_lng ?? -92.13]}
       zoom={16}
       scrollWheelZoom={false}
       className="customer-trip-map"
-      aria-label="Mapa de tu taxi en OpenStreetMap"
+      aria-label="Mapa del seguimiento de tu taxi"
     >
       <TileLayer
         url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
         referrerPolicy="strict-origin"
         maxZoom={19}
-        attribution='&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a>'
-        eventHandlers={{ tileerror: () => onTileError(true) }}
+        attribution='&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a> contributors'
+        eventHandlers={{
+          loading: () => { tileCycleFailed.current = false; },
+          tileerror: () => { tileCycleFailed.current = true; onTileError(true); },
+          load: () => onTileError(tileCycleFailed.current),
+        }}
       />
       <View snapshot={snapshot} follow={follow} focus={focus} onDrag={onDrag} />
       {viaje.origen_lat !== null && viaje.origen_lng !== null && (

@@ -12,7 +12,6 @@ import type { TrackingStore } from "../estrella-taxis-backend/supabase/functions
 import {
   pickupText,
   trackingFresh,
-  trackingPointUrl,
 } from "../src/lib/taxiTrackingPresentation.ts";
 const tenant = "11111111-1111-4111-8111-111111111111",
   id = "22222222-2222-4222-8222-222222222222",
@@ -338,14 +337,7 @@ Deno.test("Customer tracking CTA uses its own public link and cannot be mixed wi
     }, { ...raw, body: { ...raw.body, urlButton: customerRaw.body.urlButton } }]
   ) assert.throws(() => parseOutgoing(changed));
 });
-Deno.test("Customer tracking presentation uses OpenStreetMap and does not confuse stale GPS with a missing pickup", () => {
-  assert.equal(
-    trackingPointUrl(16.25, -92.13),
-    "https://www.openstreetmap.org/?mlat=16.25&mlon=-92.13#map=17/16.25/-92.13",
-  );
-  assert.equal(trackingPointUrl(null, -92.13), null);
-  assert.equal(trackingPointUrl(91, 0), null);
-  assert.equal(trackingPointUrl(NaN, 0), null);
+Deno.test("Customer tracking presentation does not confuse stale GPS with a missing pickup", () => {
   const now = Date.parse("2026-11-01T15:00:00Z");
   assert.equal(trackingFresh("2026-11-01T14:35:00Z", now), false);
   assert.equal(trackingFresh("2026-11-01T14:59:45Z", now), true);

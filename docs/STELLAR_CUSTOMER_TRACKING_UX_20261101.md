@@ -8,7 +8,7 @@ La aceptación guardaba `o.driver_name` en `viajes.taxi_name`. Ahora el número 
 
 El cliente recibe un único aviso amigable con **Ver viaje en vivo** (CTA de longitud compatible), número de unidad y chofer por separado. El enlace conserva el token privado del seguimiento de Stellar. No muestra precio, no agrega otra notificación ordinaria ni permite que el modelo invente botones. Los enlaces de cliente y conductor no se pueden mezclar por categoría.
 
-El seguimiento usa Leaflet/OpenStreetMap, igual que el mapa del panel; los enlaces de recogida y posición también abren OpenStreetMap. Conserva consulta cada5 segundos visible, controles de centrar/actualizar, privacidad de la unidad asignada y cierre al finalizar. No hay suscripción pública a toda la flota. No promete ruta vial ni una ETA inventada.
+El seguimiento usa Leaflet/OpenStreetMap, igual que el mapa del panel. La pantalla mantiene el mapa y los detalles dentro de Stellar; quitamos los botones y enlaces de acción que sacaban al cliente a OpenStreetMap. Solo queda la atribución pequeña del proveedor dentro del mapa. Conserva consulta cada 5 segundos mientras está visible, controles de centrar/actualizar, privacidad de la unidad asignada y cierre al finalizar. No hay suscripción pública a toda la flota. No promete ruta vial ni una ETA inventada.
 
 La pantalla anterior condicionaba ETA a GPS fresco y, cuando no había ETA, afirmaba que faltaba recogida aunque las coordenadas sí estaban. Ahora conserva el punto compartido y muestra la antigüedad real de GPS. Un punto antiguo no se anuncia como actualizado. Ante fallo de conexión mantiene los últimos datos con aviso; el fetch tiene límite15 segundos y no se solapan consultas.
 
@@ -17,6 +17,7 @@ La pantalla anterior condicionaba ETA a GPS fresco y, cuando no había ETA, afir
 - 191 pruebas SQL completas y 22,666 pruebas Deno con tipos aprobadas; incluyen consentimiento, aceptación única, aviso CTA con presupuesto, separación unidad/chofer, variantes de número, privacidad, caducidad, llegada y finalización.
 - Gate de 163 archivos, tipado estricto de frontend y pruebas SQL, entradas Edge y build aprobados. Los errores globales históricos ajenos a este cambio no se declaran corregidos.
 - Navegador con datos sintéticos a 390×844 y 1280×900: sin errores/desbordamiento/enlaces Google; señal antigua correcta, señal fresca, fallo/recuperación y suspensión al completar. Revisión de diseño ship; se conserva el sistema existente.
+- Revisión de la nueva presentación con datos sintéticos a 390×844, 1280×900 y 1919×915: el mapa domina, los detalles se abren en la misma página, el panel no desborda y no hay botones de acción externos. En móvil, el mapa cubierto no conserva controles enfocables. La atribución del mapa se conserva.
 - Ensayo de la migración sobre el esquema activo con ROLLBACK; respaldo de los cuerpos SQL y tres funciones Edge. La migración mantiene el hook de prueba dirigido a0540 y no modifica estado, precio ni confirmación del viaje.
 
 ## Publicación

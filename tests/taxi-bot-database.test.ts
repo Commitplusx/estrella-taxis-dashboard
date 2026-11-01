@@ -69,6 +69,7 @@ const ownerDrivingSql=readSql(new URL('../estrella-taxis-backend/supabase/migrat
 const driverTripWebSql=readSql(new URL('../estrella-taxis-backend/supabase/migrations/20261101160000_taxi_driver_trip_web.sql',import.meta.url),'utf8');
 const trackingUxSql=readSql(new URL('../estrella-taxis-backend/supabase/migrations/20261101180000_taxi_customer_tracking_ux.sql',import.meta.url),'utf8');
 const publicPilotSql=readSql(new URL('../estrella-taxis-backend/supabase/migrations/20261101190000_taxi_public_pilot.sql',import.meta.url),'utf8');
+const staffExclusionSql=readSql(new URL('../estrella-taxis-backend/supabase/migrations/20261101200000_taxi_staff_customer_exclusions.sql',import.meta.url),'utf8');
 const tenant='11111111-1111-4111-8111-111111111111',other='22222222-2222-4222-8222-222222222222',waba='+529630000001',customer='+529630000002',driverPhone='+529630000003';
 const pompeyo='4cf9acf1-f07e-4a01-9396-eb5bde3e7411';
 function unknownArray(value:unknown):value is unknown[]{return Array.isArray(value);}
@@ -808,6 +809,7 @@ async function fixture(options:{legacy?:boolean;seedCoverageBeforeMigration?:boo
     await db.exec(driverTripWebSql);
     await db.exec(trackingUxSql);
     await db.exec(publicPilotSql);
+    await db.exec(staffExclusionSql);
   }
   // These legacy protocol fixtures explicitly act as customers too. Driver-only access has separate tests below.
   await db.query('INSERT INTO taxi_bot_allowed_customers(tenant_id,phone)VALUES($1,$2),($1,$3),($1,$4)',[tenant,customer,driverPhone,'+529630000004']);
@@ -1160,6 +1162,67 @@ test('activation SQL: missing driver and missing saved H3 coverage have distinct
   const config={...correctedConfig,enabled:true};
   assert.equal((await f.admin('configure',config)).state,'activation_zones_missing');await f.db.exec('DELETE FROM conductores');
   assert.equal((await f.admin('configure',config)).state,'activation_driver_missing');
+ }finally{await f.db.close();}
+});
+
+test('staff exclusions SQL: customer-only blacklist overrides public and allowed lists without crossing the tenant',async()=>{
+ const f=await fixture();try{
+  await f.db.query('UPDATE taxi_bot_customer_access SET public_enabled=true WHERE tenant_id=$1',[tenant]);
+  assert.equal(await f.scalar('SELECT taxi_bot_customer_allowed($1,$2)',[tenant,driverPhone]),true);
+  await f.db.query('UPDATE taxi_bot_customer_access SET exclude_operational_customers=true WHERE tenant_id=$1',[tenant]);
+  for(const phone of [driverPhone,'+521'+driverPhone.slice(3)])assert.equal(await f.scalar('SELECT taxi_bot_customer_allowed($1,$2)',[tenant,phone]),false);
+  assert.equal(await f.scalar('SELECT taxi_bot_customer_allowed($1,$2)',[tenant,customer]),true);
+  await f.db.query("INSERT INTO taxi_base_contacts(id,tenant_id,unit_number,name,phone_input,role)VALUES($1,$2,'Base','Personal sintético','+529630000087','staff')",[crypto.randomUUID(),tenant]);
+  assert.equal(await f.scalar('SELECT taxi_bot_customer_allowed($1,$2)',[tenant,'+529630000087']),false);
+  await f.db.query("INSERT INTO taxi_base_contacts(id,tenant_id,unit_number,name,phone_input,role,device_id)VALUES($1,$2,'487','Dueño sintético','+529630000086','owner',1)",[crypto.randomUUID(),tenant]);
+  assert.equal(await f.scalar('SELECT taxi_bot_customer_allowed($1,$2)',[tenant,'+529630000086']),false);
+  await f.db.query('UPDATE taxi_bot_customer_access SET public_enabled=true,exclude_operational_customers=true WHERE tenant_id=$1',[other]);
+  await f.db.query('INSERT INTO taxi_bot_allowed_customers(tenant_id,phone)VALUES($1,$2)',[other,driverPhone]);
+  assert.equal(await f.scalar('SELECT taxi_bot_customer_allowed($1,$2)',[other,driverPhone]),true);
+  assert.equal((await f.enqueue('Hola',driverPhone)).ignored,true);
+  assert.equal((await f.enqueue('',driverPhone,crypto.randomUUID(),null,{lat:16.25,lng:-92.13})).ignored,true);
+  assert.equal(await f.scalar('SELECT count(*)::int FROM taxi_bot_events'),0);
+  for(const role of ['anon','authenticated','service_role'])assert.equal(await f.scalar('SELECT has_function_privilege($1,$2,$3)',[role,'taxi_bot_operational_phone(uuid,text)','EXECUTE']),false);
+ }finally{await f.db.close();}
+});
+
+test('staff exclusions SQL: offers remain sendable and the excluded driver can accept and finish its own trip',async()=>{
+ const f=await fixture();try{
+  await f.db.query('UPDATE taxi_bot_customer_access SET public_enabled=true,exclude_operational_customers=true WHERE tenant_id=$1',[tenant]);
+  await f.prepare();await f.confirm();
+  const offer=f.obj(await f.scalar('SELECT to_jsonb(o)FROM taxi_bot_offers o WHERE device_id=1'));
+  const claimed=(await f.db.query<Record<string,unknown>>('SELECT * FROM taxi_bot_outbox_claim($1,$2)',[tenant,waba])).rows;
+  const driverNotice=claimed.find(row=>row.destination===driverPhone);assert.ok(driverNotice);
+  assert.equal(await f.scalar('SELECT taxi_bot_outbox_permitted($1,$2)',[driverNotice.id,driverNotice.lease]),true);
+  assert.equal((await f.enqueue('','+529630000004',crypto.randomUUID(),'txa_'+offer.id)).ignored,true);
+  const own=await f.enqueue('',driverPhone,crypto.randomUUID(),'txa_'+offer.id),claim=await f.begin(own.eventId);assert.equal(claim.state,'proceed');
+  await f.commit(own.eventId,claim,{...f.decision('driver_accept'),offerId:offer.id});assert.equal(await f.scalar('SELECT estado FROM viajes'),'en_camino');
+  assert.equal(await f.scalar("SELECT count(*)::int FROM taxi_bot_outbox WHERE destination=$1 AND dedupe_key LIKE 'driver-assigned:%'",[driverPhone]),1);
+  const finish=await f.enqueue('',driverPhone,crypto.randomUUID(),'txf_'+offer.id),finishClaim=await f.begin(finish.eventId);
+  await f.commit(finish.eventId,finishClaim,{...f.decision('driver_finish'),offerId:offer.id});assert.equal(await f.scalar('SELECT estado FROM viajes'),'completado');
+ }finally{await f.db.close();}
+});
+
+test('staff exclusions SQL: an expired owned button gets an unavailable receipt instead of silence or late assignment',async()=>{
+ const f=await fixture();try{
+  await f.db.query('UPDATE taxi_bot_customer_access SET exclude_operational_customers=true WHERE tenant_id=$1',[tenant]);
+  await f.prepare();await f.confirm();const offer=f.obj(await f.scalar('SELECT to_jsonb(o)FROM taxi_bot_offers o WHERE device_id=1'));
+  await f.db.query("UPDATE taxi_bot_offers SET expires_at=clock_timestamp()-interval '1 minute'WHERE id=$1",[offer.id]);
+  const event=await f.enqueue('',driverPhone,crypto.randomUUID(),'txa_'+offer.id),claim=await f.begin(event.eventId);assert.equal(claim.state,'proceed');
+  await f.commit(event.eventId,claim,{...f.decision('driver_accept'),offerId:offer.id});assert.equal(await f.scalar('SELECT estado FROM viajes'),'buscando_conductor');
+  const reply=await f.scalar("SELECT body->>'text'FROM taxi_bot_outbox WHERE destination=$1 AND dedupe_key LIKE 'driver-reply:%'",[driverPhone]);assert.match(asString(reply),/venc|disponib|cambi/i);
+  assert.equal(await f.scalar("SELECT count(*)::int FROM taxi_bot_outbox WHERE dedupe_key LIKE 'trip-assigned:%'"),0);
+ }finally{await f.db.close();}
+});
+
+test('staff exclusions SQL: enabling the blacklist closes queued staff chat before interpretation without blocking ordinary customers',async()=>{
+ const f=await fixture();try{
+  await f.db.query('UPDATE taxi_bot_customer_access SET public_enabled=true WHERE tenant_id=$1',[tenant]);
+  const staff=await f.enqueue('Hola',driverPhone);
+  await f.db.query('UPDATE taxi_bot_customer_access SET exclude_operational_customers=true WHERE tenant_id=$1',[tenant]);
+  assert.equal((await f.begin(staff.eventId)).state,'blocked');
+  assert.equal(await f.scalar('SELECT count(*)::int FROM taxi_bot_sessions'),0);assert.equal(await f.scalar('SELECT count(*)::int FROM taxi_bot_outbox'),0);
+  assert.ok((await f.enqueue('Hola','+529630000088')).eventId);
  }finally{await f.db.close();}
 });
 

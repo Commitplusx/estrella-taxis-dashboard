@@ -13,13 +13,14 @@ import {
   AlertCircle,
   CarFront,
   CheckCircle2,
+  ChevronDown,
+  ChevronUp,
+  Clock3,
   Compass,
-  ExternalLink,
   Flag,
   MapPin,
   RefreshCw,
   Signal,
-  SignalZero,
 } from "lucide-react";
 import {
   fetchPublicTaxiTracking,
@@ -30,7 +31,6 @@ import {
   pickupText,
   trackingAge,
   trackingFresh,
-  trackingPointUrl,
 } from "../lib/taxiTrackingPresentation";
 import "./customerTrip.css";
 const CustomerTripMap = lazy(() => import("../components/CustomerTripMap"));
@@ -44,8 +44,8 @@ class MapBoundary
     return this.state.failed
       ? (
         <div className="customer-trip-map-placeholder">
-          No pudimos cargar el mapa. Puedes consultar los puntos en
-          OpenStreetMap.
+          <p>No pudimos cargar el mapa de tu viaje.</p>
+          <button onClick={() => window.location.reload()}>Volver a cargar</button>
         </div>
       )
       : this.props.children;
@@ -59,7 +59,9 @@ function TrackingView({ token }: { token: string | undefined }) {
     [asOf, setAsOf] = useState(Date.now),
     [follow, setFollow] = useState(true),
     [focus, setFocus] = useState(0),
-    [tileError, setTileError] = useState(false);
+    [tileError, setTileError] = useState(false),
+    [expanded, setExpanded] = useState(false),
+    [mobile, setMobile] = useState(() => window.matchMedia('(max-width: 767px)').matches);
   const retry = useRef<() => void>(() => {}),
     drag = useCallback(() => setFollow(false), []);
   useEffect(() => {
@@ -126,6 +128,12 @@ function TrackingView({ token }: { token: string | undefined }) {
       document.removeEventListener("visibilitychange", visible);
     };
   }, [token]);
+  useEffect(() => {
+    const query = window.matchMedia('(max-width: 767px)');
+    const update = () => setMobile(query.matches);
+    query.addEventListener('change', update);
+    return () => query.removeEventListener('change', update);
+  }, []);
   const trip = snapshot?.viaje,
     taxi = snapshot?.taxi,
     completed = trip?.estado === "completado",
@@ -133,8 +141,7 @@ function TrackingView({ token }: { token: string | undefined }) {
       trip?.estado === "cancelado_timeout",
     terminal = completed || cancelled;
   const fresh = Boolean(taxi && !error && trackingFresh(taxi.lastUpdate, asOf)),
-    point = taxi ? trackingPointUrl(taxi.lat, taxi.lng) : null,
-    pickup = trip ? trackingPointUrl(trip.origen_lat, trip.origen_lng) : null;
+    mapHidden = mobile && expanded;
   const title = completed
     ? "¡Gracias por viajar con nosotros!"
     : cancelled
@@ -148,7 +155,7 @@ function TrackingView({ token }: { token: string | undefined }) {
       : "Seguimiento de tu viaje · Stellar";
   }, [title, trip]);
   return (
-    <main className="customer-trip-page">
+    <main className="customer-trip-page" data-expanded={expanded}>
       <header className="customer-trip-header">
         <span>
           <CarFront aria-hidden="true" />Stellar
@@ -180,18 +187,12 @@ function TrackingView({ token }: { token: string | undefined }) {
         )
         : (
           <>
-            <section className="customer-trip-heading">
-              <h1>{title}</h1>
-              <p>
-                {terminal
-                  ? "Puedes volver a WhatsApp cuando quieras."
-                  : "Aquí puedes acompañar su recorrido hasta el punto donde pasamos por ti."}
-              </p>
-            </section>
             <div className="customer-trip-layout">
               <section
                 className="customer-trip-map-section"
                 aria-label="Seguimiento del taxi"
+                aria-hidden={mapHidden}
+                inert={mapHidden}
               >
                 {!terminal
                   ? (
@@ -200,7 +201,7 @@ function TrackingView({ token }: { token: string | undefined }) {
                         <Suspense
                           fallback={
                             <div className="customer-trip-map-placeholder">
-                              Cargando OpenStreetMap…
+                              Cargando el mapa de tu viaje…
                             </div>
                           }
                         >
@@ -233,14 +234,11 @@ function TrackingView({ token }: { token: string | undefined }) {
                           <RefreshCw aria-hidden="true" size={20} />
                         </button>
                       </div>
-                      <p className="customer-trip-legend">
-                        Azul: tu taxi · Verde: pasamos por ti
-                      </p>
                     </>
                   )
                   : (
-                    <div className="customer-trip-terminal">
-                      <CheckCircle2 aria-hidden="true" size={48} />
+                    <div className={'customer-trip-terminal' + (cancelled ? ' is-cancelled' : '')}>
+                      {completed ? <CheckCircle2 aria-hidden="true" size={48} /> : <AlertCircle aria-hidden="true" size={48} />}
                       <p>
                         {completed
                           ? "El servicio quedó finalizado."
@@ -250,8 +248,7 @@ function TrackingView({ token }: { token: string | undefined }) {
                   )}
                 {tileError && !terminal && (
                   <p className="customer-trip-warning" role="status">
-                    No pudimos cargar algunas calles. Los enlaces de
-                    OpenStreetMap siguen disponibles.
+                    Algunas calles no se pudieron cargar. Recarga esta página si el mapa sigue vacío.
                   </p>
                 )}
               </section>
@@ -259,11 +256,19 @@ function TrackingView({ token }: { token: string | undefined }) {
                 className="customer-trip-details"
                 aria-label="Datos de tu viaje"
               >
+                <button className="customer-trip-sheet-toggle" aria-expanded={expanded} aria-controls="customer-trip-body" onClick={() => setExpanded(value => !value)}>
+                  <span className="customer-trip-sheet-handle" aria-hidden="true" />
+                  {expanded ? <ChevronDown size={18} aria-hidden="true" /> : <ChevronUp size={18} aria-hidden="true" />}
+                  {expanded ? 'Volver al mapa' : 'Ver detalles del viaje'}
+                </button>
+                <div className="customer-trip-summary">
+                  <h1>{title}</h1>
+                  <p className="customer-trip-subtitle">{terminal ? 'Puedes volver a WhatsApp cuando quieras.' : trip?.estado === 'buscando_conductor' ? 'Te avisamos en cuanto una unidad acepte.' : 'Sigue aquí su recorrido hasta donde estás.'}</p>
                 <div className="customer-trip-unit">
-                  <CarFront aria-hidden="true" size={30} />
+                  <span className="customer-trip-unit-icon"><CarFront aria-hidden="true" size={24} /></span>
                   <div>
                     <h2>{trip?.unitLabel ?? "Tu taxi"}</h2>
-                    {trip?.driverName && <p>Te atiende {trip.driverName}</p>}
+                    {trip?.driverName && <p>Conduce {trip.driverName}</p>}
                   </div>
                 </div>
                 {!terminal && (
@@ -275,7 +280,7 @@ function TrackingView({ token }: { token: string | undefined }) {
                   >
                     {fresh
                       ? <Signal aria-hidden="true" />
-                      : <SignalZero aria-hidden="true" />}
+                      : <Clock3 aria-hidden="true" />}
                     <div>
                       <h2>
                         {fresh
@@ -294,6 +299,8 @@ function TrackingView({ token }: { token: string | undefined }) {
                     </div>
                   </div>
                 )}
+                </div>
+                <div id="customer-trip-body" className="customer-trip-body" hidden={mobile && !expanded}>
                 {error && (
                   <p className="customer-trip-warning" role="status">
                     {error} Mostramos los últimos datos recibidos.
@@ -304,14 +311,6 @@ function TrackingView({ token }: { token: string | undefined }) {
                   <div>
                     <h2>Pasamos por ti aquí</h2>
                     <p>{pickupText(snapshot.viaje.origen)}</p>
-                    {pickup && (
-                      <a href={pickup} target="_blank" rel="noreferrer">
-                        Ver punto en OpenStreetMap<ExternalLink
-                          size={16}
-                          aria-hidden="true"
-                        />
-                      </a>
-                    )}
                   </div>
                 </div>
                 <div className="customer-trip-stop">
@@ -324,25 +323,12 @@ function TrackingView({ token }: { token: string | undefined }) {
                     </p>
                   </div>
                 </div>
-                {point && !terminal && (
-                  <a
-                    className="customer-trip-open"
-                    href={point}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    Abrir ubicación del taxi<ExternalLink
-                      size={18}
-                      aria-hidden="true"
-                    />
-                  </a>
-                )}
                 {!terminal && (
                   <p className="customer-trip-help">
-                    Actualizamos el mapa cada 5 segundos mientras lo tengas
-                    abierto. Si necesitas ayuda, escríbenos por WhatsApp.
+                    El mapa se actualiza automáticamente. Si necesitas ayuda, escríbenos por WhatsApp.
                   </p>
                 )}
+                </div>
               </section>
             </div>
           </>
