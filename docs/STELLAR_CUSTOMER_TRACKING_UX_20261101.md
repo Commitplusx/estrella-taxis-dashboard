@@ -33,3 +33,9 @@ Después de publicar web, API y transporte se activó el botón exclusivamente e
 El API del viaje real, consultado sin mutarlo, devuelve HTTP 200, `Unidad 0540`, chofer separado y recogida presente. La página publicada pasó una comprobación con respuesta sintética: mapa OSM cargado, sin solicitudes/enlaces Google, sin errores ni desbordamiento y texto de GPS antiguo correcto. Versiones, resultados y hashes están en `STELLAR_CUSTOMER_TRACKING_UX_20261101.evidence.json`.
 
 Los mensajes ya entregados no se editan ni se reenvían para aparentar una prueba. Los siguientes avisos usan el botón; el enlace de seguimiento existente abre la página actualizada. La apertura/entrega física del nuevo CTA requiere una aceptación posterior real; una simulación y un estado success de Vercel no la prueban.
+
+## Actualización de presentación, 1 de noviembre de 2026
+
+El commit `5f9e4bde3e71f5f1e319f6139e177cb98a1ec106` publica el diseño adaptado al tracker de Estrella Eats: el mapa ocupa la vista, el resumen se abre dentro de la misma página y se retiraron las acciones externas para abrir ubicaciones en OSM. La atribución del proveedor sigue dentro del mapa. Los detalles muestran la unidad y al conductor por separado.
+
+Vercel confirmó `success` en `deiffs-projects/estrella-taxis-dashboard`, despliegue `8AdwALk22T7fMFLxek851pL2uDkm`. La página de producción se validó con datos sintéticos a 390×844, 1280×900 y 1919×915: sin desbordamiento, errores de página ni acciones externas; el recorrido móvil comprobó el sheet, recuperación de red y fin del polling. No se enviaron mensajes ni se crearon viajes de QA en producción. La evidencia de esta actualización y de la exclusión del chat está en `STELLAR_STAFF_AI_EXCLUSIONS_20261101.evidence.json`.

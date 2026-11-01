@@ -1,0 +1,121 @@
+{
+  "date": "2026-11-01",
+  "project": "Stellar taxi dispatch",
+  "production": {
+    "supabaseProject": "izrsxygazsalfhpaualj",
+    "migration": "20261101200000",
+    "migrationRehearsal": "rollback_verified",
+    "migrationRecorded": true,
+    "scope": "Pompeyo tenant only",
+    "staffExclusionEnabled": true,
+    "customerAccessRevision": 16,
+    "publicIntakeModePreserved": true,
+    "channelEnabledAtVerification": true,
+    "dispatchPausedAtVerification": false,
+    "operationalContacts": 30,
+    "blockedOperationalContacts": 30,
+    "activeDrivers": 13,
+    "activeDriverRecipientsStillAllowed": 13,
+    "productionQaMessagesSent": 0,
+    "productionQaTripsCreated": 0
+  },
+  "github": {
+    "repository": "Commitplusx/estrella-taxis-dashboard",
+    "branch": "main",
+    "commit": "5f9e4bde3e71f5f1e319f6139e177cb98a1ec106",
+    "pushVerified": true
+  },
+  "vercel": {
+    "project": "deiffs-projects/estrella-taxis-dashboard",
+    "state": "success",
+    "deployment": "8AdwALk22T7fMFLxek851pL2uDkm",
+    "productionHttp": 200,
+    "bundleMatchesLocalBuild": true
+  },
+  "tests": {
+    "fullSqlSuite": 200,
+    "staffExclusionCases": 4,
+    "trackingAndAccessDenoTests": 33,
+    "staticQualityFiles": 163,
+    "strictFrontendTypecheck": "passed",
+    "strictTestTypecheck": "passed",
+    "strictAdminTypecheck": "passed",
+    "entrypointDenoChecks": "passed",
+    "productionBuild": "passed"
+  },
+  "productionBrowser": [
+    {
+      "viewport": "390x844",
+      "syntheticData": true,
+      "mapTilesLoaded": true,
+      "noExternalActionsExceptMapAttribution": true,
+      "noOverflow": true,
+      "pageErrors": 0,
+      "sheetAndInertControls": true,
+      "networkFailureRecoveryAndTerminalPolling": true
+    },
+    {
+      "viewport": "1280x900",
+      "syntheticData": true,
+      "mapTilesLoaded": true,
+      "noExternalActionsExceptMapAttribution": true,
+      "noOverflow": true,
+      "pageErrors": 0
+    },
+    {
+      "viewport": "1919x915",
+      "syntheticData": true,
+      "mapTilesLoaded": true,
+      "noExternalActionsExceptMapAttribution": true,
+      "noOverflow": true,
+      "pageErrors": 0
+    }
+  ],
+  "staffBehavior": {
+    "driverOwnerStaffMessagesReachInterpreter": false,
+    "offerDeliveryPolicyChanged": false,
+    "ownedAcceptRejectFinishButtonsRemainOperational": true,
+    "expiredOwnedOfferReturnsUnavailableReceiptWithoutAssignment": true,
+    "realWhatsAppConversationTest": false
+  },
+  "ui": {
+    "mapProvider": "Leaflet with OpenStreetMap tiles",
+    "externalLocationActionsRemoved": true,
+    "smallMapAttributionRetained": true,
+    "unitAndDriverPresentedSeparately": true,
+    "buildAssets": [
+      "assets/index-JbuGIGF1.js",
+      "assets/index-CgyUXo8B.css"
+    ]
+  },
+  "sourceHashes": [
+    {
+      "path": "docs/STELLAR_CUSTOMER_TRACKING_UX_20261101.md",
+      "sha256": "a13e66c4056c90b42fc39fd5149c98878c11b6c7a7b65c37298a624f1b6a135b"
+    },
+    {
+      "path": "docs/STELLAR_STAFF_AI_EXCLUSIONS_20261101.md",
+      "sha256": "f011937ad98c01394866080b351cad81942c5c7f3ec0608e1894c5de1576157d"
+    },
+    {
+      "path": "estrella-taxis-backend/supabase/migrations/20261101200000_taxi_staff_customer_exclusions.sql",
+      "sha256": "4979073bf5b65bb13c99c6979dd5a12cc0820663919cb5ca63beea9c103e6aec"
+    },
+    {
+      "path": "src/pages/TrackPage.tsx",
+      "sha256": "ee69e85a0429ff67bde5b7413989323faa5d17105c509a4bb08350efa571a702"
+    },
+    {
+      "path": "src/components/CustomerTripMap.tsx",
+      "sha256": "14e865bc3259c337085e86452b2618801f2b433b7f385158f8c5b6cd7945e0e3"
+    },
+    {
+      "path": "src/pages/customerTrip.css",
+      "sha256": "7b76393859495cf3daca4d5c239297140e50e076d103bae5d60647bd8d59d827"
+    },
+    {
+      "path": "tests/taxi-bot-database.test.ts",
+      "sha256": "013c03dc57efdd9b1d62a1287d91e69e4f95494d2df3f07fdcaa80c61d338da1"
+    }
+  ]
+}
