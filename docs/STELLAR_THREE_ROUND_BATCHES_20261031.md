@@ -2,7 +2,7 @@
 
 La última instrucción del administrador sustituye la oferta secuencial: cada ronda contacta **hasta tres unidades elegibles simultáneamente**, con **tres minutos de vigencia compartida**. Si no hay aceptación válida, la siguiente ronda consulta GPS de nuevo y excluye a todas las unidades ya contactadas. Son tres rondas, hasta nueve taxis distintos y aproximadamente nueve minutos más el procesamiento del consumidor. Con menos candidatos se ofrecen los disponibles; nunca se inventan unidades.
 
-La implementación es la migración 20261101002000_taxi_three_round_batches.sql. El estado de publicación y los hashes comprobados se registran en la evidencia adjunta.
+Publicado: código bfb17a1 en main; migración 20261101002000 aplicada y registrada en Supabase independiente izrsxygazsalfhpaualj. Worker y webhook v49 ACTIVE; administrador v37 sin cambios. Las trece funciones SQL coinciden con el ensayo y los 62 archivos Edge descargados coinciden con la entrega revisada. El JavaScript público del panel contiene los nuevos textos. La evidencia adjunta conserva hashes y resultados agregados.
 
 ## Reglas de aceptación y tiempo
 
@@ -29,6 +29,8 @@ La oferta al conductor contiene nombre, enlace verificado de Maps para la recogi
 Las funciones Edge necesitan sólo tres módulos revisados: contratos de sesión, coordinación de botones y límite de exclusiones del consumidor. La publicación se prepara desde copias activas aisladas y preserva la autenticación activa. No se compila ni instala Flutter. El administrador es compatible con las firmas SQL existentes.
 
 ## Verificación y recuperación
+
+Resultado final: 178 pruebas SQL y 218 pruebas Deno aprobadas, tipos comprobados y control estático de 142 archivos. La compilación web se hizo desde una copia del commit con sólo los archivos revisados; el detector de la interfaz no encontró incidencias.
 
 La evidencia inicial reprodujo la discrepancia: la política anterior creó una oferta, frente a las tres esperadas. Las pruebas transaccionales cubren vencimiento común, primera aceptación, expansión, botones viejos, fallo tardío del proveedor, cancelación, aislamiento, continuación limitada, presupuesto de mensajes y permiso de envío. Las expectativas anteriores de una unidad y cuatro rondas se ajustaron a la nueva instrucción, manteniendo las comprobaciones de identidad, idempotencia y estado.
 

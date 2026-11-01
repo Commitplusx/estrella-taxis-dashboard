@@ -1,0 +1,151 @@
+{
+  "clientDate": "2026-10-31",
+  "verifiedAt": "2026-11-01T02:04:19.593Z",
+  "codeCommit": "bfb17a177c5425fe3de41572361ed031a87c79b8",
+  "project": "izrsxygazsalfhpaualj",
+  "migration": {
+    "version": "20261101002000",
+    "applied": true,
+    "registered": true,
+    "sha256": "02a9f1f79c18e01e73456cf07f0b8d31d83b057baed4e8556965807f1d888f01"
+  },
+  "policy": {
+    "simultaneousOffers": 3,
+    "sharedRoundSeconds": 180,
+    "roundsPerSearchBlock": 3,
+    "maxNewUnitsPerBlock": 9,
+    "normalSearchMinutes": 9,
+    "earlyRejectionsWaitUntilRoundEnds": true,
+    "providerCallbacksExtendDeadline": false,
+    "firstValidAcceptanceWins": true,
+    "oldRoundsUnavailable": true,
+    "customerChoiceExpiresMinutes": 5,
+    "explicitExtraSearchBlocks": 1,
+    "maxTotalContactedUnits": 18,
+    "driverOfferShowsFare": false,
+    "refreshGpsEachRound": true
+  },
+  "runtime": {
+    "processQueueVersion": 49,
+    "webhookVersion": 49,
+    "adminVersion": 37,
+    "jwtSettingPreserved": true,
+    "vpsRestarted": false,
+    "apkChanged": false
+  },
+  "sql": {
+    "functions": [
+      {
+        "signature": "taxi_bot_begin(uuid)",
+        "sourceMd5": "fe936da9422d6af92dad9ae7a4b47b97"
+      },
+      {
+        "signature": "taxi_bot_commit(uuid,uuid,bigint,jsonb)",
+        "sourceMd5": "8457fffee159232604aff3a96cb61b5f"
+      },
+      {
+        "signature": "taxi_bot_dispatch_attention(uuid,text)",
+        "sourceMd5": "ee10a270756234ebfe0efef20f31181e"
+      },
+      {
+        "signature": "taxi_bot_dispatch_claim()",
+        "sourceMd5": "a175e877f41218c12d7278d0b4269166"
+      },
+      {
+        "signature": "taxi_bot_dispatch_complete(uuid,uuid,jsonb,text)",
+        "sourceMd5": "1e05cb5f01f4421f32b61c5f98dffa73"
+      },
+      {
+        "signature": "taxi_bot_dispatch_customer_choice(uuid,text,text,uuid,boolean)",
+        "sourceMd5": "019ab489f60588b692e59661a11e0394"
+      },
+      {
+        "signature": "taxi_bot_dispatch_delivery_changed()",
+        "sourceMd5": "426e3f008db8ea3b201927d78a268396"
+      },
+      {
+        "signature": "taxi_bot_dispatch_eligible(uuid,text,integer[])",
+        "sourceMd5": "8bac22c37194173ed36906cdd3a151f9"
+      },
+      {
+        "signature": "taxi_bot_dispatch_offer(uuid,jsonb,integer)",
+        "sourceMd5": "8d038870b7f361344e749a00eabf6064"
+      },
+      {
+        "signature": "taxi_bot_dispatch_start(uuid,jsonb,boolean)",
+        "sourceMd5": "2bd7db416e886a724256039345d9f03c"
+      },
+      {
+        "signature": "taxi_bot_emit(uuid,text,text,text,text,jsonb)",
+        "sourceMd5": "0abfe43dd439ad85c166fbdc3ece0a5a"
+      },
+      {
+        "signature": "taxi_bot_maintain()",
+        "sourceMd5": "24bc547913d8d088c99042992ca1d2b3"
+      },
+      {
+        "signature": "taxi_bot_outbox_permitted(uuid,uuid)",
+        "sourceMd5": "31d2474c82e215bd94347393c3666a68"
+      }
+    ],
+    "hashesMatch": true,
+    "grantsMatch": true,
+    "columns": [
+      "choice_expires_at",
+      "choice_token",
+      "continuations"
+    ]
+  },
+  "edge": [
+    {
+      "name": "process-queue",
+      "files": 31,
+      "hashesMatch": true,
+      "options": 200
+    },
+    {
+      "name": "ycloud-webhook",
+      "files": 31,
+      "hashesMatch": true,
+      "options": 200
+    }
+  ],
+  "web": {
+    "status": 200,
+    "updatedPanelPublished": true,
+    "checkedAsset": "/assets/TaxiBotAdminPage-CupDCXl-.js",
+    "localPanelAsset": "TaxiBotAdminPage-CupDCXl-.js"
+  },
+  "tests": {
+    "before": {
+      "passed": 0,
+      "failed": 2
+    },
+    "fullSql": {
+      "passed": 178,
+      "failed": 0
+    },
+    "dispatchRegressions": {
+      "passed": 31,
+      "failed": 0
+    },
+    "deno": {
+      "passed": 218,
+      "failed": 0
+    },
+    "typechecked": true,
+    "qualityFiles": 142,
+    "isolatedTrackedWebBuild": true,
+    "uiDetectorFindings": 0
+  },
+  "verification": {
+    "dryRunRolledBack": true,
+    "productionHashesMatch": true,
+    "existingGrantsPreserved": true,
+    "newChoiceFunctionPrivate": true,
+    "productionTripsCreatedByChecks": 0,
+    "whatsAppMessagesSentByChecks": 0,
+    "physicalTest": false,
+    "visualBrowserTest": false
+  }
+}
