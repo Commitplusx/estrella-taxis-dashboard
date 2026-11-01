@@ -1,6 +1,8 @@
-# Viaje del chofer desde WhatsApp — candidato del 1 de noviembre de 2026
+# Viaje del chofer desde WhatsApp — publicado el 1 de noviembre de 2026
 
-Implementación preparada **sólo para Stellar Tracking** (`izrsxygazsalfhpaualj`). Kaleb eligió dejar lista la publicación por ahora: **no se aplicó esta migración, no se desplegó el endpoint ni la web y no se activó el enlace en producción**. Los viajes reales conservan el comportamiento publicado anterior. No se enviaron WhatsApp ni se crearon viajes reales de QA.
+Publicado **sólo en Stellar Tracking** (`izrsxygazsalfhpaualj`) por autorización posterior de Kaleb. GitHub `main` recibió `8169f0f`; Vercel del proyecto correcto `deiffs-projects/estrella-taxis-dashboard` terminó en success y `/driver-trip` responde200. Supabase: migración `20261101160000`, `driver-trip`v1, `process-queue`v54 y `ycloud-webhook`v50 ACTIVE. Se habilitó el enlace únicamente en Pompeyo, WABA terminado en2491, revisión7. No se enviaron WhatsApp ni se crearon viajes reales de QA durante esta publicación.
+
+La indicación inicial de dejarlo preparado fue sustituida por la petición de publicar y hacer push. Git tenía varias cuentas guardadas; se seleccionó `credential.username=Commitplusx` sin copiar ni imprimir credenciales. La CLI de Vercel sigue en otra cuenta; la publicación se realizó por la integración GitHub→Vercel existente, sin crear un sitio alterno.
 
 ## Experiencia
 
@@ -34,14 +36,16 @@ El enlace se abre en el navegador que el usuario tenga configurado para WhatsApp
 - Navegador headless:390×844 y1280×900, sin errores de página ni desbordamiento. Llegada con respuesta perdida reutiliza UUID, apertura sólo lee, finalización confirma y la confirmación no desaparece al sondear. Vista de enlace inválido a320px sin desbordamiento. Capturas con datos sintéticos y tiles públicos de OSM.
 - Revisión de diseño: ambos ajustes solicitados quedaron resueltos (`ship` limitado a esos ajustes): botón de llegada accesible en el primer viewport y metadatos debajo del título. Se conserva el sistema visual existente; no se reescribe DESIGN.md.
 
-## Publicación preparada, todavía pendiente
+## Publicación comprobada y protocolo de mantenimiento
 
-1. Confirmar el proyecto de Supabase anterior y la cuenta de Vercel que administra **deiffs-projects/estrella-taxis-dashboard**, dominio `stellar.estrella-eats.mx`. La sesión CLI disponible sólo tiene acceso a PIEDAD: no vincular ni crear un proyecto allí. No se publicó por GitHub.
+1. Confirmar el proyecto de Supabase anterior y el proyecto **deiffs-projects/estrella-taxis-dashboard**, dominio `stellar.estrella-eats.mx`. Esta publicación usó GitHub `main`, no la sesión CLI de PIEDAD. Se comprobó el estado Vercel success y la página real con navegador móvil headless.
 2. Respaldar/descargar y comparar funciones activas `process-queue` y `ycloud-webhook`, además de los cuerpos SQL que toca la migración. Conservar las variantes de autenticación activas. Revisar sólo los archivos de esta entrega.
-3. Ensayar la migración `20261101160000_taxi_driver_trip_web.sql` con ROLLBACK sobre el esquema activo; sus guardas deben coincidir. Aplicar sólo esa migración revisada a Stellar con gate desactivado. No copiar todo el historial de otros proyectos al workspace enlazado.
+3. Ensayar la migración `20261101160000_taxi_driver_trip_web.sql` con ROLLBACK sobre el esquema activo; sus guardas deben coincidir. Aplicar sólo esa migración revisada a Stellar con gate desactivado. En esta publicación `db push --dry-run` falló por configuración de perfil de CLI; se aplicó el SQL ensayado por `db query --linked`, registrando versión/nombre/fuente en `supabase_migrations.schema_migrations` dentro de la misma transacción. No se copiaron otros historiales ni se marcaron migraciones sin aplicar.
 4. Publicar `driver-trip` con `verify_jwt=false` (capacidad privada validada dentro del handler). Publicar los consumidores revisados `process-queue`/`ycloud-webhook` con el nuevo transporte CTA, manteniendo sus opciones activas de autenticación. El runner VPS actual sólo llama a `process-queue`: se comprobó que no contiene un segundo runtime de envío; no necesita copiar toda la carpeta ni reiniciarse por este cambio.
 5. Publicar la web revisada en el proyecto Stellar correcto. Verificar `/driver-trip`, headers no-store/no-referrer/noindex y bundle; token falso debe dar404 sin escribir. Verificar métodos, RLS/grants, pausa y salud del consumidor.
 6. Sólo cuando web/API/transporte estén comprobados, habilitar `driver_web_enabled` para el tenant/WABA de Pompeyo verificado (sufijo2491), con revisión de canal incrementada. No cambiar el teléfono, tenant, allowlist ni plan. No activar todos los canales con un UPDATE sin filtro.
 7. Prueba física coordinada con cliente/chofer autorizados: aceptación, botón, mapa, llegada única, aviso realmente recibido y finalización. Guardar hashes/versiones/salud y evidencia de entrega separada del acuse del proveedor.
+
+Se descargaron después las tres funciones:32/32 módulos de process-queue,31/31 de webhook y9/9 del endpoint coinciden con los paquetes revisados, conservando las variantes activas de autenticación de cada consumidor. El endpoint rechazó token falso404, GET405, origen ajeno403; OPTIONS204. La página publicada conserva no-store/no-referrer/noindex y el navegador no presentó errores ni desbordamiento al abrir enlace inválido. Consumidor VPS online, cero reinicios y cero salidas pendientes/inciertas en el corte. La función de oferta conserva el hash del hook de prueba `cb595438742cb4aa1a32d370594d45d6`; la regla para9156→0540 estaba armada sin consumirse. La prueba física sigue pendiente de la confirmación real del usuario.
 
 Si hace falta suspender, la pausa existente del canal bloquea nuevas acciones/avisos. Desactivar sólo `driver_web_enabled` devuelve los recibos futuros al flujo anterior y deja las páginas existentes pausadas; no borrar tablas, viajes ni recibos para revertir.

@@ -21,4 +21,4 @@ FORM: Code-led extension of the incumbent operational interface. No comp or new 
 
 FINISH: Desktop1280/mobile390 synthetic captures inspected; both reviewer fixes resolved. Additional320px invalid-link state has no overflow. Opening never writes; confirmation survives polling; uncertain action retries preserve UUID; terminal trips hide controls. A full-page screenshot places the fixed action at the original viewport bottom. Physical WhatsApp browser behavior remains untested and cannot be forced by a URL.
 
-Publication: candidate only. User chose to prepare publication and leave production unchanged on November1,2026. The channel release gate defaults false until database, transport, endpoint and web are verified together.
+Publication: shipped November1,2026 after the user superseded deferral and explicitly requested publishing/push. GitHub main8169f0f, Vercel success, Stellar migration20261101160000 and API/transport verified; channel gate enabled only for Pompeyo. Physical WhatsApp opening/arrival remains pending; invalid-link production browser check passed.

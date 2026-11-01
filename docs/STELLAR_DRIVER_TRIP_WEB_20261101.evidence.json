@@ -3,13 +3,25 @@
   "project": "Stellar Tracking",
   "supabaseProject": "izrsxygazsalfhpaualj",
   "publication": {
-    "status": "prepared_only",
-    "userChoseToDefer": true,
-    "webPublished": false,
-    "functionsPublished": false,
-    "migrationApplied": false,
-    "channelGateEnabled": false,
-    "githubPushVerified": false,
+    "status": "published_and_enabled",
+    "userSupersededDeferral": true,
+    "webPublished": true,
+    "functionsPublished": true,
+    "migrationApplied": true,
+    "channelGateEnabled": true,
+    "githubPushVerified": true,
+    "githubCodeCommit": "8169f0fc1b5008c1d7cb38576e484e07da374d0b",
+    "vercelState": "success",
+    "vercelProject": "deiffs-projects/estrella-taxis-dashboard",
+    "vercelDeployment": "4RrTYNxiwRncdazaQRHT4LAH5LrL",
+    "supabaseProject": "izrsxygazsalfhpaualj",
+    "migration": "20261101160000",
+    "migrationMethod": "management_query_with_atomic_history_after_rollback_rehearsal",
+    "processQueueVersion": 54,
+    "webhookVersion": 50,
+    "driverTripVersion": 1,
+    "channelRevision": 7,
+    "channelWabaSuffix": "2491",
     "productionQaMessagesSent": 0,
     "productionQaTripsCreated": 0
   },
@@ -133,7 +145,7 @@
     },
     {
       "path": "tests/taxi-bot-database.test.ts",
-      "sha256": "96838856edd906714292ffc54d4843c4fbfa1b72059ee6ecae3c661ba7d8a611"
+      "sha256": "2e389a4232191155af3e8e986175f5e82c844fa289af99871c2600120aa6239b"
     },
     {
       "path": "vercel.json",
@@ -141,11 +153,11 @@
     },
     {
       "path": ".impeccable/surfaces/src-pages-drivertrippage-tsx.md",
-      "sha256": "93735f5e6641a5084100dac13ef539bd851b26b6ea8fe3eacc93392f771937b7"
+      "sha256": "15ab4defbf58f9f7700022228c759a05da09fd90fae6d71f66d94129ed35a1a1"
     },
     {
       "path": "docs/STELLAR_DRIVER_TRIP_WEB_20261101.md",
-      "sha256": "be2126bbdde14e7cdb991189ccf8859bf95d4bcc846d2f2124ded6cdf15f3ccf"
+      "sha256": "d56fe311567bee6b16bae1e8c46702eab47a05d5fe749fd6b8acfa1d40d69706"
     },
     {
       "path": "estrella-taxis-backend/supabase/functions/_shared/bot/taxis/driverTripContracts.ts",
@@ -213,5 +225,56 @@
       "name": "stellar-driver-web-global-typecheck.log",
       "sha256": "81361dbf88f5c590ad65db1dd9a2166da025b458f770ba97cf99480422ef1d2c"
     }
-  ]
+  ],
+  "liveHttp": {
+    "unknownToken": 404,
+    "get": 405,
+    "options": 204,
+    "forbiddenOrigin": 403,
+    "page": 200,
+    "referrer": [
+      "no-referrer"
+    ],
+    "cache": [
+      "no-store"
+    ],
+    "robots": [
+      "noindex, nofollow"
+    ]
+  },
+  "deployedRuntimeMatches": [
+    {
+      "entry": "process",
+      "runtimeFilesMatched": 32
+    },
+    {
+      "entry": "webhook",
+      "runtimeFilesMatched": 31
+    },
+    {
+      "entry": "driver",
+      "runtimeFilesMatched": 9
+    }
+  ],
+  "liveBrowser": {
+    "productionPage": true,
+    "invalidPrivateTokenRejected": true,
+    "noArrivalActionsForInvalidToken": true,
+    "noHorizontalOverflow": true,
+    "pageErrors": 0
+  },
+  "liveActivation": {
+    "channel_enabled": true,
+    "driver_web_enabled": true,
+    "offer_hook_md5": "cb595438742cb4aa1a32d370594d45d6",
+    "pending_messages": 0,
+    "revision": 7,
+    "test_armed": true,
+    "test_expiry": "2026-11-01T09:06:41.40864-06:00"
+  },
+  "consumer": {
+    "name": "stellar-taxi-bot",
+    "status": "online",
+    "restarts": 0
+  }
 }

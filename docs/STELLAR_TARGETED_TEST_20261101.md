@@ -1,5 +1,7 @@
 # Siguiente confirmación de prueba → Ana Karen 0540
 
+Actualización posterior del mismo día: la página y el backend del conductor ya se publicaron por autorización posterior; ver `STELLAR_DRIVER_TRIP_WEB_20261101.md`. La excepción de asignación descrita aquí se conservó armada y sin consumirse al activar el enlace. La nota inferior documenta la etapa inicial de armado.
+
 Por solicitud expresa de Kaleb se armó una excepción de **un solo servicio** para el cliente terminado en9156, canal de Pompeyo terminado en2491, tenant `4cf9acf1-f07e-4a01-9396-eb5bde3e7411`, proyecto Stellar `izrsxygazsalfhpaualj`. La unidad0540 es el device4 y su chofer actual tiene WhatsApp terminado en1852.
 
 Publicación: únicamente el hook SQL revisado `deployment/stellar/target-next-test-trip.sql` y una fila privada de configuración. No se publicó la página del conductor, la migración `20261101160000`, funciones Edge, web, APK ni otro proyecto. No se creó un viaje ni se envió una oferta durante la preparación. El resumen anterior del cliente ya estaba vencido: necesita obtener uno vigente y tocar su botón normal de confirmación.
