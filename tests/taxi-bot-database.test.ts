@@ -60,6 +60,7 @@ const currentTraceIntentsSql=readFileSync(new URL('../estrella-taxis-backend/sup
 const sequentialOffersSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261101001000_taxi_sequential_offers.sql',import.meta.url),'utf8');
 const batchRoundsSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261101002000_taxi_three_round_batches.sql',import.meta.url),'utf8');
 const trackingLinkSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261101025802_taxi_customer_live_tracking.sql',import.meta.url),'utf8');
+const compactTrackingSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261101120000_taxi_tracking_compact_tokens.sql',import.meta.url),'utf8');
 const tenant='11111111-1111-4111-8111-111111111111',other='22222222-2222-4222-8222-222222222222',waba='+529630000001',customer='+529630000002',driverPhone='+529630000003';
 const pompeyo='4cf9acf1-f07e-4a01-9396-eb5bde3e7411';
 function unknownArray(value:unknown):value is unknown[]{return Array.isArray(value);}
@@ -793,6 +794,7 @@ async function fixture(options:{legacy?:boolean;seedCoverageBeforeMigration?:boo
     await db.exec(sequentialOffersSql);
     await db.exec(batchRoundsSql);
     await db.exec(trackingLinkSql);
+    await db.exec(compactTrackingSql);
   }
   // These legacy protocol fixtures explicitly act as customers too. Driver-only access has separate tests below.
   await db.query('INSERT INTO taxi_bot_allowed_customers(tenant_id,phone)VALUES($1,$2),($1,$3),($1,$4)',[tenant,customer,driverPhone,'+529630000004']);
@@ -1323,7 +1325,7 @@ test('taxi status notifications match trip state from request through assignment
     const accepted=await f.enqueue('botón',driverPhone),acceptClaim=await f.begin(accepted.eventId);
     await f.commit(accepted.eventId,acceptClaim,{...f.decision('driver_accept'),offerId:offer.id});
     const assigned=String(await f.scalar("SELECT body->>'text'FROM taxi_bot_outbox WHERE dedupe_key LIKE 'trip-assigned:%'"));assert.match(assigned,/^🚕/);assert.match(assigned,/😊/);
-    const trackingToken=String(await f.scalar("SELECT token FROM viajes WHERE estado='en_camino'"));assert.match(trackingToken,/^[0-9a-f-]{36}$/i);
+    const trackingToken=String(await f.scalar("SELECT token FROM viajes WHERE estado='en_camino'"));assert.match(trackingToken,/^[0-9a-f]{32}$/i);
     assert.match(assigned,new RegExp(`https://stellar\\.estrella-eats\\.mx/track/${trackingToken}`));assert.doesNotMatch(assigned,/tarifa|precio|\+529630000002/i);
     const driverReceipt=String(await f.scalar("SELECT body->>'text'FROM taxi_bot_outbox WHERE dedupe_key LIKE 'driver-assigned:%'"));
     const pickupLat=String(await f.scalar("SELECT round(origen_lat::numeric,6)::text FROM viajes WHERE estado='en_camino'"));

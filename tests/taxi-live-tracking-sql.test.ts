@@ -5,6 +5,7 @@ import { PGlite } from '@electric-sql/pglite';
 
 const briefFlowSql = readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261031233000_taxi_brief_customer_flow.sql', import.meta.url), 'utf8');
 const trackingSql = readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261101025802_taxi_customer_live_tracking.sql', import.meta.url), 'utf8');
+const compactTokenSql = readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261101120000_taxi_tracking_compact_tokens.sql', import.meta.url), 'utf8');
 const functionStart = briefFlowSql.indexOf('CREATE TABLE public.taxi_bot_message_budgets');
 const functionEndMarker = 'END $$;';
 const functionEnd = briefFlowSql.indexOf(functionEndMarker, briefFlowSql.indexOf('CREATE OR REPLACE FUNCTION public.taxi_bot_emit(')) + functionEndMarker.length;
@@ -17,7 +18,7 @@ const waba = '+529630000001';
 const customer = '+529630000002';
 const driver = '+529630000003';
 const tripId = '123e4567-e89b-42d3-a456-426614174000';
-const tripToken = '123e4567-e89b-42d3-a456-426614174001';
+const tripToken = 'ffe08480aad748c6aa553c90782df77c';
 
 async function fixture(): Promise<PGlite> {
   const db = new PGlite();
@@ -29,6 +30,7 @@ async function fixture(): Promise<PGlite> {
     CREATE FUNCTION public.taxi_bot_customer_phone(value text)RETURNS text LANGUAGE sql IMMUTABLE AS $$SELECT '+'||regexp_replace(value,'\\D','','g')$$;`);
   await db.exec(messageBudgetAndEmitSql);
   await db.exec(trackingSql);
+  await db.exec(compactTokenSql);
   await db.query('INSERT INTO public.taxi_bot_channels(tenant_id,waba)VALUES($1,$2)', [tenant, waba]);
   await db.query('INSERT INTO public.taxi_bot_channels(tenant_id,waba)VALUES($1,$2)', [otherTenant, waba]);
   await db.query("INSERT INTO public.viajes(id,token,tenant_id,bot_waba,cliente_tel,device_id,taxi_name,bot_managed,estado,origen_lat,origen_lng)VALUES($1,$2,$3,$4,$5,540,'OMAR 1134',true,'en_camino',16.23533,-92.12439)", [tripId, tripToken, tenant, waba, customer]);

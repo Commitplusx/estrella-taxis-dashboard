@@ -3,7 +3,7 @@ import { record, TrackingError } from '../_shared/tracking/contracts.ts';
 import { requestJson, type Fetcher } from '../_shared/tracking/http.ts';
 import type { TrackingStore } from '../_shared/tracking/store.ts';
 
-const TOKEN_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const TOKEN_PATTERN = /^(?:[0-9a-f]{32}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i;
 const SESSION_TTL_MS = 10 * 60 * 1000;
 const SESSION_REFRESH_MARGIN_MS = 30 * 1000;
 const POSITION_RESPONSE_LIMIT = 512 * 1024;

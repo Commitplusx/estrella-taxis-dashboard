@@ -4,7 +4,7 @@ import type { TrackingStore } from '../estrella-taxis-backend/supabase/functions
 import { createTrackPositionHandler } from '../estrella-taxis-backend/supabase/functions/track-position/handler.ts';
 import { parsePublicTaxiTracking } from '../src/lib/taxiTrackingContracts.ts';
 
-const token = '123e4567-e89b-42d3-a456-426614174000';
+const token = 'ffe08480aad748c6aa553c90782df77c';
 const tenant = '11111111-1111-4111-8111-111111111111';
 const baseTrip: Record<string, unknown> = {
   token,
@@ -77,7 +77,7 @@ function fixture(trip: Record<string, unknown> | null = baseTrip, positionRows: 
     read: async (table, query) => {
       counts.reads += 1;
       assert.equal(table, 'viajes');
-      assert.equal(query.get('token'), `eq.${token}`);
+      assert.equal(query.get('token'), 'eq.' + (trip?.token ?? token));
       assert.equal(query.get('bot_managed'), 'eq.true');
       assert.equal(query.get('limit'), '2');
       return trip === null ? [] : [trip];
@@ -132,6 +132,14 @@ Deno.test('public tracking returns only the assigned unit, converts Traccar knot
   assert.deepEqual(test.counts, { login: 1, position: 2, reads: 2 });
 });
 
+Deno.test('public tracking still accepts previously issued UUID tokens', async () => {
+  const legacyToken = '123e4567-e89b-42d3-a456-426614174000';
+  const trip = { ...baseTrip, token: legacyToken, estado: 'completado' };
+  const test = fixture(trip);
+  const result = await invoke(test.handler, legacyToken);
+  assert.equal(result.response.status, 200);
+  assert.equal(expectRecord(result.body).taxi, null);
+});
 Deno.test('public tracking ignores provider positions from any other unit and keeps the assigned trip route', async () => {
   const test = fixture(baseTrip, [{ deviceId: 541, latitude: 16.24, longitude: -92.12, speed: 10, course: 0, fixTime: '2026-10-31T18:00:58.000Z' }]);
   const result = await invoke(test.handler);
