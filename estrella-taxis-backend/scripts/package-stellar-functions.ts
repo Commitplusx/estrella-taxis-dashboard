@@ -5,7 +5,7 @@ import { pathToFileURL } from 'node:url';
 export interface FunctionFile { name: string; content: string }
 const repo = resolve(import.meta.dirname, '../..');
 const root = resolve(repo, 'estrella-taxis-backend/supabase/functions');
-const supported = ['ycloud-webhook', 'process-queue', 'taxi-bot-admin', 'ai-insights', 'calculate-driving-scores', 'driver-trip'] as const;
+const supported = ['ycloud-webhook', 'process-queue', 'taxi-bot-admin', 'ai-insights', 'calculate-driving-scores', 'driver-trip','track-position'] as const;
 export function packageStellarFunction(name: string): FunctionFile[] {
   if (!supported.some((item) => item === name)) throw new Error('Unsupported Stellar entrypoint.');
   const files = new Map<string, FunctionFile>();

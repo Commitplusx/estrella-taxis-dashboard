@@ -1,5 +1,5 @@
 {
-  "headers":[{"source":"/driver-trip","headers":[{"key":"Referrer-Policy","value":"no-referrer"},{"key":"X-Frame-Options","value":"DENY"},{"key":"X-Robots-Tag","value":"noindex, nofollow"},{"key":"Cache-Control","value":"no-store"}]}],
+  "headers":[{"source":"/track/:token","headers":[{"key":"Referrer-Policy","value":"no-referrer"},{"key":"X-Robots-Tag","value":"noindex, nofollow"},{"key":"Cache-Control","value":"no-store"}]},{"source":"/driver-trip","headers":[{"key":"Referrer-Policy","value":"no-referrer"},{"key":"X-Frame-Options","value":"DENY"},{"key":"X-Robots-Tag","value":"noindex, nofollow"},{"key":"Cache-Control","value":"no-store"}]}],
   "rewrites": [
     {
       "source": "/api/socket",

@@ -23,6 +23,7 @@ interface Trip {
   waba: string;
   deviceId: number | null;
   taxiName: string | null;
+  driverName: string | null;
   origin: string;
   destination: string;
   originLat: number | null;
@@ -106,6 +107,7 @@ function parseTrip(value: unknown, token: string): Trip | null {
     waba: value.bot_waba,
     deviceId,
     taxiName: typeof value.taxi_name === 'string' && value.taxi_name.trim() ? value.taxi_name.slice(0, 100) : null,
+    driverName: typeof value.bot_driver_name==='string'&&value.bot_driver_name.trim()?value.bot_driver_name.slice(0,120):null,
     origin: value.origen,
     destination: value.destino,
     originLat: optionalCoordinate(value.origen_lat, latitude),
@@ -219,7 +221,7 @@ export function createTrackPositionHandler(dependencies: TrackPositionDependenci
       if (!TOKEN_PATTERN.test(token)) return jsonResponse({ error: 'El enlace de seguimiento no es válido.', code: 'invalid_token' }, 400);
 
       const rows = await dependencies.store.read('viajes', new URLSearchParams({
-        select: 'token,tenant_id,bot_waba,bot_managed,device_id,taxi_name,origen,destino,origen_lat,origen_lng,estado,created_at',
+        select: 'token,tenant_id,bot_waba,bot_managed,device_id,taxi_name,bot_driver_name,origen,destino,origen_lat,origen_lng,estado,created_at',
         token: `eq.${token}`,
         bot_managed: 'eq.true',
         limit: '2',
@@ -239,6 +241,8 @@ export function createTrackPositionHandler(dependencies: TrackPositionDependenci
           origen_lng: trip.originLng,
           estado: trip.state,
           createdAt: trip.createdAt,
+          unitLabel: trip.taxiName,
+          driverName: trip.driverName,
         },
       });
     } catch (error: unknown) {

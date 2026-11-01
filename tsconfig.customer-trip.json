@@ -1,0 +1,15 @@
+{
+  "extends": "./tsconfig.app.json",
+  "compilerOptions": {
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true
+  },
+  "include": [],
+  "files": [
+    "src/pages/TrackPage.tsx",
+    "src/components/CustomerTripMap.tsx",
+    "src/lib/taxiTrackingPresentation.ts",
+    "src/lib/taxiTrackingContracts.ts"
+  ]
+}

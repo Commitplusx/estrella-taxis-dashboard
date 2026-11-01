@@ -144,6 +144,9 @@ Deno.test('public tracking still accepts previously issued UUID tokens', async (
   assert.equal(result.response.status, 200);
   assert.equal(expectRecord(result.body).taxi, null);
 });
+Deno.test('public tracking keeps the configured unit and accepted driver separate, with a known pickup despite stale GPS',async()=>{
+ const test=fixture({...baseTrip,taxi_name:'Unidad 0540',bot_driver_name:'Persona de prueba'},[{deviceId:540,latitude:16.24,longitude:-92.12,speed:0,course:0,fixTime:'2026-10-31T17:40:00Z'}]);const result=await invoke(test.handler);assert.equal(result.response.status,200);const body=expectRecord(result.body),trip=expectRecord(body.viaje);assert.equal(trip.unitLabel,'Unidad 0540');assert.equal(trip.driverName,'Persona de prueba');assert.equal(trip.origen_lat,16.23533);assert.equal(expectRecord(body.taxi).name,'Unidad 0540');
+});
 Deno.test('an assigned phone-only taxi is tracked with its fresh mobile fix, without exposing other units', async () => {
   const test = fixture(baseTrip, [], false, [{deviceId:540,latitude:16.26,longitude:-92.14,speed:0,course:null,fixTime:'2026-10-31T18:00:58.000Z'}, {deviceId:999,latitude:1,longitude:1,fixTime:'2026-10-31T18:00:58.000Z'}]);
   const result = await invoke(test.handler); assert.equal(result.response.status,200);

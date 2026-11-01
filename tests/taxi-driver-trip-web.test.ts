@@ -9,6 +9,11 @@ import {
   sendTaxiMessage,
 } from "../estrella-taxis-backend/supabase/functions/_shared/bot/taxis/transport.ts";
 import type { TrackingStore } from "../estrella-taxis-backend/supabase/functions/_shared/tracking/store.ts";
+import {
+  pickupText,
+  trackingFresh,
+  trackingPointUrl,
+} from "../src/lib/taxiTrackingPresentation.ts";
 const tenant = "11111111-1111-4111-8111-111111111111",
   id = "22222222-2222-4222-8222-222222222222",
   requestId = "33333333-3333-4333-8333-333333333333";
@@ -295,4 +300,57 @@ Deno.test("Driver CTA provider timeout remains uncertain and is not blindly rese
     { state: "uncertain", code: "provider_result_unknown" },
   );
   assert.equal(calls, 1);
+});
+Deno.test("Customer tracking CTA uses its own public link and cannot be mixed with a driver link or output category", async () => {
+  const customerRaw = {
+    ...raw,
+    dedupe_key: "trip-assigned:" + id,
+    body: {
+      text: "Tu taxi va por ti. Unidad 0540",
+      buttons: null,
+      urlButton: {
+        title: "Ver viaje en vivo",
+        url: origin + "/track/" + "b".repeat(32),
+      },
+    },
+  };
+  const outgoing = parseOutgoing(customerRaw);
+  let calls = 0;
+  assert.equal(
+    (await sendTaxiMessage(outgoing, "fixture", async (_url, init) => {
+      calls++;
+      const value: unknown = JSON.parse(String(init?.body));
+      assert.ok(
+        typeof value === "object" && value !== null && "interactive" in value,
+      );
+      return Response.json({ id: "synthetic-customer-cta" });
+    })).state,
+    "accepted",
+  );
+  assert.equal(calls, 1);
+  for (
+    const changed of [{ ...customerRaw, dedupe_key: "driver-assigned:" + id }, {
+      ...customerRaw,
+      body: {
+        ...customerRaw.body,
+        urlButton: { title: "Ver viaje en vivo", url },
+      },
+    }, { ...raw, body: { ...raw.body, urlButton: customerRaw.body.urlButton } }]
+  ) assert.throws(() => parseOutgoing(changed));
+});
+Deno.test("Customer tracking presentation uses OpenStreetMap and does not confuse stale GPS with a missing pickup", () => {
+  assert.equal(
+    trackingPointUrl(16.25, -92.13),
+    "https://www.openstreetmap.org/?mlat=16.25&mlon=-92.13#map=17/16.25/-92.13",
+  );
+  assert.equal(trackingPointUrl(null, -92.13), null);
+  assert.equal(trackingPointUrl(91, 0), null);
+  assert.equal(trackingPointUrl(NaN, 0), null);
+  const now = Date.parse("2026-11-01T15:00:00Z");
+  assert.equal(trackingFresh("2026-11-01T14:35:00Z", now), false);
+  assert.equal(trackingFresh("2026-11-01T14:59:45Z", now), true);
+  assert.equal(
+    pickupText("Ubicación compartida (16.25, -92.13)\nReferencia: portón azul"),
+    "El punto que compartiste por WhatsApp\nReferencia: portón azul",
+  );
 });

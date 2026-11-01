@@ -67,6 +67,7 @@ const compactTrackingSql=readSql(new URL('../estrella-taxis-backend/supabase/mig
 const driverMobileSql=readSql(new URL('../estrella-taxis-backend/supabase/migrations/20261101140000_taxi_driver_mobile_shifts.sql',import.meta.url),'utf8');
 const ownerDrivingSql=readSql(new URL('../estrella-taxis-backend/supabase/migrations/20261101140100_taxi_owner_driving_accounts.sql',import.meta.url),'utf8');
 const driverTripWebSql=readSql(new URL('../estrella-taxis-backend/supabase/migrations/20261101160000_taxi_driver_trip_web.sql',import.meta.url),'utf8');
+const trackingUxSql=readSql(new URL('../estrella-taxis-backend/supabase/migrations/20261101180000_taxi_customer_tracking_ux.sql',import.meta.url),'utf8');
 const tenant='11111111-1111-4111-8111-111111111111',other='22222222-2222-4222-8222-222222222222',waba='+529630000001',customer='+529630000002',driverPhone='+529630000003';
 const pompeyo='4cf9acf1-f07e-4a01-9396-eb5bde3e7411';
 function unknownArray(value:unknown):value is unknown[]{return Array.isArray(value);}
@@ -804,6 +805,7 @@ async function fixture(options:{legacy?:boolean;seedCoverageBeforeMigration?:boo
     await db.exec(driverMobileSql);
     await db.exec(ownerDrivingSql);
     await db.exec(driverTripWebSql);
+    await db.exec(trackingUxSql);
   }
   // These legacy protocol fixtures explicitly act as customers too. Driver-only access has separate tests below.
   await db.query('INSERT INTO taxi_bot_allowed_customers(tenant_id,phone)VALUES($1,$2),($1,$3),($1,$4)',[tenant,customer,driverPhone,'+529630000004']);
@@ -883,6 +885,22 @@ async function driverWebFixture(){
  const act=(action:string,request=crypto.randomUUID())=>f.scalar('SELECT taxi_driver_trip_apply($1,$2,$3)',[token,request,action]);
  return{...f,offer,token,receipt,read,act};
 }
+test('customer tracking UX: native acceptance snapshots unit number separately from driver and emits one budgeted URL button',async()=>{
+ const f=await fixture();try{
+  await f.db.query("INSERT INTO taxi_base_contacts(id,tenant_id,unit_number,name,phone_input,role,device_id)VALUES($1,$2,'540','Synthetic driver',$3,'driver',1)",[crypto.randomUUID(),tenant,driverPhone]);
+  await f.db.exec('UPDATE taxi_bot_channels SET customer_tracking_button_enabled=true');await f.prepare();await f.confirm(customer,[{deviceId:1,name:'Driver name is not unit label'}]);
+  const offer=asString(await f.scalar('SELECT id::text FROM taxi_bot_offers'));const event=await f.enqueue('',driverPhone,crypto.randomUUID(),'txa_'+offer),claim=await f.begin(event.eventId);await f.commit(event.eventId,claim,{...f.decision('driver_accept'),offerId:offer});
+  assert.equal(await f.scalar('SELECT taxi_name FROM viajes'),'Unidad 0540');assert.equal(await f.scalar('SELECT bot_driver_name FROM viajes'),'Unidad 1');
+  const output=f.obj(await f.scalar("SELECT body FROM taxi_bot_outbox WHERE dedupe_key LIKE 'trip-assigned:%'"));assert.equal(f.obj(output.urlButton).title,'Ver viaje en vivo');assert.match(asString(f.obj(output.urlButton).url),/^https:\/\/stellar\.estrella-eats\.mx\/track\/[a-f0-9-]+$/);assert.equal(output.buttons,null);assert.doesNotMatch(asString(output.text),/https:|La unidad Unidad|tarifa|\$/);assert.match(asString(output.text),/Unidad 0540/);assert.equal(typeof output.messageServiceId,'string');assert.equal(output.messageClass,'normal');
+  const id=asString(await f.scalar('SELECT id::text FROM viajes'));await f.scalar('SELECT taxi_bot_emit($1,$2,$3,$4,$5)',[tenant,waba,customer,'No duplicate','trip-assigned:'+id]);assert.equal(await f.scalar("SELECT count(*)::int FROM taxi_bot_outbox WHERE dedupe_key LIKE 'trip-assigned:%'"),1);
+ }finally{await f.db.close();}
+});
+test('customer tracking UX: unit numbers are tenant-scoped and ambiguous contact numbers are never guessed',async()=>{
+ const f=await fixture();try{
+  await f.db.query("INSERT INTO taxi_base_contacts(id,tenant_id,unit_number,name,phone_input,role,device_id)VALUES($1,$2,'540','Synthetic A','9630000071','driver',1),($3,$2,'0540','Synthetic B','9630000072','owner',1)",[crypto.randomUUID(),tenant,crypto.randomUUID()]);assert.equal(await f.scalar('SELECT taxi_bot_unit_label($1,1)',[tenant]),'Unidad 0540');assert.equal(await f.scalar('SELECT taxi_bot_unit_label($1,1)',[other]),'Tu taxi');
+  await f.db.query("UPDATE taxi_base_contacts SET unit_number='541'WHERE name='Synthetic B'");assert.equal(await f.scalar('SELECT taxi_bot_unit_label($1,1)',[tenant]),'Tu taxi');
+ }finally{await f.db.close();}
+});
 test('driver web SQL: acceptance emits one private URL button; opening it never notifies arrival or exposes the client tracking token',async()=>{
  const f=await driverWebFixture();try{
   assert.equal(f.receipt.buttons,null);assert.ok(asString(f.receipt.text).length<=1024);assert.doesNotMatch(asString(f.receipt.text),/tarifa|\$\d/i);

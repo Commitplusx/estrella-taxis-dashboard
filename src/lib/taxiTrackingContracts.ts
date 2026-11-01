@@ -16,6 +16,8 @@ export interface PublicTaxiTrip {
   origen_lng: number | null;
   estado: PublicTaxiTripState;
   createdAt: string;
+  unitLabel: string | null;
+  driverName: string | null;
 }
 
 export interface PublicTaxiTracking {
@@ -79,7 +81,9 @@ export function parsePublicTaxiTracking(value: unknown): PublicTaxiTracking {
   if (typeof trip.origen !== 'string' || trip.origen.length > 500 ||
     typeof trip.destino !== 'string' || trip.destino.length > 500 ||
     !isOptionalCoordinate(trip.origen_lat, -90, 90) || !isOptionalCoordinate(trip.origen_lng, -180, 180) ||
-    !isTripState(trip.estado) || !isValidTimestamp(trip.createdAt)) {
+    !isTripState(trip.estado) || !isValidTimestamp(trip.createdAt) ||
+    !(trip.unitLabel===undefined||trip.unitLabel===null||typeof trip.unitLabel==='string'&&trip.unitLabel.length<=100)||
+    !(trip.driverName===undefined||trip.driverName===null||typeof trip.driverName==='string'&&trip.driverName.length<=120)) {
     throw new TypeError('Los datos del viaje no tienen un formato válido.');
   }
   return {
@@ -91,6 +95,8 @@ export function parsePublicTaxiTracking(value: unknown): PublicTaxiTracking {
       origen_lng: trip.origen_lng,
       estado: trip.estado,
       createdAt: trip.createdAt,
+      unitLabel: typeof trip.unitLabel==='string'?trip.unitLabel:null,
+      driverName: typeof trip.driverName==='string'?trip.driverName:null,
     },
   };
 }

@@ -29,7 +29,7 @@ export async function fetchPublicTaxiTracking(token: string, signal: AbortSignal
       headers: { apikey: config.publicKey },
       cache: 'no-store',
       redirect: 'error',
-      signal,
+      signal:AbortSignal.any([signal,AbortSignal.timeout(15000)]),
     });
   } catch (error: unknown) {
     if (error instanceof DOMException && error.name === 'AbortError') throw error;
