@@ -33,10 +33,24 @@ Deno.test('dispatch worker rejects malformed claims before consulting providers'
 for(const result of ['paused','stale','denied','ready'] as const)Deno.test('dispatch send check '+result+' avoids blind sends or success',async()=>{
  let requests=0,completions=0;
  const message={id:tripId,lease,tenant_id:tenant,waba,destination:'+529630000002',body:{text:'Oferta sintética'}};
- const store=storage(async(name,args)=>{if(name==='taxi_bot_outbox_claim')return[message];if(name==='taxi_bot_dispatch_send_check')return result;assertEquals(name,'taxi_bot_outbox_complete');completions++;assertEquals(args.p_state,result==='ready'?'accepted':'failed');return true;});
+ const read:TrackingStore['read']=async(table)=>{assertEquals(table,'taxi_bot_channels');return[channel];};
+ const store=storage(async(name,args)=>{if(name==='taxi_bot_outbox_claim')return[message];if(name==='taxi_bot_dispatch_send_check')return result;assertEquals(name,'taxi_bot_outbox_complete');completions++;assertEquals(args.p_state,result==='ready'?'accepted':'failed');return true;},read);
  const services:TaxiServices={interpret:never,resolve:never,quote:never,candidates:never};
  await engine(store,services,async()=>{requests++;return Response.json({id:'synthetic-provider-ack'});}).drain(tenant,waba);
  assertEquals(requests,result==='ready'?1:0);assertEquals(completions,['paused','stale'].includes(result)?0:1);
+});
+Deno.test('emergency channel pause after send check prevents the WhatsApp handoff',async()=>{
+ let requests=0,completions=0;
+ const message={id:tripId,lease,tenant_id:tenant,waba,destination:'+529630000002',body:{text:'Oferta sintética'}};
+ const store=storage(async(name,args)=>{
+  if(name==='taxi_bot_outbox_claim')return[message];
+  if(name==='taxi_bot_dispatch_send_check')return'ready';
+  assertEquals(name,'taxi_bot_outbox_complete');completions++;
+  assertEquals(args.p_state,'failed');assertEquals(args.p_error,'taxi_channel_disabled');return true;
+ },async(table)=>{assertEquals(table,'taxi_bot_channels');return[{...channel,enabled:false}];});
+ const services:TaxiServices={interpret:never,resolve:never,quote:never,candidates:never};
+ await engine(store,services,async()=>{requests++;return Response.json({id:'synthetic-provider-ack'});}).drain(tenant,waba);
+ assertEquals(requests,0);assertEquals(completions,1);
 });
 Deno.test('malformed outbox content fails durably before provider submission',async()=>{let completed=0;const store=storage(async(name,args)=>{if(name==='taxi_bot_outbox_claim')return[{id:tripId,lease,tenant_id:tenant,waba,destination:'+529630000002',body:{text:'x'.repeat(1025),buttons:[{id:'fixture',title:'Aceptar'}]}}];assertEquals(name,'taxi_bot_outbox_complete');assertEquals(args.p_state,'failed');assertEquals(args.p_error,'invalid_taxi_interactive_body');completed++;return true;});await engine(store,{interpret:never,resolve:never,quote:never,candidates:never}).drain(tenant,waba);assertEquals(completed,1);});
 Deno.test('dispatch administration reads server status and requires configuration permission for resuming',async()=>{

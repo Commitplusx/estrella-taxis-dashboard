@@ -219,6 +219,43 @@
 .taxi-channel-state.is-on i {
   background: #16815d;
 }
+.taxi-bot-control {
+  display: grid;
+  align-self: stretch;
+  align-content: end;
+  gap: 6px;
+  min-width: 190px;
+  max-width: 300px;
+}
+.taxi-bot-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 10px 15px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  color: #fff;
+  font-weight: 700!important;
+  white-space: nowrap;
+}
+.taxi-bot-toggle.is-pausing {
+  background: #b42318;
+}
+.taxi-bot-toggle.is-pausing:hover:not(:disabled) {
+  background: #912018;
+}
+.taxi-bot-toggle.is-activating {
+  background: #146246;
+}
+.taxi-bot-toggle.is-activating:hover:not(:disabled) {
+  background: #0d5138;
+}
+.taxi-bot-control small {
+  max-width: 38ch;
+  font-size: 12px;
+}
 .taxi-tabs {
   display: flex;
   gap: 26px;
@@ -880,6 +917,15 @@
   }
   .taxi-channel-bar .taxi-text-button {
     font-size: 13px;
+  }
+  .taxi-bot-control {
+    grid-column: 1/-1;
+    grid-template-columns: minmax(0, auto) minmax(0, 1fr);
+    align-items: center;
+    max-width: none;
+  }
+  .taxi-bot-control small {
+    max-width: none;
   }
   .taxi-tabs {
     gap: 22px;

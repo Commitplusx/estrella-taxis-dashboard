@@ -10,6 +10,7 @@ import {
   MessageSquare,
   MousePointer2,
   Plus,
+  Power,
   RefreshCw,
   Save,
   Scan,
@@ -299,6 +300,10 @@ export default function TaxiBotAdminPage(
       setNotice(
         result.state === "queued"
           ? "Mensaje en cola. Revisa abajo si WhatsApp lo acepta o entrega."
+          : command.action === "configure" && command.payload.enabled === false
+          ? "Bot pausado en el servidor. Las respuestas y ofertas nuevas se detendrán."
+          : command.action === "configure" && command.payload.enabled === true
+          ? "Bot activado en el servidor."
           : zonesChanged
           ? "Zonas guardadas en el servidor. Las próximas cotizaciones usarán las tarifas de esta base."
           : "Cambios guardados en el servidor.",
@@ -347,6 +352,21 @@ export default function TaxiBotAdminPage(
       revision,
       requestId: crypto.randomUUID(),
     });
+  };
+  const toggleBot = () => {
+    if (!channel) return;
+    write("configure", {
+      name: channel.name,
+      city: channel.city,
+      dispatcher: channel.dispatcher,
+      centerLat: channel.centerLat,
+      centerLng: channel.centerLng,
+      radiusKm: channel.radiusKm,
+      pricingMode: channel.pricingMode,
+      baseCents: channel.baseCents,
+      perKmCents: channel.perKmCents,
+      enabled: !channel.enabled,
+    }, channel.revision, channel.waba);
   };
   const selectCells = (cells: string[]) => {
     if (cells.length > 400) {
@@ -554,6 +574,29 @@ export default function TaxiBotAdminPage(
           <i />
           {channel?.enabled ? "Canal activo" : "Canal apagado"}
         </span>
+        {channel && canConfigure && (
+          <div className="taxi-bot-control">
+            <button
+              type="button"
+              className={"taxi-bot-toggle " + (channel.enabled ? "is-pausing" : "is-activating")}
+              onClick={toggleBot}
+              disabled={busy || Boolean(pending) || qualityLocked || preview || (!channel.enabled && context?.runtimeReady !== true)}
+              aria-busy={busy && pending?.action === "configure"}
+            >
+              <Power size={17} />
+              {busy && pending?.action === "configure"
+                ? "Guardando…"
+                : channel.enabled ? "Pausar bot" : "Activar bot"}
+            </button>
+            <small>
+              {channel.enabled
+                ? "Pausa respuestas y ofertas nuevas. Un mensaje ya enviado a WhatsApp aún podría llegar."
+                : context?.runtimeReady === true
+                ? "Activa la atención automática de este canal."
+                : "El servidor todavía no está listo para activar el bot."}
+            </small>
+          </div>
+        )}
         {canConfigure && (
           <button
             className="taxi-text-button"

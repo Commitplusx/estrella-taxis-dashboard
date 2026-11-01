@@ -97,7 +97,12 @@ export class TaxiEngine {
       const permitted=await this.store.rpc('taxi_bot_dispatch_send_check',{p_id:out.id,p_lease:out.lease});
       if(permitted==='paused'||permitted==='stale')return;
       if(permitted!=='ready'&&permitted!=='denied')throw new TrackingError(502,'taxi_access_unknown','No se pudo comprobar el permiso del destinatario.');
-      const result=permitted==='ready'?await sendTaxiMessage(out,this.config.ycloudKey,this.fetcher):{state:'failed' as const,code:'outbox_no_longer_permitted'};
+      // Re-read the channel after the SQL send check so an emergency pause is
+      // observed as close as possible to the provider handoff. Fail closed if
+      // the channel was paused, moved, or removed while this message was leased.
+      const currentChannel=permitted==='ready'?await this.channel(waba):null;
+      const sendAllowed=permitted==='ready'&&currentChannel?.tenantId===tenant&&currentChannel.enabled;
+      const result=sendAllowed?await sendTaxiMessage(out,this.config.ycloudKey,this.fetcher):{state:'failed' as const,code:permitted!=='ready'?'outbox_no_longer_permitted':currentChannel?.tenantId!==tenant?'taxi_channel_scope_changed':'taxi_channel_disabled'};
       const saved=await this.store.rpc('taxi_bot_outbox_complete',{p_id:out.id,p_lease:out.lease,p_state:result.state,p_provider:result.state==='accepted'?result.providerId:null,p_error:result.state==='accepted'?null:result.code});
       // A verified callback can win this race. No resend is attempted on a lost write response.
       if(saved!==true)console.warn(JSON.stringify({event:'taxi_send_result_unconfirmed',outbox:out.id}));
