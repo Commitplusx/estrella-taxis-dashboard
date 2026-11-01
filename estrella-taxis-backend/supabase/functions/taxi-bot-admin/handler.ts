@@ -365,15 +365,19 @@ export function createTaxiAdminHandler(
         if (raw.action === 'customer_access') {
           exact(raw,['action','tenantId']);
           const access = parseCustomerAccess(await deps.store.rpc('taxi_bot_customer_access_read',{p_tenant:tenant}));
-          return json({...access,restricted:true});
+          return json(access);
         }
-        exact(raw,['action','tenantId','requestId','revision','phones']);
+        exact(raw,['action','tenantId','requestId','revision','phones','restricted']);
         if (!scope.configure) throw new TrackingError(403,'configure_forbidden','Sólo la administración de Pompeyo puede cambiar los números autorizados.');
         if (typeof raw.revision !== 'number' || !Number.isSafeInteger(raw.revision) || raw.revision < 0) throw new TrackingError(400,'invalid_revision','Actualiza la lista antes de guardar.');
-        const result = await deps.store.rpc('taxi_bot_customer_access_apply',{p_tenant:tenant,p_actor:identity.userId,p_request:uuid(raw.requestId),p_expected:raw.revision,p_phones:customerPhones(raw.phones)});
+        if (raw.restricted !== undefined && typeof raw.restricted !== 'boolean') throw new TrackingError(400,'invalid_customer_access','Selecciona quién puede conversar con la IA.');
+        const accessArgs={p_tenant:tenant,p_actor:identity.userId,p_request:uuid(raw.requestId),p_expected:raw.revision,p_phones:customerPhones(raw.phones)};
+        const result = raw.restricted === undefined
+          ? await deps.store.rpc('taxi_bot_customer_access_apply',accessArgs)
+          : await deps.store.rpc('taxi_bot_customer_access_configure',{...accessArgs,p_restricted:raw.restricted});
         if (!record(result) || typeof result.state !== 'string') throw new TrackingError(503,'access_result_uncertain','No se confirmó el guardado. Comprueba la misma solicitud.');
         if (result.state !== 'saved') throw new TrackingError(409,result.state,'La lista cambió o la solicitud ya se usó. Actualiza antes de editar.');
-        return json({...parseCustomerAccess(result),restricted:true,state:'saved'});
+        return json({...parseCustomerAccess(result),state:'saved'});
       }
       const waba = phone(raw.waba);
       if (!waba) {

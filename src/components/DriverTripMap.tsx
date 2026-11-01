@@ -38,7 +38,8 @@ export default function DriverTripMap({ trip }: { trip: DriverTripView }) {
     >
       <TileLayer
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a>'
-        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+        referrerPolicy="strict-origin"
       />
       <Bounds trip={trip} />
       <CircleMarker

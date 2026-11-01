@@ -54,6 +54,7 @@ export default function CustomerTripMap(
     >
       <TileLayer
         url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+        referrerPolicy="strict-origin"
         maxZoom={19}
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a>'
         eventHandlers={{ tileerror: () => onTileError(true) }}

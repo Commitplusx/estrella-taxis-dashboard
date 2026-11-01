@@ -68,6 +68,7 @@ const driverMobileSql=readSql(new URL('../estrella-taxis-backend/supabase/migrat
 const ownerDrivingSql=readSql(new URL('../estrella-taxis-backend/supabase/migrations/20261101140100_taxi_owner_driving_accounts.sql',import.meta.url),'utf8');
 const driverTripWebSql=readSql(new URL('../estrella-taxis-backend/supabase/migrations/20261101160000_taxi_driver_trip_web.sql',import.meta.url),'utf8');
 const trackingUxSql=readSql(new URL('../estrella-taxis-backend/supabase/migrations/20261101180000_taxi_customer_tracking_ux.sql',import.meta.url),'utf8');
+const publicPilotSql=readSql(new URL('../estrella-taxis-backend/supabase/migrations/20261101190000_taxi_public_pilot.sql',import.meta.url),'utf8');
 const tenant='11111111-1111-4111-8111-111111111111',other='22222222-2222-4222-8222-222222222222',waba='+529630000001',customer='+529630000002',driverPhone='+529630000003';
 const pompeyo='4cf9acf1-f07e-4a01-9396-eb5bde3e7411';
 function unknownArray(value:unknown):value is unknown[]{return Array.isArray(value);}
@@ -806,6 +807,7 @@ async function fixture(options:{legacy?:boolean;seedCoverageBeforeMigration?:boo
     await db.exec(ownerDrivingSql);
     await db.exec(driverTripWebSql);
     await db.exec(trackingUxSql);
+    await db.exec(publicPilotSql);
   }
   // These legacy protocol fixtures explicitly act as customers too. Driver-only access has separate tests below.
   await db.query('INSERT INTO taxi_bot_allowed_customers(tenant_id,phone)VALUES($1,$2),($1,$3),($1,$4)',[tenant,customer,driverPhone,'+529630000004']);
@@ -1158,6 +1160,78 @@ test('activation SQL: missing driver and missing saved H3 coverage have distinct
   const config={...correctedConfig,enabled:true};
   assert.equal((await f.admin('configure',config)).state,'activation_zones_missing');await f.db.exec('DELETE FROM conductores');
   assert.equal((await f.admin('configure',config)).state,'activation_driver_missing');
+ }finally{await f.db.close();}
+});
+
+test('pilot access SQL: defaults stay closed; public intake accepts new clients only in its active taxi tenant',async()=>{
+ const f=await fixture();try{
+  const newcomer='+529630000088';
+  assert.equal(await f.scalar('SELECT public_enabled FROM taxi_bot_customer_access WHERE tenant_id=$1',[tenant]),false);
+  assert.equal((await f.enqueue('Hola',newcomer)).ignored,true);
+  await f.db.query('UPDATE taxi_bot_customer_access SET public_enabled=true WHERE tenant_id=$1',[tenant]);
+  assert.equal(f.obj(await f.scalar('SELECT taxi_bot_customer_access_read($1)',[tenant])).restricted,false);
+  assert.ok((await f.enqueue('Necesito un taxi',newcomer)).eventId);
+  assert.equal(await f.scalar('SELECT taxi_bot_customer_allowed($1,$2)',[other,newcomer]),false);
+  for(const invalid of [null,'9630000088','not a phone',''])assert.equal(await f.scalar('SELECT taxi_bot_customer_allowed($1,$2)',[tenant,invalid]),false);
+  await f.db.query('UPDATE empresas SET activo=false WHERE id=$1',[tenant]);
+  assert.equal(await f.scalar('SELECT taxi_bot_customer_allowed($1,$2)',[tenant,newcomer]),false);
+ }finally{await f.db.close();}
+});
+
+test('pilot access SQL: mode/list writes are atomic, versioned and replayable; legacy list saves preserve mode',async()=>{
+ const f=await fixture();try{
+  const request=crypto.randomUUID(),save=(restricted:boolean,revision=0,id=request)=>f.scalar('SELECT taxi_bot_customer_access_configure($1,$2,$3,$4,$5,$6)',[tenant,42,id,revision,[customer],restricted]);
+  const opened=f.obj(await save(false));assert.equal(opened.state,'saved');assert.equal(opened.restricted,false);assert.deepEqual(opened.phones,[customer]);
+  assert.deepEqual(await save(false),opened);assert.equal(f.obj(await save(true)).state,'request_conflict');
+  assert.equal(f.obj(await save(true,0,crypto.randomUUID())).state,'revision_conflict');
+  const legacy=f.obj(await f.scalar('SELECT taxi_bot_customer_access_apply($1,$2,$3,$4,$5)',[tenant,42,crypto.randomUUID(),1,[customer]]));assert.equal(legacy.restricted,false);
+  const closed=f.obj(await save(true,2,crypto.randomUUID()));assert.equal(closed.restricted,true);assert.equal(closed.revision,3);
+  assert.equal(await f.scalar('SELECT taxi_bot_customer_allowed($1,$2)',[tenant,'+529630000088']),false);
+  assert.equal(await f.scalar('SELECT taxi_bot_customer_allowed($1,$2)',[tenant,customer]),true);
+  for(const role of ['anon','authenticated'])assert.equal(await f.scalar('SELECT has_function_privilege($1,$2,$3)',[role,'taxi_bot_customer_access_configure(uuid,bigint,uuid,bigint,jsonb,boolean)','EXECUTE']),false);
+ }finally{await f.db.close();}
+});
+
+test('pilot access SQL: closing the pilot while interpreting revokes unknown clients before a trip can commit',async()=>{
+ const f=await fixture();try{
+  await f.db.query('UPDATE taxi_bot_customer_access SET public_enabled=true WHERE tenant_id=$1',[tenant]);
+  await f.db.exec('DELETE FROM taxi_bot_allowed_customers');await f.prepare();
+  const event=await f.enqueueButton(),claim=await f.begin(event.eventId);
+  await f.scalar('SELECT taxi_bot_customer_access_configure($1,$2,$3,$4,$5,$6)',[tenant,42,crypto.randomUUID(),0,[],true]);
+  await assert.rejects(f.commit(event.eventId,claim,{...f.decision('confirm'),confirmation:f.draft.confirmation,candidates:[{deviceId:1,name:'Unidad 1'}]}),/taxi_customer_not_authorized/);
+  assert.equal(await f.scalar('SELECT count(*)::int FROM viajes'),0);assert.equal(await f.scalar('SELECT count(*)::int FROM taxi_bot_outbox'),0);
+ }finally{await f.db.close();}
+});
+
+test('pilot access SQL: emergency pause blocks public intake and committing a trip',async()=>{
+ const f=await fixture();try{
+  await f.db.query('UPDATE taxi_bot_customer_access SET public_enabled=true WHERE tenant_id=$1',[tenant]);
+  await f.prepare();const event=await f.enqueueButton(),claim=await f.begin(event.eventId);
+  await f.db.exec('UPDATE taxi_bot_channels SET enabled=false');
+  await assert.rejects(f.enqueue('Hola','+529630000088'),/taxi channel unavailable/);
+  await assert.rejects(f.commit(event.eventId,claim,{...f.decision('confirm'),confirmation:f.draft.confirmation,candidates:[{deviceId:1,name:'Unidad 1'}]}),/taxi channel disabled/);
+  assert.equal(await f.scalar('SELECT count(*)::int FROM viajes'),0);
+ }finally{await f.db.close();}
+});
+
+test('pilot access SQL: a new public customer completes the native service while an unrelated offer acceptance is refused',async()=>{
+ const f=await fixture();try{
+  const newcomer='+529630000088';
+  await f.db.query('UPDATE taxi_bot_customer_access SET public_enabled=true WHERE tenant_id=$1',[tenant]);await f.db.exec('DELETE FROM taxi_bot_allowed_customers');
+  await f.prepare(newcomer);assert.equal(await f.scalar('SELECT count(*)::int FROM viajes'),0);
+  await f.confirm(newcomer);assert.equal(await f.scalar('SELECT estado FROM viajes'),'buscando_conductor');
+  const offer=f.obj(await f.scalar('SELECT to_jsonb(o)FROM taxi_bot_offers o WHERE device_id=1'));
+  const foreign=await f.enqueue('','+529630000004',crypto.randomUUID(),'txa_'+offer.id),foreignClaim=await f.begin(foreign.eventId);
+  await f.commit(foreign.eventId,foreignClaim,{...f.decision('driver_accept'),offerId:offer.id});
+  assert.equal(await f.scalar('SELECT estado FROM viajes'),'buscando_conductor');
+  const own=await f.enqueue('',driverPhone,crypto.randomUUID(),'txa_'+offer.id),ownClaim=await f.begin(own.eventId);
+  await f.commit(own.eventId,ownClaim,{...f.decision('driver_accept'),offerId:offer.id});
+  assert.equal(await f.scalar('SELECT estado FROM viajes'),'en_camino');
+  assert.equal(await f.scalar("SELECT count(*)::int FROM taxi_bot_outbox WHERE destination=$1 AND dedupe_key LIKE 'trip-assigned:%'",[newcomer]),1);
+  assert.equal(await f.scalar('SELECT taxi_bot_recipient_allowed($1,$2,$3)',[tenant,waba,newcomer]),true);
+  const finish=await f.enqueue('',driverPhone,crypto.randomUUID(),'txf_'+offer.id),finishClaim=await f.begin(finish.eventId);
+  await f.commit(finish.eventId,finishClaim,{...f.decision('driver_finish'),offerId:offer.id});
+  assert.equal(await f.scalar('SELECT estado FROM viajes'),'completado');
  }finally{await f.db.close();}
 });
 

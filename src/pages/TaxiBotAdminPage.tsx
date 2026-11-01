@@ -580,7 +580,7 @@ export default function TaxiBotAdminPage(
               type="button"
               className={"taxi-bot-toggle " + (channel.enabled ? "is-pausing" : "is-activating")}
               onClick={toggleBot}
-              disabled={busy || Boolean(pending) || qualityLocked || preview || (!channel.enabled && context?.runtimeReady !== true)}
+              disabled={busy || Boolean(pending) || (!channel.enabled && qualityLocked) || preview || (!channel.enabled && context?.runtimeReady !== true)}
               aria-busy={busy && pending?.action === "configure"}
             >
               <Power size={17} />

@@ -1,6 +1,6 @@
 import { phone, record } from './contracts.ts';
 import { TrackingError } from '../../tracking/contracts.ts';
-export interface CustomerAccess { revision: number; phones: string[] }
+export interface CustomerAccess { restricted: boolean; revision: number; phones: string[] }
 export function customerPhone(value: unknown): string | null {
   if (typeof value !== 'string' || !/^\+?[0-9 ()-]{8,24}$/.test(value)) return null;
   const digits = value.replace(/\D/g, '');
@@ -18,7 +18,7 @@ export function customerPhones(value: unknown): string[] {
   return result.sort();
 }
 export function parseCustomerAccess(value: unknown): CustomerAccess {
-  if (!record(value) || value.restricted !== true || typeof value.revision !== 'number' || !Number.isSafeInteger(value.revision) || value.revision < 0 || !Array.isArray(value.phones)) throw new TrackingError(502, 'invalid_customer_access_response', 'No pudimos comprobar la lista de autorizados.');
+  if (!record(value) || typeof value.restricted !== 'boolean' || typeof value.revision !== 'number' || !Number.isSafeInteger(value.revision) || value.revision < 0 || !Array.isArray(value.phones)) throw new TrackingError(502, 'invalid_customer_access_response', 'No pudimos comprobar el acceso de clientes.');
   const phones = customerPhones(value.phones);
-  return { revision: value.revision, phones };
+  return { restricted: value.restricted, revision: value.revision, phones };
 }
