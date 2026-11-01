@@ -3,6 +3,9 @@ import {conversationPhase}from'../estrella-taxis-backend/supabase/functions/_sha
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync,writeFileSync}from'node:fs';
+// Git on Windows may materialize CRLF. Match the LF SQL bodies deployed to
+// PostgreSQL so guarded migration patches test the same function definitions.
+function readSql(url:URL,encoding:'utf8'):string{return readFileSync(url,encoding).replace(/\r\n/g,'\n');}
 import {PGlite}from'@electric-sql/pglite';
 import {emptyDraft,parseSession,parseStoredInbound,record,TAXI_BOT_VERSION}from'../estrella-taxis-backend/supabase/functions/_shared/bot/taxis/contracts.ts';
 import {TaxiEngine}from'../estrella-taxis-backend/supabase/functions/_shared/bot/taxis/engine.ts';
@@ -23,44 +26,46 @@ import {TaxiTurnTrace}from'../estrella-taxis-backend/supabase/functions/_shared/
 import {parseDispatchClaims,parseDispatchStatus}from'../estrella-taxis-backend/supabase/functions/_shared/bot/taxis/dispatchContracts.ts';
 import {parseOwnerContext}from'../estrella-taxis-backend/supabase/functions/_shared/bot/taxis/ownerContracts.ts';
 const denyAdminWrite = async (): Promise<never> => { throw new Error('No administration writes in this fixture.'); };
-const sql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261027220000_taxi_bot_transactions.sql',import.meta.url),'utf8');
-const h3CatalogSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20260901110001_create_h3_zonas.sql',import.meta.url),'utf8');
-const h3PricingSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261027223402_taxi_bot_h3_pricing.sql',import.meta.url),'utf8');
-const adminSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261028145826_taxi_bot_admin_zones.sql',import.meta.url),'utf8');
-const traceSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261028160342_taxi_bot_trace_state_quality.sql',import.meta.url),'utf8');
-const accessSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261029165842_taxi_customer_access.sql',import.meta.url),'utf8');
-const mapCacheSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261029194000_taxi_channel_edit_map_cache.sql',import.meta.url),'utf8');
-const driverSetupSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261029193220_taxi_bot_driver_setup.sql',import.meta.url),'utf8');
-const baseZonesSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261029195350_taxi_base_owned_zones.sql',import.meta.url),'utf8');
-const baseFleetSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261030134513_taxi_base_fleet.sql',import.meta.url),'utf8');
-const baseContactsSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261030135906_taxi_base_contacts.sql',import.meta.url),'utf8');
-const personAccountsSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261030180000_taxi_person_accounts.sql',import.meta.url),'utf8');
-const locationRequestSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261030190000_taxi_native_location_request.sql',import.meta.url),'utf8');
-const optionalFareSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261030200000_taxi_optional_fare.sql',import.meta.url),'utf8');
-const addressGeocodeSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261030201500_taxi_address_geocoding.sql',import.meta.url),'utf8');
-const neighborhoodsSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261030210000_taxi_neighborhoods.sql',import.meta.url),'utf8');
-const dispatchSafetySql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261030223000_taxi_dispatch_safety.sql',import.meta.url),'utf8');
-const conversationEmojisSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261030234500_taxi_conversation_emojis.sql',import.meta.url),'utf8');
-const pdfLocalFaresSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261031120000_taxi_document_local_fares.sql',import.meta.url),'utf8');
-const localitySeparationSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261031160000_taxi_written_localities_h3_separation.sql',import.meta.url),'utf8');
-const gpsBookingSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261031170000_taxi_gps_pickup_button_booking.sql',import.meta.url),'utf8');
-const privateReferenceQuoteSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261031173000_taxi_reference_quote_private_reads.sql',import.meta.url),'utf8');
-const resetMinimumSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261031180000_taxi_conversation_reset_minimum.sql',import.meta.url),'utf8');
-const destinationDialogueSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261031190000_taxi_destination_dialogue.sql',import.meta.url),'utf8');
-const messageBatchingSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261031200000_taxi_15s_message_batching.sql',import.meta.url),'utf8');
-const pendingLeaseSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261031210000_taxi_pending_lease_polling.sql',import.meta.url),'utf8');
-const dispatchSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261031210001_taxi_dispatch_rounds.sql',import.meta.url),'utf8');
-const ownerSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261031220000_taxi_owner_shifts.sql',import.meta.url),'utf8');
-const driverReceiptSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261031230000_taxi_driver_acceptance_receipts.sql',import.meta.url),'utf8');
-const briefFlowSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261031233000_taxi_brief_customer_flow.sql',import.meta.url),'utf8');
-const briefRecoverySql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261031234000_taxi_brief_recovery_edges.sql',import.meta.url),'utf8');
-const phoneLoginSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261031235000_taxi_phone_login.sql',import.meta.url),'utf8');
-const sharedDriverSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261031235100_taxi_shared_driver_turns.sql',import.meta.url),'utf8');
-const currentTraceIntentsSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261031235900_taxi_trace_current_intents.sql',import.meta.url),'utf8');
-const sequentialOffersSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261101001000_taxi_sequential_offers.sql',import.meta.url),'utf8');
-const batchRoundsSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261101002000_taxi_three_round_batches.sql',import.meta.url),'utf8');
-const trackingLinkSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261101025802_taxi_customer_live_tracking.sql',import.meta.url),'utf8');
-const compactTrackingSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261101120000_taxi_tracking_compact_tokens.sql',import.meta.url),'utf8');
+const sql=readSql(new URL('../estrella-taxis-backend/supabase/migrations/20261027220000_taxi_bot_transactions.sql',import.meta.url),'utf8');
+const h3CatalogSql=readSql(new URL('../estrella-taxis-backend/supabase/migrations/20260901110001_create_h3_zonas.sql',import.meta.url),'utf8');
+const h3PricingSql=readSql(new URL('../estrella-taxis-backend/supabase/migrations/20261027223402_taxi_bot_h3_pricing.sql',import.meta.url),'utf8');
+const adminSql=readSql(new URL('../estrella-taxis-backend/supabase/migrations/20261028145826_taxi_bot_admin_zones.sql',import.meta.url),'utf8');
+const traceSql=readSql(new URL('../estrella-taxis-backend/supabase/migrations/20261028160342_taxi_bot_trace_state_quality.sql',import.meta.url),'utf8');
+const accessSql=readSql(new URL('../estrella-taxis-backend/supabase/migrations/20261029165842_taxi_customer_access.sql',import.meta.url),'utf8');
+const mapCacheSql=readSql(new URL('../estrella-taxis-backend/supabase/migrations/20261029194000_taxi_channel_edit_map_cache.sql',import.meta.url),'utf8');
+const driverSetupSql=readSql(new URL('../estrella-taxis-backend/supabase/migrations/20261029193220_taxi_bot_driver_setup.sql',import.meta.url),'utf8');
+const baseZonesSql=readSql(new URL('../estrella-taxis-backend/supabase/migrations/20261029195350_taxi_base_owned_zones.sql',import.meta.url),'utf8');
+const baseFleetSql=readSql(new URL('../estrella-taxis-backend/supabase/migrations/20261030134513_taxi_base_fleet.sql',import.meta.url),'utf8');
+const baseContactsSql=readSql(new URL('../estrella-taxis-backend/supabase/migrations/20261030135906_taxi_base_contacts.sql',import.meta.url),'utf8');
+const personAccountsSql=readSql(new URL('../estrella-taxis-backend/supabase/migrations/20261030180000_taxi_person_accounts.sql',import.meta.url),'utf8');
+const locationRequestSql=readSql(new URL('../estrella-taxis-backend/supabase/migrations/20261030190000_taxi_native_location_request.sql',import.meta.url),'utf8');
+const optionalFareSql=readSql(new URL('../estrella-taxis-backend/supabase/migrations/20261030200000_taxi_optional_fare.sql',import.meta.url),'utf8');
+const addressGeocodeSql=readSql(new URL('../estrella-taxis-backend/supabase/migrations/20261030201500_taxi_address_geocoding.sql',import.meta.url),'utf8');
+const neighborhoodsSql=readSql(new URL('../estrella-taxis-backend/supabase/migrations/20261030210000_taxi_neighborhoods.sql',import.meta.url),'utf8');
+const dispatchSafetySql=readSql(new URL('../estrella-taxis-backend/supabase/migrations/20261030223000_taxi_dispatch_safety.sql',import.meta.url),'utf8');
+const conversationEmojisSql=readSql(new URL('../estrella-taxis-backend/supabase/migrations/20261030234500_taxi_conversation_emojis.sql',import.meta.url),'utf8');
+const pdfLocalFaresSql=readSql(new URL('../estrella-taxis-backend/supabase/migrations/20261031120000_taxi_document_local_fares.sql',import.meta.url),'utf8');
+const localitySeparationSql=readSql(new URL('../estrella-taxis-backend/supabase/migrations/20261031160000_taxi_written_localities_h3_separation.sql',import.meta.url),'utf8');
+const gpsBookingSql=readSql(new URL('../estrella-taxis-backend/supabase/migrations/20261031170000_taxi_gps_pickup_button_booking.sql',import.meta.url),'utf8');
+const privateReferenceQuoteSql=readSql(new URL('../estrella-taxis-backend/supabase/migrations/20261031173000_taxi_reference_quote_private_reads.sql',import.meta.url),'utf8');
+const resetMinimumSql=readSql(new URL('../estrella-taxis-backend/supabase/migrations/20261031180000_taxi_conversation_reset_minimum.sql',import.meta.url),'utf8');
+const destinationDialogueSql=readSql(new URL('../estrella-taxis-backend/supabase/migrations/20261031190000_taxi_destination_dialogue.sql',import.meta.url),'utf8');
+const messageBatchingSql=readSql(new URL('../estrella-taxis-backend/supabase/migrations/20261031200000_taxi_15s_message_batching.sql',import.meta.url),'utf8');
+const pendingLeaseSql=readSql(new URL('../estrella-taxis-backend/supabase/migrations/20261031210000_taxi_pending_lease_polling.sql',import.meta.url),'utf8');
+const dispatchSql=readSql(new URL('../estrella-taxis-backend/supabase/migrations/20261031210001_taxi_dispatch_rounds.sql',import.meta.url),'utf8');
+const ownerSql=readSql(new URL('../estrella-taxis-backend/supabase/migrations/20261031220000_taxi_owner_shifts.sql',import.meta.url),'utf8');
+const driverReceiptSql=readSql(new URL('../estrella-taxis-backend/supabase/migrations/20261031230000_taxi_driver_acceptance_receipts.sql',import.meta.url),'utf8');
+const briefFlowSql=readSql(new URL('../estrella-taxis-backend/supabase/migrations/20261031233000_taxi_brief_customer_flow.sql',import.meta.url),'utf8');
+const briefRecoverySql=readSql(new URL('../estrella-taxis-backend/supabase/migrations/20261031234000_taxi_brief_recovery_edges.sql',import.meta.url),'utf8');
+const phoneLoginSql=readSql(new URL('../estrella-taxis-backend/supabase/migrations/20261031235000_taxi_phone_login.sql',import.meta.url),'utf8');
+const sharedDriverSql=readSql(new URL('../estrella-taxis-backend/supabase/migrations/20261031235100_taxi_shared_driver_turns.sql',import.meta.url),'utf8');
+const currentTraceIntentsSql=readSql(new URL('../estrella-taxis-backend/supabase/migrations/20261031235900_taxi_trace_current_intents.sql',import.meta.url),'utf8');
+const sequentialOffersSql=readSql(new URL('../estrella-taxis-backend/supabase/migrations/20261101001000_taxi_sequential_offers.sql',import.meta.url),'utf8');
+const batchRoundsSql=readSql(new URL('../estrella-taxis-backend/supabase/migrations/20261101002000_taxi_three_round_batches.sql',import.meta.url),'utf8');
+const trackingLinkSql=readSql(new URL('../estrella-taxis-backend/supabase/migrations/20261101025802_taxi_customer_live_tracking.sql',import.meta.url),'utf8');
+const compactTrackingSql=readSql(new URL('../estrella-taxis-backend/supabase/migrations/20261101120000_taxi_tracking_compact_tokens.sql',import.meta.url),'utf8');
+const driverMobileSql=readSql(new URL('../estrella-taxis-backend/supabase/migrations/20261101140000_taxi_driver_mobile_shifts.sql',import.meta.url),'utf8');
+const ownerDrivingSql=readSql(new URL('../estrella-taxis-backend/supabase/migrations/20261101140100_taxi_owner_driving_accounts.sql',import.meta.url),'utf8');
 const tenant='11111111-1111-4111-8111-111111111111',other='22222222-2222-4222-8222-222222222222',waba='+529630000001',customer='+529630000002',driverPhone='+529630000003';
 const pompeyo='4cf9acf1-f07e-4a01-9396-eb5bde3e7411';
 function unknownArray(value:unknown):value is unknown[]{return Array.isArray(value);}
@@ -759,7 +764,7 @@ async function fixture(options:{legacy?:boolean;seedCoverageBeforeMigration?:boo
   await db.exec(mapCacheSql);
   await db.exec(driverSetupSql);
   if(options.seedCoverageBeforeMigration){
-    await db.exec(readFileSync(new URL('../estrella-taxis-backend/supabase/h3_limpio.sql',import.meta.url),'utf8'));
+    await db.exec(readSql(new URL('../estrella-taxis-backend/supabase/h3_limpio.sql',import.meta.url),'utf8'));
     await db.exec('ALTER TABLE h3_zonas ADD COLUMN tenant_id uuid');
     await db.query('UPDATE h3_zonas SET tenant_id=$1',[tenant]);
   }
@@ -795,6 +800,8 @@ async function fixture(options:{legacy?:boolean;seedCoverageBeforeMigration?:boo
     await db.exec(batchRoundsSql);
     await db.exec(trackingLinkSql);
     await db.exec(compactTrackingSql);
+    await db.exec(driverMobileSql);
+    await db.exec(ownerDrivingSql);
   }
   // These legacy protocol fixtures explicitly act as customers too. Driver-only access has separate tests below.
   await db.query('INSERT INTO taxi_bot_allowed_customers(tenant_id,phone)VALUES($1,$2),($1,$3),($1,$4)',[tenant,customer,driverPhone,'+529630000004']);
@@ -881,12 +888,13 @@ test('base zones: an edit applies to all channels of that base and invalidates t
  }finally{await f.db.close();}
 });
 
-test('contacts: incomplete source phone is preserved for editing, owner and unclassified contacts cannot receive offers',async()=>{
+test('contacts: incomplete source phone is preserved; pending roles and invalid owner phones cannot receive offers',async()=>{
  const f=await fixture();try{
   const id=crypto.randomUUID(),payload={unitNumber:'487',name:'Contacto de prueba',phoneInput:'963000077',role:'pending',deviceId:null,receiveOffers:false,driverVersion:null};
   const save=(body:Record<string,unknown>,expected:string|null=null,base=tenant)=>f.scalar('SELECT taxi_bot_contact_apply($1,$2,$3,$4,$5,$6)',[base,42,crypto.randomUUID(),expected,id,body]);
   const saved=f.obj(await save(payload)),contact=f.obj(saved.contact);assert.equal(saved.state,'saved');assert.equal(contact.phoneInput,'963000077');assert.equal(contact.phone,null);assert.equal(contact.receiving,false);
-  assert.equal(f.obj(await save({...payload,role:'owner',receiveOffers:true},String(contact.version))).state,'role_not_driving');
+  assert.equal(f.obj(await save({...payload,receiveOffers:true},String(contact.version))).state,'role_not_driving');
+  assert.equal(f.obj(await save({...payload,role:'owner',deviceId:1,receiveOffers:true},String(contact.version))).state,'phone_invalid');
   assert.equal(f.obj(await save({...payload,role:'driver',receiveOffers:true,deviceId:1},String(contact.version))).state,'phone_invalid');
   assert.equal(f.obj(await save(payload,String(contact.version),other)).state,'contact_forbidden');
   assert.equal(await f.scalar('SELECT count(*)::int FROM conductores'),3);
@@ -1497,10 +1505,11 @@ test('taxi reset ingress: without an alert phone, signed webhook → SQL queue �
  }finally{await f.db.close();}
 });
 
-test('taxi end-to-end: signed webhook → durable queue → real tool decoder → summary → one trip → provider ACK → driver acceptance',async()=>{
+for(const positionSource of ['hardware','mobile','mobile_refresh_failure']as const)test('taxi end-to-end '+positionSource+': signed request → current button → actual selector → acceptance → tracking → completion',async()=>{
   const f=await fixture();try{
     await f.seedH3();
-    const rpcArgs:Record<string,string[]>={taxi_bot_dispatch_send_check:['p_id','p_lease'],taxi_bot_dispatch_complete:['p_trip','p_lease','p_candidates','p_error'],taxi_bot_trace_start:['p_event','p_lease','p_revision','p_meta'],taxi_bot_trace_fail:['p_event','p_lease','p_code','p_packet'],taxi_bot_enqueue:['p_tenant','p_waba','p_message','p_hash','p_payload'],taxi_bot_begin:['p_event'],taxi_bot_commit:['p_event','p_lease','p_revision','p_decision'],taxi_bot_outbox_complete:['p_id','p_lease','p_state','p_provider','p_error'],taxi_bot_maintain:[]};
+    const usingPhone=positionSource!=='hardware';
+    const rpcArgs:Record<string,string[]>={taxi_mobile_dispatch_positions:['p_tenant','p_device'],taxi_bot_dispatch_send_check:['p_id','p_lease'],taxi_bot_dispatch_complete:['p_trip','p_lease','p_candidates','p_error'],taxi_bot_trace_start:['p_event','p_lease','p_revision','p_meta'],taxi_bot_trace_fail:['p_event','p_lease','p_code','p_packet'],taxi_bot_enqueue:['p_tenant','p_waba','p_message','p_hash','p_payload'],taxi_bot_begin:['p_event'],taxi_bot_commit:['p_event','p_lease','p_revision','p_decision'],taxi_bot_outbox_complete:['p_id','p_lease','p_state','p_provider','p_error'],taxi_bot_maintain:[]};
     const store:TrackingStore={writePackages:denyAdminWrite,writeCompanyPackage:denyAdminWrite,writeCompanyStatus:denyAdminWrite,
       read:async(table,q)=>{
         if(table==='taxi_bot_channels')return(await f.db.query<Record<string,unknown>>('SELECT * FROM taxi_bot_channels WHERE waba=$1',[q.get('waba')?.slice(3)])).rows;
@@ -1509,6 +1518,7 @@ test('taxi end-to-end: signed webhook → durable queue → real tool decoder �
         throw new Error('Unexpected fixture read '+table);
       },writeScores:async()=>{throw new Error('Taxi must not write driving scores.');},
       rpc:async(name,args)=>{
+        if(name==='taxi_bot_dispatch_eligible')return(await f.db.query<Record<string,unknown>>('SELECT * FROM taxi_bot_dispatch_eligible($1,$2,$3)',[args.p_tenant,args.p_waba,args.p_excluded])).rows;
         if(name==='taxi_bot_dispatch_claim')return(await f.db.query<{claim:unknown}>('SELECT taxi_bot_dispatch_claim() AS claim')).rows.map(row=>row.claim);
         if(name==='taxi_bot_pending')return(await f.db.query<Record<string,unknown>>('SELECT * FROM taxi_bot_pending()')).rows;
         if(name==='taxi_bot_outbox_claim')return(await f.db.query<Record<string,unknown>>('SELECT * FROM taxi_bot_outbox_claim($1,$2)',[args.p_tenant,args.p_waba])).rows;
@@ -1524,7 +1534,21 @@ test('taxi end-to-end: signed webhook → durable queue → real tool decoder �
       assert.equal(input.current,current,'No undeclared model decision may be automatically approved.');
       return new Response(JSON.stringify({choices:[{finish_reason:'tool_calls',message:{role:'assistant',content:null,tool_calls:[{id:'call_sql',type:'function',function:{name:'actualizar_recorrido',arguments:JSON.stringify({fields:{name:{value:'Persona Prueba',evidence:current},origin:{value:'Centro',evidence:current},destination:{value:'Terminal',evidence:current}}})}}]}}],usage:{prompt_tokens:250,completion_tokens:70}}),{status:200});
     };
-    const services:TaxiServices={interpret:(text,s,c,signal,observe)=>createTaxiInterpreter(modelProvider,'fixture-model-key',c.model,observe)(text,s,c,signal),resolve:async()=>({kind:'unavailable'}),quote:async()=>4500,candidates:async()=>[{deviceId:1,name:'Unidad 1'}]};
+    if(usingPhone){
+      await f.db.query("INSERT INTO perfiles(traccar_user_id,empresa_id,rol)VALUES(81,$1,'driver')",[tenant]);
+      await f.db.query("INSERT INTO taxi_base_contacts(id,tenant_id,unit_number,name,phone_input,role,device_id,traccar_user_id)VALUES($1,$2,'1','Unidad 1',$3,'driver',1,81)",[crypto.randomUUID(),tenant,driverPhone]);
+      assert.equal(f.obj(await f.scalar("SELECT taxi_mobile_position_write(81,1,(SELECT epoch FROM taxi_driver_location_epochs WHERE tenant_id=$1 AND device_id=1),16.25,-92.13,10,0,NULL,clock_timestamp(),false)",[tenant])).state,'saved');
+    }
+    let refreshes=0,fleetReads=0;
+    const selector=createTaxiServices(store,async(url)=>{
+      const path=new URL(String(url)).pathname;
+      if(path==='/taxi-gps-refresh'){refreshes++;return positionSource==='mobile_refresh_failure'?new Response(null,{status:503}):Response.json({state:'refreshed',synced:1,completedAt:new Date().toISOString()});}
+      if(path==='/api/session')return Response.json({id:99,administrator:true,disabled:false},{headers:{'set-cookie':'JSESSIONID=fixture-fleet; HttpOnly'}});
+      if(path==='/api/devices')return Response.json([{id:1,name:'Unidad 1',status:positionSource==='hardware'?'online':'unknown'}]);
+      assert.equal(path,'/api/positions');assert.equal(refreshes,1);fleetReads++;
+      return Response.json(usingPhone?[]:[{id:101,deviceId:1,valid:true,latitude:16.25,longitude:-92.13,fixTime:new Date().toISOString(),speed:0,attributes:{occupied:false,taxiAvailability:'free'}}]);
+    },{mapsKey:'fixture-maps',modelKey:'fixture-model',traccarUrl:'https://fleet.invalid/api',traccarEmail:'fleet@example.invalid',traccarPassword:'synthetic-password',gpsRefresh:{url:'https://taxis.estrella-eats.mx/taxi-gps-refresh',secret:'fixture-gps-refresh-secret-at-least-32'}});
+    const services:TaxiServices={interpret:(text,s,c,signal,observe)=>createTaxiInterpreter(modelProvider,'fixture-model-key',c.model,observe)(text,s,c,signal),resolve:async()=>({kind:'unavailable'}),quote:async()=>4500,candidates:selector.candidates};
     const transport:Fetcher=async(url,init)=>{assert.equal(String(url),'https://api.ycloud.com/v2/whatsapp/messages');assert.equal(init?.method,'POST');providerCalls++;const body:unknown=JSON.parse(String(init?.body));assert.ok(record(body));assert.match(String(body.externalId),/^taxi:/);return new Response(JSON.stringify({id:'provider-fixture-'+providerCalls}),{status:202});};
     const secret='fixture-signature-secret-not-real',workerSecret='fixture-worker-secret-at-least-32-characters';
     const engine=new TaxiEngine(store,services,{webhookSecret:secret,workerSecret,ycloudKey:'fixture-key',now:()=>Date.now()},transport);
@@ -1541,10 +1565,21 @@ test('taxi end-to-end: signed webhook → durable queue → real tool decoder �
     let summary=f.obj(await f.scalar('SELECT draft FROM taxi_bot_sessions WHERE customer=$1',[customer]));assert.equal(summary.confirmation,null);assert.equal(summary.pickupText,'Centro');
     await inbound('',customer,crypto.randomUUID(),null,{latitude:16.25,longitude:-92.13});await engine.tick();summary=f.obj(await f.scalar('SELECT draft FROM taxi_bot_sessions WHERE customer=$1',[customer]));assert.ok(summary.confirmation);assert.equal(summary.quoteCents,4500);assert.equal(modelCalls,1);
     await engine.inbound(initial.raw,`t=${initial.timestamp},s=${initial.hash}`);await engine.tick();assert.equal(modelCalls,1);
-    await inbound('',customer,crypto.randomUUID(),'txc_'+summary.confirmation);await engine.tick();assert.equal(await f.scalar('SELECT count(*)::int FROM viajes'),1);assert.equal(modelCalls,1);
+    await inbound('',customer,crypto.randomUUID(),'txc_'+summary.confirmation);await engine.tick();assert.equal(await f.scalar('SELECT count(*)::int FROM viajes'),1);assert.equal(modelCalls,1);assert.equal(refreshes,1);assert.equal(fleetReads,1);
     assert.ok(providerCalls>=3);assert.equal(await f.scalar("SELECT count(*)::int FROM taxi_bot_outbox WHERE state='delivered'"),0);
     const offer=await f.scalar('SELECT id FROM taxi_bot_offers LIMIT 1');await inbound('',driverPhone,crypto.randomUUID(),'txa_'+offer);await engine.tick();assert.equal(await f.scalar('SELECT estado FROM viajes'),'en_camino');
     assert.equal(await f.scalar("SELECT count(*)::int FROM taxi_bot_outbox WHERE dedupe_key LIKE 'trip-assigned:%'"),1);
+    const customerReceipt=asString(await f.scalar("SELECT body->>'text'FROM taxi_bot_outbox WHERE dedupe_key LIKE 'trip-assigned:%'"));
+    const token=asString(await f.scalar('SELECT token FROM viajes'));assert.ok(customerReceipt.includes('https://stellar.estrella-eats.mx/track/'+token));assert.doesNotMatch(customerReceipt,/Tarifa|\$\d/);
+    const driverReceipt=f.obj(await f.scalar("SELECT body FROM taxi_bot_outbox WHERE dedupe_key LIKE 'driver-assigned:%'"));assert.ok(asString(driverReceipt.text).includes('https://maps.google.com/?q='));
+    assert.ok(Array.isArray(driverReceipt.buttons));assert.equal(f.obj(driverReceipt.buttons[0]).id,'txf_'+offer);
+    await engine.tick();const callsBeforeFinish=providerCalls;
+    await inbound('',driverPhone,crypto.randomUUID(),'txf_'+offer);await engine.tick();
+    assert.equal(await f.scalar('SELECT estado FROM viajes'),'completado');assert.equal(await f.scalar('SELECT state FROM taxi_bot_offers WHERE id=$1',[offer]),'finished');
+    assert.equal(await f.scalar('SELECT count(*)::int FROM taxi_bot_dispatch_eligible($1,$2,ARRAY[]::integer[])WHERE device_id=1',[tenant,waba]),1);
+    assert.equal(await f.scalar('SELECT message_budget_closed FROM taxi_bot_message_budgets WHERE customer=$1',[customer]),true);
+    assert.ok(providerCalls>callsBeforeFinish);const afterFinish=providerCalls;await engine.tick();assert.equal(providerCalls,afterFinish,'completed outbox rows cannot resend');
+    assert.equal(await f.scalar('SELECT count(*)::int FROM viajes'),1);
     await assert.rejects(engine.inbound(initial.raw,'t=0,s='+'0'.repeat(64)),/Firma/);
     assert.equal(await engine.authorized(null),false);assert.equal(await engine.authorized(workerSecret),true);
   }finally{await f.db.close();}

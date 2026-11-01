@@ -21,6 +21,11 @@ Deno.test('fresh phone replaces unavailable old hardware, never current occupied
   assert(run([hardware(2, 16.25, 1801)], [mobile(2)]).success);
   for (const occupied of [true, 'unknown', null]) assertEquals(run([hardware(2, 16.25, 10, occupied)], [mobile(2)]).success, false);
 });
+for(const patch of [{valid:false},{latitude:91},{fixTime:'not-a-date'},{fixTime:fix(-60)}])for(const occupied of [true,false,null]){
+  Deno.test('a malformed or future hardware report cannot be silently replaced with a free phone: '+JSON.stringify({patch,occupied}),()=>{
+    assertEquals(run([{...hardware(2,16.25,10,occupied),...patch}],[mobile(2)]).success,false);
+  });
+}
 for (const age of [0, 30, 120, 121, -31]) for (const idle of [30, 1800, 1801]) {
   if (idle < age) continue;
   Deno.test(`phone expiry and idle limits: age=${age}, idle=${idle}`, () => {

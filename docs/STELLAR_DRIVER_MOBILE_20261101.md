@@ -1,5 +1,7 @@
 # Turnos personales y ubicación móvil de Stellar — 2026-11-01
 
+Actualización posterior: la [revisión del servicio completo](STELLAR_SERVICE_FLOW_AUDIT_20261101.md) publica v53/v40 y endurece la autoridad del GPS físico ante puntos inválidos o relojes no verificables. También desbloquea y aprueba la matriz SQL completa con las migraciones actuales. Los números de versiones y el fallo de fixture descritos abajo conservan el estado de esta entrega inicial.
+
 ## Uso
 
 Los dueños y conductores entran con su número registrado y contraseña. En **Mi taxi y turnos**, el conductor elige una unidad autorizada y toca **Encender mi turno**. Se pide permiso de ubicación; si se rechaza, la pantalla explica cómo habilitarlo. **Terminar mi turno** detiene el envío. No se permite desplazar al conductor activo de otra persona ni cerrar un turno con viaje u oferta pendiente.

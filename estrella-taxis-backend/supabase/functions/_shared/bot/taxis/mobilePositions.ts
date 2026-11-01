@@ -10,12 +10,13 @@ export async function mobileTaxiPositions(store: TrackingStore, tenant: string):
   if (!Array.isArray(rows) || rows.length > 500 || !rows.every(record)) throw new TrackingError(502, 'mobile_positions_invalid', 'No pudimos comprobar las ubicaciones de la APK.');
   return rows;
 }
-/** A current hardware report (including occupied/unknown/idle) cannot be overridden by a phone. */
+/** A phone replaces only absent or provably stale hardware. Invalid coordinates,
+ * an invalid fix or an unverifiable clock cannot silently turn a unit free. */
 export function combineTaxiPositions(hardware: readonly unknown[], mobile: readonly unknown[], now: number, mobileOnly = false): unknown[] {
   const physical = new Set<number>();
-  for (const p of hardware) if (record(p) && positiveId(p.deviceId) && p.valid === true && coord(p.latitude, p.longitude) && typeof p.fixTime === 'string') {
-    const age = now - Date.parse(p.fixTime);
-    if (age >= -30000 && age <= TAXI_GPS_MAX_AGE_MS) physical.add(p.deviceId);
+  for (const p of hardware) if (record(p) && positiveId(p.deviceId)) {
+    const age = typeof p.fixTime === 'string' ? now - Date.parse(p.fixTime) : NaN;
+    if (!Number.isFinite(age) || age <= TAXI_GPS_MAX_AGE_MS) physical.add(p.deviceId);
   }
   const replacements = mobile.filter(p => {
     if (!record(p) || !positiveId(p.deviceId) || physical.has(p.deviceId) || p.valid !== true || !coord(p.latitude, p.longitude) || typeof p.fixTime !== 'string' || !record(p.attributes) || p.attributes.taxiPositionSource !== 'mobile') return false;
