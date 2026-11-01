@@ -69,6 +69,7 @@ export function assertTaxiTransition(
   };
   if (
     !messages.length || d.messages.length > 3 ||
+    d.messages.some(m=>m.urlButton!==undefined) ||
     d.messages.some((m) => m.to !== messages.at(-1)?.from)
   ) fail();
   if(d.draft.fareMode==='unquoted'&&(d.draft.quoteCents!==null||d.draft.quoteH3!==null))fail();

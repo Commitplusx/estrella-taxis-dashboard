@@ -14,3 +14,8 @@ test('Stellar deployment bundles contain the real taxi runtime and no restaurant
   assert.throws(() => packageStellarFunction('vapi-robins'), /Unsupported/);
   assert.throws(() => packageStellarFunction('../ycloud-webhook'), /Unsupported/);
 });
+test('Driver trip deployment bundle contains only its private action contract and tracking dependencies',()=>{
+ const files=packageStellarFunction('driver-trip');
+ for(const path of['driver-trip/index.ts','driver-trip/handler.ts','_shared/bot/taxis/driverTripContracts.ts','_shared/tracking/store.ts'])assert.ok(files.some(file=>file.name===path));
+ assert.ok(files.every(file=>!/^taxi-bot-admin\/|^process-queue\/|restaurant|\.env/.test(file.name)));
+});

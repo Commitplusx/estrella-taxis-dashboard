@@ -27,6 +27,7 @@ import OrdersPage from './pages/OrdersPage';
 import InvoicesPage from './pages/InvoicesPage';
 import TrackPage from './pages/TrackPage';
 const TaxiBotAdminPage=lazy(()=>import('./pages/TaxiBotAdminPage'));
+const DriverTripPage=lazy(()=>import('./pages/DriverTripPage'));
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { user, userRole } = useAuth();
@@ -109,6 +110,7 @@ function AppRoutes() {
 }
 
 export default function App() {
+  if(window.location.pathname==='/driver-trip')return <Suspense fallback={<p className="p-6 text-lg">Cargando tu servicio…</p>}><DriverTripPage/></Suspense>;
   if(import.meta.env.DEV&&window.location.pathname==='/conductores-diseno')return <DriversPage preview/>;
   if(import.meta.env.DEV&&window.location.pathname==='/zonas-tarifas-diseno')return <Suspense fallback={<p className="p-8">Cargando zonas y tarifas…</p>}><TaxiBotAdminPage preview zoneEditor/></Suspense>;
   if(import.meta.env.DEV&&window.location.pathname==='/taxi-bot-diseno')return <Suspense fallback={<p className="p-8">Cargando vista de diseño…</p>}><TaxiBotAdminPage preview/></Suspense>;

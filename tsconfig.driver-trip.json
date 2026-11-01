@@ -1,0 +1,14 @@
+{
+  "extends": "./tsconfig.app.json",
+  "compilerOptions": {
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true
+  },
+  "include": [],
+  "files": [
+    "src/pages/DriverTripPage.tsx",
+    "src/components/DriverTripMap.tsx",
+    "src/lib/driverTripClient.ts"
+  ]
+}

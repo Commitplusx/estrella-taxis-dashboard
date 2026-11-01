@@ -32,7 +32,7 @@ export interface Interpretation {
   intent:'request'|'provide'|'quote'|'question'|'confirm'|'cancel'|'status'|'human'|'smalltalk'|'ambiguous';
   fields:{name?:FieldValue;origin?:FieldValue;destination?:FieldValue;pickupReference?:FieldValue};
 }
-export interface TaxiMessage {to:string;text:string;buttons?:{id:string;title:string}[];locationRequest?:'origin'|'destination'}
+export interface TaxiMessage {to:string;text:string;buttons?:{id:string;title:string}[];locationRequest?:'origin'|'destination';urlButton?:{title:string;url:string}}
 export interface Candidate {deviceId:number;name:string}
 export interface TaxiDecision {
   action:'draft'|'reply'|'reset'|'confirm'|'cancel'|'human'|'driver_accept'|'driver_reject'|'driver_finish';

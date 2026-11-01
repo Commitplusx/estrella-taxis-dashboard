@@ -1,0 +1,217 @@
+{
+  "date": "2026-11-01",
+  "project": "Stellar Tracking",
+  "supabaseProject": "izrsxygazsalfhpaualj",
+  "publication": {
+    "status": "prepared_only",
+    "userChoseToDefer": true,
+    "webPublished": false,
+    "functionsPublished": false,
+    "migrationApplied": false,
+    "channelGateEnabled": false,
+    "githubPushVerified": false,
+    "productionQaMessagesSent": 0,
+    "productionQaTripsCreated": 0
+  },
+  "tests": {
+    "denoTypedConversationAndBackend": 22708,
+    "fullSqlMatrix": 185,
+    "targetedDriverWebSql": 6,
+    "uniqueSqlCasesVerified": 186,
+    "targetedSqlOverlap": 5,
+    "nodeSeparationConfigAndPackage": 5,
+    "staticFiles": 157,
+    "driverUiStrictTypecheck": "passed",
+    "sqlTestsStrictTypecheck": "passed",
+    "build": "passed",
+    "entrypointDenoCheck": "passed",
+    "globalTypecheck": "preexisting_errors_outside_changed_files",
+    "lint": "zero_errors_one_set_state_in_effect_warning_for_initial_network_refresh"
+  },
+  "browser": {
+    "synthetic": true,
+    "results": [
+      {
+        "viewport": {
+          "width": 390,
+          "height": 844
+        },
+        "overflow": false,
+        "arrivalRetryReusesId": true,
+        "openingNeverMutates": true,
+        "finishRequiresConfirmation": true,
+        "confirmationSurvivesPolling": true,
+        "terminalHidesActions": true,
+        "pageErrors": 0
+      },
+      {
+        "viewport": {
+          "width": 1280,
+          "height": 900
+        },
+        "overflow": false,
+        "arrivalRetryReusesId": true,
+        "openingNeverMutates": true,
+        "finishRequiresConfirmation": true,
+        "confirmationSurvivesPolling": true,
+        "terminalHidesActions": true,
+        "pageErrors": 0
+      }
+    ],
+    "invalidTokenState": true
+  },
+  "review": {
+    "finalDisposition": "ship",
+    "scope": "two_scored_fixes",
+    "fixes": [
+      "arrival_control_visible_in_initial_viewport_with_clearance",
+      "unit_metadata_follows_title"
+    ],
+    "documenter": "incumbent_system_preserved",
+    "physicalWhatsAppTest": false,
+    "internalWhatsAppBrowserForced": false,
+    "roadRoutingOrEtaClaimed": false
+  },
+  "artifacts": [
+    {
+      "name": "20261101160000_taxi_driver_trip_web.sql",
+      "sha256": "c5b798e71260cbc8b1407a9238477b2ee855c8ecbc28cbf372460338acc953f2"
+    },
+    {
+      "name": "driver-trip.json",
+      "sha256": "0156ce53f21749be223a7cc374ff53fb9113b3ab8a00bbdda12ab9da6e16c5b8"
+    },
+    {
+      "name": "process-queue.json",
+      "sha256": "02c5278908c30ed051a13fd8b484300c538525c3d10897e5f7e4380bae2cf9c7"
+    },
+    {
+      "name": "STELLAR_DRIVER_TRIP_WEB_20261101.md",
+      "sha256": "be2126bbdde14e7cdb991189ccf8859bf95d4bcc846d2f2124ded6cdf15f3ccf"
+    },
+    {
+      "name": "stellar-web.zip",
+      "sha256": "0956cda27add8726b1b60a5a79f6f3a4a68faa06379e28bcb8e658daddb28ee7"
+    },
+    {
+      "name": "ycloud-webhook.json",
+      "sha256": "74464e98b3de5b695a241086dc93aca6d4abdd9c2f143fd44d24d77fe007b4ff"
+    }
+  ],
+  "sourceHashes": [
+    {
+      "path": "estrella-taxis-backend/scripts/check-taxi-bot-quality.ts",
+      "sha256": "e4ed3f366f1d7342ad8425202cce6e4df2b9ccfb08c7c474d9956a43a7576366"
+    },
+    {
+      "path": "estrella-taxis-backend/scripts/package-stellar-functions.ts",
+      "sha256": "0571088c1b58e76354225a589cb6e04f4346792dffef35edd2d4cc22a8afd901"
+    },
+    {
+      "path": "estrella-taxis-backend/scripts/test-taxi-bot.ps1",
+      "sha256": "ee4efabe11ec601aa1f83e1058eeb8ba7f58e7b5410779253d16535321b2b3b6"
+    },
+    {
+      "path": "estrella-taxis-backend/supabase/functions/_shared/bot/taxis/contracts.ts",
+      "sha256": "7d19bf8140018ee0d0cde7fb3d389d51526ec218cfcd70c77608c8b9629e17c6"
+    },
+    {
+      "path": "estrella-taxis-backend/supabase/functions/_shared/bot/taxis/stateMachine.ts",
+      "sha256": "24c36f55cb2158161779c7d105d8e04830c09c017f2f001a2a23431c430cf778"
+    },
+    {
+      "path": "estrella-taxis-backend/supabase/functions/_shared/bot/taxis/transport.ts",
+      "sha256": "9c03f876046ee5b218ed0e913cbeeccaf76371ca746304e8bbd3a20bf4a4031a"
+    },
+    {
+      "path": "src/App.tsx",
+      "sha256": "54ce3bd3ce8219a29aa7f886d86cc39a38c25eba9a29055d0ce49d1f3c2dbde9"
+    },
+    {
+      "path": "tests/stellar-package.test.ts",
+      "sha256": "bd67ef73cf8f8061436e0a6f8b06e3ff5c52c6f30e89bed7d056b95fb3ebe8a1"
+    },
+    {
+      "path": "tests/taxi-bot-database.test.ts",
+      "sha256": "96838856edd906714292ffc54d4843c4fbfa1b72059ee6ecae3c661ba7d8a611"
+    },
+    {
+      "path": "vercel.json",
+      "sha256": "bcd51ce482a259d8c07b2e420bdd75a85d29c102bc69d236a21d25df3fb5028b"
+    },
+    {
+      "path": ".impeccable/surfaces/src-pages-drivertrippage-tsx.md",
+      "sha256": "93735f5e6641a5084100dac13ef539bd851b26b6ea8fe3eacc93392f771937b7"
+    },
+    {
+      "path": "docs/STELLAR_DRIVER_TRIP_WEB_20261101.md",
+      "sha256": "be2126bbdde14e7cdb991189ccf8859bf95d4bcc846d2f2124ded6cdf15f3ccf"
+    },
+    {
+      "path": "estrella-taxis-backend/supabase/functions/_shared/bot/taxis/driverTripContracts.ts",
+      "sha256": "07c5b58a3e419b85058b604577380cb57c57716c8709f6479a7a1ee15d563882"
+    },
+    {
+      "path": "estrella-taxis-backend/supabase/functions/driver-trip/handler.ts",
+      "sha256": "d7aea7381fb07281ff87ea6f58d4bfe3455c89260da193ee146ebf0ee59287f3"
+    },
+    {
+      "path": "estrella-taxis-backend/supabase/functions/driver-trip/index.ts",
+      "sha256": "999a9349e8af179a3a67debc278ba656c72164908a616dab6469879ee061f05c"
+    },
+    {
+      "path": "estrella-taxis-backend/supabase/migrations/20261101160000_taxi_driver_trip_web.sql",
+      "sha256": "c5b798e71260cbc8b1407a9238477b2ee855c8ecbc28cbf372460338acc953f2"
+    },
+    {
+      "path": "src/components/DriverTripMap.tsx",
+      "sha256": "a883dd039bb8238d9a82e415db615344d99e876f67801cdd14f9ce7715413c19"
+    },
+    {
+      "path": "src/lib/driverTripClient.ts",
+      "sha256": "e4514f479f846629644d2e03dd0a48b42926bcbd07a5cbcce6de482e0bcc2963"
+    },
+    {
+      "path": "src/pages/DriverTripPage.tsx",
+      "sha256": "f7cdf8b9e52d881f3f4162d697da4115435fd3fb081b9ef790c42970f5eac1aa"
+    },
+    {
+      "path": "src/pages/driverTrip.css",
+      "sha256": "2cc58d1e9011cf9c627635bca1290a824b908217ea781fe1ee79a456d91fb168"
+    },
+    {
+      "path": "tests/taxi-driver-trip-web.test.ts",
+      "sha256": "90e5c90d7441ae6a4b8e3ad2cb83c8cf8b5eb6844cffef0811b81cd1a7aacd11"
+    },
+    {
+      "path": "tsconfig.driver-trip.json",
+      "sha256": "d473cf859eaed6ed90a315395b62d998c1303c3c6b5d94a7df29497640fc34ab"
+    }
+  ],
+  "logHashes": [
+    {
+      "name": "stellar-driver-web-full-sql.log",
+      "sha256": "9eb72fc48d76f0037b6651ba66a7e466cec22be6cb8e3e08750a37db41ec4d9f"
+    },
+    {
+      "name": "stellar-driver-web-sql.log",
+      "sha256": "eb5df65064015dbe4d8115994d7dc662da7512fa92b50847fa80688285893fa2"
+    },
+    {
+      "name": "stellar-driver-web-deno.log",
+      "sha256": "2dc5196fdd38903611cd2a6104756f03041989eb3b533109f64e1ff32aa8d27e"
+    },
+    {
+      "name": "stellar-driver-web-ui.log",
+      "sha256": "10e6a12143f737981f278d5041a9b256cc1b1c49e76ba6a33c31efd823b734aa"
+    },
+    {
+      "name": "stellar-driver-web-build.log",
+      "sha256": "894ce43bd94badad0df494879e6ff90eb3ae507a103fca31ec40a2737a32a9e8"
+    },
+    {
+      "name": "stellar-driver-web-global-typecheck.log",
+      "sha256": "81361dbf88f5c590ad65db1dd9a2166da025b458f770ba97cf99480422ef1d2c"
+    }
+  ]
+}
