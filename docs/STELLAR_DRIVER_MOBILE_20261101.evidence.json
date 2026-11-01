@@ -341,5 +341,11 @@
       "path": "test/driver_location_service_test.dart",
       "sha256": "744d0ff3ee5d9b9a01ec96edee5814a6526edb8844ce42498abfa5c6b9e2752a"
     }
-  ]
+  ],
+  "sourcePublication": {
+    "implementationCommit": "bdaf997",
+    "supabaseRuntimeVerified": true,
+    "githubMainUpdated": false,
+    "githubPushFailure": "Git credential manager did not provide GitHub credentials; no username available in noninteractive session."
+  }
 }
