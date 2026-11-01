@@ -45,7 +45,7 @@ interface PositionCandidate extends TaxiPosition {
 }
 
 export interface TrackPositionDependencies {
-  store: Pick<TrackingStore, 'read'>;
+  store: Pick<TrackingStore, 'read' | 'rpc'>;
   fleet: FleetApi;
   fetcher: Fetcher;
   email: string;
@@ -184,18 +184,29 @@ export function createTrackPositionHandler(dependencies: TrackPositionDependenci
 
   async function readPosition(trip: Trip, signal: AbortSignal): Promise<TaxiPosition | null> {
     if (trip.state !== 'en_camino' || trip.deviceId === null) return null;
+    const mobilePosition=async():Promise<TaxiPosition|null>=>{
+      const rows=await dependencies.store.rpc('taxi_mobile_dispatch_positions',{p_tenant:trip.tenantId,p_device:trip.deviceId});
+      return parsePosition(rows,trip.deviceId!,trip.taxiName??'Tu taxi',now());
+    };
     const path = `/positions?deviceId=${trip.deviceId}`;
-    let cookie = await sessionCookie();
+    let cookie: string;
+    try {cookie=await sessionCookie();}catch(error:unknown){const mobile=await mobilePosition();if(mobile)return mobile;throw error;}
     let raw: unknown;
     try {
       raw = await dependencies.fleet.get(path, cookie, signal, POSITION_RESPONSE_LIMIT);
     } catch (error: unknown) {
-      if (!(error instanceof TrackingError) || error.code !== 'session_expired') throw error;
+      if (!(error instanceof TrackingError) || error.code !== 'session_expired') {const mobile=await mobilePosition();if(mobile)return mobile;throw error;}
       if (cachedCookie === cookie) { cachedCookie = null; cookieExpiresAt = 0; }
-      cookie = await sessionCookie();
-      raw = await dependencies.fleet.get(path, cookie, signal, POSITION_RESPONSE_LIMIT);
+      try {
+        cookie = await sessionCookie();
+        raw = await dependencies.fleet.get(path, cookie, signal, POSITION_RESPONSE_LIMIT);
+      } catch (retryError: unknown) {
+        const mobile = await mobilePosition(); if (mobile) return mobile; throw retryError;
+      }
     }
-    return parsePosition(raw, trip.deviceId, trip.taxiName ?? 'Tu taxi', now());
+    const hardware=parsePosition(raw, trip.deviceId, trip.taxiName ?? 'Tu taxi', now());
+    if(hardware&&now()-Date.parse(hardware.lastUpdate)<=30*60*1000)return hardware;
+    return await mobilePosition()??hardware;
   }
 
   return async (request: Request): Promise<Response> => {

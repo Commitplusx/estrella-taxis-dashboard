@@ -51,11 +51,11 @@ export async function accountRequest(raw: Record<string, unknown>, tenant: strin
   const email = raw.email === null && personal ? chosen?.email.toLowerCase() ?? personalAccountEmail(contactId) : raw.email;
   if (!isContactRole(raw.role) || raw.role === 'pending' || !(raw.deviceId === null || positiveId(raw.deviceId) && baseDevices.some(unit => unit.id === raw.deviceId)) ||
     typeof raw.receiveOffers !== 'boolean' || !(raw.driverVersion === null || typeof raw.driverVersion === 'string' && /^[a-f0-9]{32}$/.test(raw.driverVersion)) ||
-    raw.role !== 'staff' && raw.deviceId === null || raw.receiveOffers && (!['driver', 'owner_driver'].includes(raw.role) || !person.phone || raw.deviceId === null)) throw new TrackingError(400, 'invalid_assignment', 'Confirma su rol, su taxi y quién recibirá las ofertas.');
+    raw.role !== 'staff' && raw.deviceId === null || raw.receiveOffers && (!['driver', 'owner_driver', 'owner'].includes(raw.role) || !person.phone || raw.deviceId === null)) throw new TrackingError(400, 'invalid_assignment', 'Confirma su rol, su taxi y quién recibirá las ofertas.');
   if (typeof email !== 'string' || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254 || email !== email.trim().toLowerCase() ||
     typeof raw.expected !== 'string' || !/^[a-f0-9]{32}$/.test(raw.expected) || !(raw.userId === null || positiveId(raw.userId))) throw new TrackingError(400, 'invalid_account', 'Revisa el correo y el acceso elegido.');
   const marked = users.find(user => record(user.attributes) && user.attributes.stellarAccountRequest === requestId);
-  if (raw.userId === null && !marked && (typeof raw.password !== 'string' || raw.password.length < 12 || raw.password.length > 128)) throw new TrackingError(400, 'invalid_password', 'Usa una contraseña de entre 12 y 128 caracteres.');
+  if (raw.userId === null && !marked && (typeof raw.password !== 'string' || raw.password.length < 8 || raw.password.length > 128)) throw new TrackingError(400, 'invalid_password', 'Usa una contraseña de entre 8 y 128 caracteres.');
   if (raw.userId !== null && raw.password !== '') throw new TrackingError(400, 'unexpected_password', 'No se cambia la contraseña al vincular una cuenta existente.');
   let target = raw.userId === null ? marked : allowedUsers.find(user => user.id === raw.userId);
   if (raw.userId !== null && (!target || target.email.toLowerCase() !== email)) fail('user_forbidden', 'La cuenta elegida no está disponible o cambió su correo.');

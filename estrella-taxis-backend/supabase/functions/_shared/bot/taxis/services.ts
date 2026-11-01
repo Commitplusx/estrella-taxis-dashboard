@@ -3,7 +3,8 @@ import { requestJson, type Fetcher } from '../../tracking/http.ts';
 import type { TrackingStore } from '../../tracking/store.ts';
 import { getDistanceFromLatLonInKm } from '../../algorithms/headingMatcher.ts';
 import {selectTaxiCandidates} from './selection.ts';
-import {refreshTaxiGps,type GpsRefreshConfig} from './gpsRefresh.ts';
+import {combineTaxiPositions,mobileTaxiPositions,refreshDispatchSources} from './mobilePositions.ts';
+import type {GpsRefreshConfig} from './gpsRefresh.ts';
 import { positiveId, TrackingError } from '../../tracking/contracts.ts';
 import { record, text, coord, type Place, type TaxiChannel } from './contracts.ts';
 import type { TaxiServices, LocationResult } from './coordinator.ts';
@@ -102,13 +103,14 @@ export function createTaxiServices(store:TrackingStore,fetcher:Fetcher,config:{m
       if(rows.length>500)throw new TrackingError(413,'taxi_fleet_limit','La flota supera el límite del selector actual.');
       const allowed=new Set<number>();for(const r of rows){if(!record(r)||!positiveId(r.device_id))throw new TrackingError(502,'taxi_bad_driver','La base tiene una unidad no válida.');allowed.add(r.device_id);}
       if(!allowed.size)return [];
-      if(config.gpsRefresh)await refreshTaxiGps(fetcher,config.gpsRefresh,signal);
+      const mobile=await mobileTaxiPositions(store,c.tenantId),mobileOnly=await refreshDispatchSources(fetcher,config.gpsRefresh,mobile,signal);
       const fleet=new FleetApi(config.traccarUrl,fetcher),session=await fleet.jobSession(config.traccarEmail,config.traccarPassword,signal);
       // A fresh GPS fix can still be usable when Traccar labels the device offline;
       // the driver must accept the WhatsApp offer before any trip is assigned.
       const raw=await fleet.get('/positions',session.cookie,signal);
       if(!Array.isArray(raw)||raw.length>10000)throw new TrackingError(502,'taxi_bad_positions','No se pudo validar la flota.');
-      const ranked=selectTaxiCandidates(session.devices,raw,allowed,origin,c.radiusKm,Date.now());
+      const now=Date.now(),positions=combineTaxiPositions(raw,mobile,now,mobileOnly);
+      const ranked=selectTaxiCandidates(session.devices,positions,allowed,origin,c.radiusKm,now);
       return ranked.success?ranked.data.map((d)=>({deviceId:d.deviceId,name:d.name})):[];
     }
   };

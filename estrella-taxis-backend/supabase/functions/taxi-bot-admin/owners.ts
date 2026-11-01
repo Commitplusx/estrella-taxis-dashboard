@@ -160,7 +160,7 @@ export async function ownerRequest(
           raw.email.length <= 254 &&
           /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(raw.email)) ||
       typeof raw.password !== "string" || raw.password.length > 128 ||
-      raw.password.length > 0 && raw.password.length < 12 ||
+      raw.password.length > 0 && raw.password.length < 8 ||
       typeof raw.name !== "string" || !raw.name.trim() ||
       raw.name.length > 120 || typeof raw.phone !== "string" ||
       !/^\+(?:52(?:1)?\d{10}|1\d{10}|502\d{8})$/.test(raw.phone)
@@ -168,7 +168,7 @@ export async function ownerRequest(
       throw new TrackingError(
         400,
         "invalid_owner_driver",
-        "Revisa nombre, WhatsApp y contraseña de al menos 12 caracteres.",
+        "Revisa nombre, WhatsApp y contraseña de al menos 8 caracteres.",
       );
     }
     const contactId = parseContactId(raw.contactId);
@@ -206,7 +206,7 @@ export async function ownerRequest(
         throw new TrackingError(
           400,
           "password_required",
-          "Esta persona aún no tiene acceso. Crea una contraseña inicial de al menos 12 caracteres.",
+          "Esta persona aún no tiene acceso. Crea una contraseña inicial de al menos 8 caracteres.",
         );
       }
     }

@@ -109,7 +109,7 @@ export function findOptimalTaxi(
   }
 
   const report = (deviceId:number,reason:TaxiSelectionReason) => options.onDecision?.({deviceId,reason,rank:null,distanceKm:null,penaltyKm:null,effectiveDistanceKm:null});
-  const scoredTaxis: { device: TraccarDevice; effectiveDist: number; rawDist: number;penaltyKm:number }[] = [];
+  const scoredTaxis: { device: TraccarDevice; effectiveDist: number; rawDist: number;penaltyKm:number;mobile:boolean }[] = [];
   const byId = new Map(devices.map((device) => [device.id, device]));
   const latest = new Map<number, TraccarPosition>();
   for (const pos of positions) {
@@ -184,11 +184,11 @@ export function findOptimalTaxi(
 
     const effectiveDistance = rawDistance + penaltyKm;
     
-    scoredTaxis.push({ device, effectiveDist: effectiveDistance, rawDist: rawDistance,penaltyKm });
+    scoredTaxis.push({ device, effectiveDist: effectiveDistance, rawDist: rawDistance,penaltyKm,mobile:pos.attributes?.taxiPositionSource==='mobile' });
   }
 
   // Ordenar por distancia efectiva (menor a mayor)
-  scoredTaxis.sort((a, b) => a.effectiveDist - b.effectiveDist || a.rawDist - b.rawDist || a.device.id - b.device.id);
+  scoredTaxis.sort((a, b) => Number(a.mobile)-Number(b.mobile) || a.effectiveDist - b.effectiveDist || a.rawDist - b.rawDist || a.device.id - b.device.id);
 
   // Filtrar los que están realmente dentro del radio máximo crudo
   const validTaxis = scoredTaxis.filter(t => t.rawDist <= maxRadiusKm);

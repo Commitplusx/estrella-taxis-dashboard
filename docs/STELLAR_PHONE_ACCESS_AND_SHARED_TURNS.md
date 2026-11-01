@@ -6,7 +6,7 @@
 
 Dueños y conductores entran a la web y la APK con su **WhatsApp registrado y contraseña**. Se aceptan los diez dígitos de México, +52 y el prefijo móvil anterior +521. Una cuenta existente conserva su contraseña y correo anterior. La administración conserva el acceso por correo.
 
-En **Mi taxi y turnos → Agregar chofer**, escribe nombre y WhatsApp. Si ya tiene cuenta en la base, deja la contraseña vacía: se vincula la misma persona. Puede ser otro dueño; conserva la propiedad de su unidad, su rol y sus credenciales. Para una persona nueva, escribe una contraseña inicial de 12 a 128 caracteres. No se envían contraseñas ni invitaciones automáticamente.
+En **Mi taxi y turnos → Agregar chofer**, escribe nombre y WhatsApp. Si ya tiene cuenta en la base, deja la contraseña vacía: se vincula la misma persona. Puede ser otro dueño; conserva la propiedad de su unidad, su rol y sus credenciales. Para una persona nueva, escribe una contraseña inicial de 8 a 128 caracteres. No se envían contraseñas ni invitaciones automáticamente. La [entrega del 1 de noviembre](STELLAR_DRIVER_MOBILE_20261101.md) agrega activación personal del turno y ubicación del celular; su evidencia sustituye los números de versiones de publicación de esta nota histórica.
 
 El propietario también aparece entre las personas que pueden conducir su taxi, aunque su rol sea Dueño. **Poner en turno** selecciona al único destinatario operativo. Un dueño puede cubrir otra unidad, pero primero tiene que terminar su turno anterior. No se cambia el turno si tiene viaje u oferta pendiente. El cliente recibe la notificación mediante la outbox existente cuando ese conductor acepta; no se crea un segundo algoritmo ni una segunda flota.
 

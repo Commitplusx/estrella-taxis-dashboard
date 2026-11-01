@@ -66,7 +66,7 @@ function serverFixture(mode:'success'|'refresh_failure'|'commit_unknown'|'replay
   calls.push(name);
   if(name==='tracking_operation_begin'){assertEquals(args.p_user,42);assertEquals(args.p_kind,'simulation');return mode==='replay'||mode==='revoked'?{state:'replay',status:200,result:stored}:{state:'proceed',lease};}
   if(name==='tracking_operation_complete'){completions++;assertEquals(args.p_lease,lease);assertEquals(args.p_status,mode==='refresh_failure'?503:200);return mode!=='commit_unknown';}
-  if(name==='taxi_bot_simulation_fleet'){assertEquals(args,{p_tenant:tenant,p_waba:waba});return fleet;}
+  if(name==='taxi_mobile_dispatch_positions'){assertEquals(args.p_tenant,tenant);return[];}if(name==='taxi_bot_simulation_fleet'){assertEquals(args,{p_tenant:tenant,p_waba:waba});return fleet;}
   assertEquals(name,'taxi_bot_h3_quote');return{state:'priced',cents:5500,mode:'h3_zone_max',originCell:args.p_origin,destinationCell:args.p_destination};
  }};
  const fetcher:Fetcher=async(url)=>{calls.push(new URL(String(url)).pathname);assertEquals(url,refresh.url);refreshCalls++;return mode==='refresh_failure'?new Response('',{status:503}):Response.json({state:'refreshed',synced:16,completedAt:new Date().toISOString()});};

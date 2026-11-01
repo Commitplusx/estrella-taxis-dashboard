@@ -12,7 +12,7 @@ for(const attributes of [{},{occupied:null},{occupied:'unknown'},{occupied:'inva
 });
 async function candidates(attributes:Record<string,unknown>){
  const deny=async():Promise<never>=>{throw Error('Undeclared write');};
- const store:TrackingStore={read:deny,writeScores:deny,writePackages:deny,writeCompanyPackage:deny,writeCompanyStatus:deny,rpc:async(name,args)=>{assertEquals(name,'taxi_bot_dispatch_eligible');assertEquals(args.p_tenant,channel.tenantId);return[{device_id:1}];}};
+ const store:TrackingStore={read:deny,writeScores:deny,writePackages:deny,writeCompanyPackage:deny,writeCompanyStatus:deny,rpc:async(name,args)=>{if(name==='taxi_mobile_dispatch_positions'){assertEquals(args.p_tenant,channel.tenantId);return[];}assertEquals(name,'taxi_bot_dispatch_eligible');assertEquals(args.p_tenant,channel.tenantId);return[{device_id:1}];}};
  const services=createTaxiServices(store,async(input)=>{
   const path=new URL(String(input)).pathname;
   if(path==='/api/session')return Response.json({id:99,administrator:true,disabled:false},{headers:{'set-cookie':'JSESSIONID=synthetic-session; HttpOnly'}});

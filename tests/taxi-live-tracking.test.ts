@@ -54,7 +54,7 @@ interface TestFixture {
   counts: { login: number; position: number; reads: number };
 }
 
-function fixture(trip: Record<string, unknown> | null = baseTrip, positionRows: unknown[] = [], expireFirstPosition = false): TestFixture {
+function fixture(trip: Record<string, unknown> | null = baseTrip, positionRows: unknown[] = [], expireFirstPosition = false, mobileRows: unknown[] = []): TestFixture {
   const counts = { login: 0, position: 0, reads: 0 };
   const fetcher: Fetcher = async input => {
     const url = new URL(String(input));
@@ -73,7 +73,11 @@ function fixture(trip: Record<string, unknown> | null = baseTrip, positionRows: 
     }
     throw new Error('Unexpected provider route.');
   };
-  const store: Pick<TrackingStore, 'read'> = {
+  const store: Pick<TrackingStore, 'read' | 'rpc'> = {
+    rpc: async (name, params) => {
+      assert.equal(name, 'taxi_mobile_dispatch_positions'); assert.equal(params.p_tenant, tenant); assert.equal(params.p_device, baseTrip.device_id);
+      return mobileRows;
+    },
     read: async (table, query) => {
       counts.reads += 1;
       assert.equal(table, 'viajes');
@@ -139,6 +143,11 @@ Deno.test('public tracking still accepts previously issued UUID tokens', async (
   const result = await invoke(test.handler, legacyToken);
   assert.equal(result.response.status, 200);
   assert.equal(expectRecord(result.body).taxi, null);
+});
+Deno.test('an assigned phone-only taxi is tracked with its fresh mobile fix, without exposing other units', async () => {
+  const test = fixture(baseTrip, [], false, [{deviceId:540,latitude:16.26,longitude:-92.14,speed:0,course:null,fixTime:'2026-10-31T18:00:58.000Z'}, {deviceId:999,latitude:1,longitude:1,fixTime:'2026-10-31T18:00:58.000Z'}]);
+  const result = await invoke(test.handler); assert.equal(result.response.status,200);
+  assert.equal(expectRecord(expectRecord(result.body).taxi).lat,16.26);
 });
 Deno.test('public tracking ignores provider positions from any other unit and keeps the assigned trip route', async () => {
   const test = fixture(baseTrip, [{ deviceId: 541, latitude: 16.24, longitude: -92.12, speed: 10, course: 0, fixTime: '2026-10-31T18:00:58.000Z' }]);

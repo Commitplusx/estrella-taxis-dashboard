@@ -1,0 +1,345 @@
+{
+  "date": "2026-11-01",
+  "project": "Stellar Tracking",
+  "supabaseProject": "izrsxygazsalfhpaualj",
+  "baseline": "4378a9722bba468cdc74309a5bf0b88e8a0f671d",
+  "migrations": [
+    "20261101140000",
+    "20261101140100"
+  ],
+  "publishedFunctions": [
+    {
+      "status": "ACTIVE",
+      "name": "taxi-bot-admin",
+      "version": 39
+    },
+    {
+      "status": "ACTIVE",
+      "name": "process-queue",
+      "version": 52
+    },
+    {
+      "status": "ACTIVE",
+      "name": "track-position",
+      "version": 4
+    }
+  ],
+  "accounts": {
+    "total": 29,
+    "existingPreserved": 3,
+    "createdAndPhoneLoginVerified": 26,
+    "ownersWithLinkedDrivers": 10,
+    "incomplete": 6,
+    "completeWithoutAccount": 0
+  },
+  "mobileVirtualDevice": {
+    "deviceId": 25,
+    "unit": "0509"
+  },
+  "checks": {
+    "flutterPassed": 17,
+    "denoEntrypointsChecked": [
+      "taxi-bot-admin",
+      "process-queue",
+      "track-position"
+    ],
+    "physicalDeviceTested": false,
+    "probeUnitActive": false,
+    "persistedProbeSamples": 0,
+    "androidLocationForegroundServiceVerified": true,
+    "runtimeDifferences": 0,
+    "denoRelevantPassed": 314,
+    "completeHistoricalDbSuiteGreen": false,
+    "androidApkV2SignatureVerified": true,
+    "liveSqlStartLocationStopRollback": true,
+    "downloadedRuntimeFilesCompared": 57
+  },
+  "http": {
+    "driverWithoutSession": 401,
+    "trackingWithoutToken": 400,
+    "adminOptions": 200,
+    "emptyQueueEvent": 404
+  },
+  "apk": {
+    "bytes": 166634426,
+    "path": "C:/Users/Kaleb/Desktop/StellarTracking/releases/20261101-driver-mobile/Stellar-debug.apk",
+    "mode": "debug",
+    "sha256": "3d07aaad28bbc81b35c80851d2b84fa3d46145cec215c3a7210c54f05cdc1792",
+    "version": "1.0.0+3",
+    "package": "com.stellar.tracking",
+    "installed": false,
+    "reason": "No ADB device connected"
+  },
+  "runtimeSourceHashes": [
+    {
+      "path": "process-queue/deno.json",
+      "sha256": "7bd99c63c2313bd63093ce85e3cf5dc0077e2b702ef60b7f66d1019f520a8258"
+    },
+    {
+      "path": "process-queue/index.ts",
+      "sha256": "336f57ee2967649ce8025cb907630a5c67800e62d0e7cf8f5b1fca612db4f481"
+    },
+    {
+      "path": "taxi-bot-admin/accounts.ts",
+      "sha256": "03589599c4c07e164e471f28733d95e9a7246802d9ad0bba79c155dff5e63607"
+    },
+    {
+      "path": "taxi-bot-admin/deno.json",
+      "sha256": "19f5b75b512c6fb7dd64e5af78329a4a4dbb9de6f054a955b3c4c6f5d8a97d1e"
+    },
+    {
+      "path": "taxi-bot-admin/dispatch.ts",
+      "sha256": "5917102f59a1b04143fbe59a898e1f8c894784f7b3e221245479e0378650e679"
+    },
+    {
+      "path": "taxi-bot-admin/driverMobile.ts",
+      "sha256": "ee06045581870ba8b550ce86c85d8fa2e98eddfce8cd7a917b4d718a0a193300"
+    },
+    {
+      "path": "taxi-bot-admin/drivers.ts",
+      "sha256": "44172a9067dcf4d8106ddacb37ecf2c97614dc3bdfd8b5faaa1a43290db92e03"
+    },
+    {
+      "path": "taxi-bot-admin/handler.ts",
+      "sha256": "cb44b00d865354292df25040883e3434580afa2f77fa3f28487f4fe5a20176d9"
+    },
+    {
+      "path": "taxi-bot-admin/index.ts",
+      "sha256": "c7417b62cca43aec517b236e94a370df526ec42538262ff1ed7b67c19991b135"
+    },
+    {
+      "path": "taxi-bot-admin/neighborhoods.ts",
+      "sha256": "964e6f6521bae6f36f7dfd1482b308dafab4040c6f86a718ea4fec4b7fbf6ce0"
+    },
+    {
+      "path": "taxi-bot-admin/owners.ts",
+      "sha256": "c449618570040a6b4277fd020fe4532283eeccd25dfc32be012732637062794a"
+    },
+    {
+      "path": "taxi-bot-admin/phoneLogin.ts",
+      "sha256": "58cf2bc07eb85e4469487c4d22d7d5d2f89598509a16444a281a4babd491c19d"
+    },
+    {
+      "path": "taxi-bot-admin/quality.ts",
+      "sha256": "89d4b031b31a105fc20184353a067e76b1a5c101bb43a531bc7e7204663dfb13"
+    },
+    {
+      "path": "taxi-bot-admin/sharedDrivers.ts",
+      "sha256": "7c642f811189d909e7307aa588e22c8a09cd22bd78249c5eace8454632643fee"
+    },
+    {
+      "path": "taxi-bot-admin/simulation.ts",
+      "sha256": "c3f2898bd3aab8c4b7098a69d6325cbeeb220fe9c5061084a8c7f468f81e98e7"
+    },
+    {
+      "path": "track-position/handler.ts",
+      "sha256": "bc12f34dbdf40bc42755acb45e64cfeeecfad95812782f82481bc0c741cce37d"
+    },
+    {
+      "path": "track-position/index.ts",
+      "sha256": "71e407642248a4b92444053594f16d0787fcb13f2c203efbf56005090680a46b"
+    },
+    {
+      "path": "_shared/algorithms/headingMatcher.ts",
+      "sha256": "7bbeb085e7f4443ecc60225d618aef71296b1bb8a2a86869219cc9590488bede"
+    },
+    {
+      "path": "_shared/bot/taxis/addressGeocoder.ts",
+      "sha256": "63cc92a7f449e1618b963b1796f30ce83d64b6269d972e34c128004e4eae7a0b"
+    },
+    {
+      "path": "_shared/bot/taxis/adminContracts.ts",
+      "sha256": "b6ef0d31df2776d6fe61f8c3ed3d7791fdbc44be508fd7570aa2aeef358f4f03"
+    },
+    {
+      "path": "_shared/bot/taxis/channelPhone.ts",
+      "sha256": "8e86f529ca509903793540a23f6a11bc52733b97ddf01e5345143176f8f413d7"
+    },
+    {
+      "path": "_shared/bot/taxis/contactAdmin.ts",
+      "sha256": "54ab767c557c47088dfb34fdaf293580d4871f1df5d4553584bad798406f5a0c"
+    },
+    {
+      "path": "_shared/bot/taxis/contracts.ts",
+      "sha256": "a83c34dda40b1829f71163148ca306058cc1d2aa68097e95d496d1b6b380a185"
+    },
+    {
+      "path": "_shared/bot/taxis/conversationReply.ts",
+      "sha256": "4941c56514d0f3061d28fdf9fd78f94b0a1deb439df8b60e73da34755041764e"
+    },
+    {
+      "path": "_shared/bot/taxis/conversationTools.ts",
+      "sha256": "4bef3f35f53a1d4ba256c6a2f174d4a235204e904b03a0da6a2747d4ba2afd4e"
+    },
+    {
+      "path": "_shared/bot/taxis/coordinator.ts",
+      "sha256": "69558b3fb290ab38ded8b78044b3943feea27aef566035f1a00c3161973375f7"
+    },
+    {
+      "path": "_shared/bot/taxis/customerAccess.ts",
+      "sha256": "58151159c49a6419218efb50f3491b0cf67dda17b8401f106655870e5660262f"
+    },
+    {
+      "path": "_shared/bot/taxis/dispatchContracts.ts",
+      "sha256": "02a5f28c8d6bb585cb5c7dd2bc35a33a361d0ccdd78a754bd662cf00fb40f252"
+    },
+    {
+      "path": "_shared/bot/taxis/dispatchPolicy.ts",
+      "sha256": "85c87245b944ba65861aa3d1c468ec1fb9082f438a9eb21f20aa4fba093accde"
+    },
+    {
+      "path": "_shared/bot/taxis/driverAdmin.ts",
+      "sha256": "162f65028b833701c11bcfd2b0bb653d2d05cc3ce064e03d16a8256bce9eb3c2"
+    },
+    {
+      "path": "_shared/bot/taxis/engine.ts",
+      "sha256": "ce6172435d1c16ccdd7dce28f85c041e56c962830719f7c5e7d85abafee6ab8f"
+    },
+    {
+      "path": "_shared/bot/taxis/gpsOccupancy.ts",
+      "sha256": "053cf0304a23005e97e58395c37fa236527dabe6cc1aeafa0943667f5ac98170"
+    },
+    {
+      "path": "_shared/bot/taxis/gpsRefresh.ts",
+      "sha256": "2121c9979f49e5ed29e4eb695c320b24d1c3b0bf47fee2770c61f7ea8b1a416f"
+    },
+    {
+      "path": "_shared/bot/taxis/h3.ts",
+      "sha256": "97972558a5e8c3d39a4731082471ae4e8576915d1976817a16868665f9ad42ba"
+    },
+    {
+      "path": "_shared/bot/taxis/interpreter.ts",
+      "sha256": "ec4d0a097cd4284be16f0323c902adcec00b187aed1330463b8c6b669dd98273"
+    },
+    {
+      "path": "_shared/bot/taxis/messageBudget.ts",
+      "sha256": "f4468230cbc2a7ef14b679ec6ecc7013a6a67bbb92b9395139e4466044456848"
+    },
+    {
+      "path": "_shared/bot/taxis/mobilePositions.ts",
+      "sha256": "c0586e2a3486158642d93347fff618461eb66bc8711ea2404e104c3b08ed0ee9"
+    },
+    {
+      "path": "_shared/bot/taxis/neighborhoodContracts.ts",
+      "sha256": "6e28c65fa45d0d6d77ebc52d6d9b7423463554e5235ad7742290b1051a288def"
+    },
+    {
+      "path": "_shared/bot/taxis/neighborhoods.ts",
+      "sha256": "daef9445359cdc779f361d17cf1ddcbb818bae532c8e437d432fb5248a95a5a0"
+    },
+    {
+      "path": "_shared/bot/taxis/ownerContracts.ts",
+      "sha256": "e431146c3ad1d4ca7388affe40d4e3bdb8791317a717223656725e00790d0a94"
+    },
+    {
+      "path": "_shared/bot/taxis/policy.ts",
+      "sha256": "6ba2465f07bc5e5585fabb45a5bed4516c63e2f4cadf7dd0a063ec69ed462f45"
+    },
+    {
+      "path": "_shared/bot/taxis/runtime.ts",
+      "sha256": "aad34fda994d55bbe11047823343b5f11a6f73e91c43fdb6c9f14e5213e6221a"
+    },
+    {
+      "path": "_shared/bot/taxis/selection.ts",
+      "sha256": "a5a3776e48c3f00353a2f33d0fa16e645810baa8e6e74cf1e8310dedeba05394"
+    },
+    {
+      "path": "_shared/bot/taxis/services.ts",
+      "sha256": "8494020cde1faa753e5079136e67b81faf2a70523fb71cfb6112d160680bb71f"
+    },
+    {
+      "path": "_shared/bot/taxis/simulation.ts",
+      "sha256": "8f5d3bd60b5fb7579a1692a38eb418f689bb02c04eef8c0c0558bf6147b136b9"
+    },
+    {
+      "path": "_shared/bot/taxis/simulationContracts.ts",
+      "sha256": "b2ab639b05644aeb55af11ce5ff7c4fd1e56b50c6b14df4445f6450c44ba6156"
+    },
+    {
+      "path": "_shared/bot/taxis/stateMachine.ts",
+      "sha256": "a74d5f7f5204db17d92ae7fb835a182e28ebc5707142153ac757c96adf3fdc06"
+    },
+    {
+      "path": "_shared/bot/taxis/trace.ts",
+      "sha256": "40253bf9194c2ec56c2f9b9809ed6851eb80306c02160246c2df4e233dcaad2a"
+    },
+    {
+      "path": "_shared/bot/taxis/transport.ts",
+      "sha256": "29f5578f0870cec117894daa234ed8dd9df51b020b10f6c806f01ac46750e795"
+    },
+    {
+      "path": "_shared/tracking/auth.ts",
+      "sha256": "88bf5f88ae849bbaf539febc2be498ec48ca9495987ceb74352b3511f93334dc"
+    },
+    {
+      "path": "_shared/tracking/companies.ts",
+      "sha256": "e9946343de3947db011777fd0c0205907c0ca37b846d559ce359fcaf96a6928d"
+    },
+    {
+      "path": "_shared/tracking/contracts.ts",
+      "sha256": "e2022ca9691f7ecc923b11a14a4144723af378aa5e6252bf1ec9c4ed2e72a612"
+    },
+    {
+      "path": "_shared/tracking/http.ts",
+      "sha256": "14b020429bf5e9978677a588ab295c5e99fe5d0cc9854cced29f435ccf2e9192"
+    },
+    {
+      "path": "_shared/tracking/packages.ts",
+      "sha256": "55c558673b28e77337b0ee53d667d60ad264c49484806cdc36b1147145124a4a"
+    },
+    {
+      "path": "_shared/tracking/phoneLogin.ts",
+      "sha256": "372c5a993d9e350088e9cfd2649ae5142a76b5dd070d900ea5441c4ff3423ca1"
+    },
+    {
+      "path": "_shared/tracking/runtime.ts",
+      "sha256": "905d44a66e1ba6ca437ed8b34c0a5328874cff48bdc33b0bc4733344b9aa941a"
+    },
+    {
+      "path": "_shared/tracking/store.ts",
+      "sha256": "cffcdb1cbcb1c68f810fbc9523f0ca6de32dc78278a1694adf377da4eadbf087"
+    }
+  ],
+  "nativeSources": [
+    {
+      "path": "pubspec.lock",
+      "sha256": "2b1150cecba4b110d45bb6f7bab00b32675e37769dc8b96fc63beee2773dc569"
+    },
+    {
+      "path": "pubspec.yaml",
+      "sha256": "3a5501149cfd00feae63230170efe108632875b57ab1342a4c6999612d806256"
+    },
+    {
+      "path": "ios/Runner/Info.plist",
+      "sha256": "28cc7d0d89e89cf005ca1bfbcc9d6ee728e3c6ba25c240135beb671f0506efc6"
+    },
+    {
+      "path": "lib/screens/main_screen.dart",
+      "sha256": "f4a6469badd6a4d6596a73e2ac4bec4dfff9e882487aefd2393bc89b26a5a8ee"
+    },
+    {
+      "path": "lib/screens/taxi_owner_screen.dart",
+      "sha256": "70b41745237c9b5639ecfe3e82aaf3a70b385d4ea3de384a0fdde6f8efe98e84"
+    },
+    {
+      "path": "lib/services/driver_location_service.dart",
+      "sha256": "6e2ffb6e4d020f73c042218b66895b5ea326061584d30611c32d61ea0fbde5a3"
+    },
+    {
+      "path": "lib/services/driver_shift_state.dart",
+      "sha256": "452665dac5a2e3aab3fdf301360df0985ec59c78908f290cd716156dd4e9d2d7"
+    },
+    {
+      "path": "lib/services/traccar_service.dart",
+      "sha256": "b59bb34484693c8d51965be7d8d14b5a527cd72350ed3d15d3083f79c60c5788"
+    },
+    {
+      "path": "lib/widgets/driver_shift_panel.dart",
+      "sha256": "301a496f8498d56d434ae76eb068f23cdc8fcbc9f60a1e63512ef9c3d2caf673"
+    },
+    {
+      "path": "test/driver_location_service_test.dart",
+      "sha256": "744d0ff3ee5d9b9a01ec96edee5814a6526edb8844ce42498abfa5c6b9e2752a"
+    }
+  ]
+}
