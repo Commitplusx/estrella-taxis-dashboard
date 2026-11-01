@@ -23,3 +23,9 @@ Deno.test('customer intake: independent bubbles preserve data, omit destination 
 Deno.test('customer intake: a place cannot become a name just because it accompanies a pin',async()=>{
  const fixture=providers({intent:'provide',fields:{name:{value:'Plaza Las Flores',evidence:'Plaza Las Flores'}}});const d=await coordinateTaxi([intakePin(),intakeMessage('Plaza Las Flores')],intakeSession(),INTAKE_CHANNEL,fixture.services,INTAKE_NOW);assertEquals(d.draft.name,null);assertEquals(d.draft.pickupMessageId,'pickup');assertEquals(fixture.counts().lookups,0);assert(!d.draft.confirmation);
 });
+Deno.test('customer intake: adding a pickup landmark after three collection replies is a permitted clarification',async()=>{
+ const s=intakeSession(true);s.draft.name='Mariana';s.messageBudget={normal:3,extra:0,closed:false};
+ const fixture=providers({intent:'provide',fields:{pickupReference:{value:'En la fábrica de tostadas Botanitos',evidence:'En la fábrica de tostadas Botanitos'}}});
+ const d=await coordinateTaxi([intakeMessage('En la fábrica de tostadas Botanitos')],s,INTAKE_CHANNEL,fixture.services,INTAKE_NOW);
+ assertEquals(d.action,'draft');assertEquals(d.replyClass,'change');assertEquals(d.draft.pickupMessageId,'saved-pickup');assertEquals(d.draft.name,'Mariana');assert(!d.messages[0].locationRequest);assertEquals(fixture.counts().lookups,0);
+});
