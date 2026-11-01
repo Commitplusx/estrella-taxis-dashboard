@@ -1,0 +1,75 @@
+{
+  "date": "2026-11-01",
+  "project": "Stellar Tracking",
+  "supabaseProject": "izrsxygazsalfhpaualj",
+  "operation": "activate_requested_driver_shifts",
+  "requestedUnits": [
+    "0491",
+    "0494",
+    "0487",
+    "1014",
+    "1111"
+  ],
+  "verifiedDrivers": [
+    {
+      "unit": "0491",
+      "device_id": 2,
+      "role": "driver",
+      "has_account": true,
+      "active": true,
+      "recipient_matches": true,
+      "receiving": "true"
+    },
+    {
+      "unit": "1014",
+      "device_id": 3,
+      "role": "owner_driver",
+      "has_account": true,
+      "active": true,
+      "recipient_matches": true,
+      "receiving": "true"
+    },
+    {
+      "unit": "494",
+      "device_id": 6,
+      "role": "driver",
+      "has_account": true,
+      "active": true,
+      "recipient_matches": true,
+      "receiving": "true"
+    },
+    {
+      "unit": "1111",
+      "device_id": 12,
+      "role": "owner",
+      "has_account": true,
+      "active": true,
+      "recipient_matches": true,
+      "receiving": "true"
+    },
+    {
+      "unit": "487",
+      "device_id": 26,
+      "role": "driver",
+      "has_account": true,
+      "active": true,
+      "recipient_matches": true,
+      "receiving": "true"
+    }
+  ],
+  "existingActiveRecipientsPreserved": 4,
+  "newMobileUnit": {
+    "positionInvented": false,
+    "phoneLoginVerified": true,
+    "active": true,
+    "unit": "0487",
+    "freshLocationRequired": true,
+    "deviceId": 26,
+    "accountUserId": 34
+  },
+  "temporaryMaintenanceFunctionRemoved": true,
+  "otherDriversChanged": false,
+  "customerAccessChanged": false,
+  "newWhatsappMessagesSent": 0,
+  "apkInstalled": false
+}
