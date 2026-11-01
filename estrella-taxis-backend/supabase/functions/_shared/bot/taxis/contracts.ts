@@ -19,7 +19,7 @@ export interface Draft {
   pickupText?:string|null;pickupMessageId?:string|null;destinationText?:string|null;quoteBasis?:'pickup'|'route'|null;
   destinationDeferred?:boolean;destinationPrompt?:string|null;
 }
-export interface Trip {id:string;state:'buscando_conductor'|'en_camino'|'completado'|'cancelado'|'cancelado_timeout';taxiName:string|null;dispatchAttention?:boolean}
+export interface Trip {id:string;state:'buscando_conductor'|'en_camino'|'completado'|'cancelado'|'cancelado_timeout';taxiName:string|null;dispatchAttention?:boolean;dispatchChoice?:{token:string;expiresAt:string}}
 export interface TaxiSession {revision:number;mode:'bot'|'human';draft:Draft;active:Trip|null;history:History[];messageBudget?:{normal:number;extra:number;closed:boolean}}
 export interface History {role:'user'|'assistant';content:string}
 export interface TaxiInbound {
@@ -114,8 +114,11 @@ export function parseSession(value:unknown):TaxiSession {
   let active:Trip|null=null;
   if(value.active!==null) {const a=value.active;if(!record(a)||!text(a.id,40)||!['buscando_conductor','en_camino','completado','cancelado','cancelado_timeout'].includes(String(a.state))||!(a.taxiName===null||text(a.taxiName,120)))throw new TrackingError(502,'invalid_taxi_trip','El viaje guardado no es válido.');
     if(a.dispatchAttention!==undefined&&typeof a.dispatchAttention!=='boolean')throw new TrackingError(502,'invalid_taxi_trip','El estado de asignación no es válido.');
+    const choice=a.dispatchChoice;
+    if(choice!==undefined&&choice!==null&&(!record(choice)||typeof choice.token!=='string'||!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(choice.token)||typeof choice.expiresAt!=='string'||!Number.isFinite(Date.parse(choice.expiresAt))||a.state!=='buscando_conductor'))throw new TrackingError(502,'invalid_taxi_trip','La opción de espera no es válida.');
     const state=a.state;if(state==='buscando_conductor'||state==='en_camino'||state==='completado'||state==='cancelado'||state==='cancelado_timeout')active={id:String(a.id),state,taxiName:a.taxiName===null?null:String(a.taxiName),...(a.dispatchAttention!==undefined?{dispatchAttention:a.dispatchAttention}:{})};
   }
+  if(active&&record(value.active)&&record(value.active.dispatchChoice)&&typeof value.active.dispatchChoice.token==='string'&&typeof value.active.dispatchChoice.expiresAt==='string')active.dispatchChoice={token:value.active.dispatchChoice.token,expiresAt:value.active.dispatchChoice.expiresAt};
   const originArea=parseNeighborhoodArea(d.originArea),destinationArea=parseNeighborhoodArea(d.destinationArea);
   if(d.destinationDeferred!==undefined&&typeof d.destinationDeferred!=='boolean'||d.destinationPrompt!==undefined&&d.destinationPrompt!==null&&(typeof d.destinationPrompt!=='string'||!/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(d.destinationPrompt)||awaitingLocation!=='destination'||d.confirmation!==null))throw new TrackingError(502,'invalid_taxi_destination_choice','La elección de destino no es válida.');
   if(d.destinationDeferred===true&&(destination||d.destinationText||destinationArea||awaitingLocation==='destination'))throw new TrackingError(502,'invalid_taxi_destination_choice','El destino pendiente no coincide con su elección.');

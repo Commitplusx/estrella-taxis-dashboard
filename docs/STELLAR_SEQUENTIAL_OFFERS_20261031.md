@@ -1,5 +1,7 @@
 # Oferta de taxi: uno a la vez y un minuto para responder
 
+> Sustituido por la última instrucción: [tres unidades simultáneas por ronda, tres minutos y decisión del cliente tras tres rondas](STELLAR_THREE_ROUND_BATCHES_20261031.md). Este documento conserva la entrega secuencial anterior como historial.
+
 Publicado en Supabase independiente `izrsxygazsalfhpaualj`: migración `20261101001000_taxi_sequential_offers`, código `d963fbd` en `main`. Es un cambio SQL: worker/webhook permanecen en v48 y administrador en v37; no hace falta reinstalar la APK.
 
 ## Comportamiento

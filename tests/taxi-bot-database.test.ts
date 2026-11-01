@@ -58,6 +58,7 @@ const phoneLoginSql=readFileSync(new URL('../estrella-taxis-backend/supabase/mig
 const sharedDriverSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261031235100_taxi_shared_driver_turns.sql',import.meta.url),'utf8');
 const currentTraceIntentsSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261031235900_taxi_trace_current_intents.sql',import.meta.url),'utf8');
 const sequentialOffersSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261101001000_taxi_sequential_offers.sql',import.meta.url),'utf8');
+const batchRoundsSql=readFileSync(new URL('../estrella-taxis-backend/supabase/migrations/20261101002000_taxi_three_round_batches.sql',import.meta.url),'utf8');
 const tenant='11111111-1111-4111-8111-111111111111',other='22222222-2222-4222-8222-222222222222',waba='+529630000001',customer='+529630000002',driverPhone='+529630000003';
 const pompeyo='4cf9acf1-f07e-4a01-9396-eb5bde3e7411';
 function unknownArray(value:unknown):value is unknown[]{return Array.isArray(value);}
@@ -789,6 +790,7 @@ async function fixture(options:{legacy?:boolean;seedCoverageBeforeMigration?:boo
     await db.exec(sharedDriverSql);
     await db.exec(currentTraceIntentsSql);
     await db.exec(sequentialOffersSql);
+    await db.exec(batchRoundsSql);
   }
   // These legacy protocol fixtures explicitly act as customers too. Driver-only access has separate tests below.
   await db.query('INSERT INTO taxi_bot_allowed_customers(tenant_id,phone)VALUES($1,$2),($1,$3),($1,$4)',[tenant,customer,driverPhone,'+529630000004']);
@@ -1298,7 +1300,7 @@ test('taxi H3 integration: real service quote → current summary → recheck �
 });
 test('taxi SQL: only the offered driver accepts, first acceptance wins and duplicate acceptance is harmless',async()=>{
   const f=await fixture();try{
-    await f.prepare();await f.confirm();const offers=(await f.db.query<Record<string,unknown>>('SELECT * FROM taxi_bot_offers ORDER BY device_id')).rows;assert.equal(offers.length,1);
+    await f.prepare();await f.confirm();const offers=(await f.db.query<Record<string,unknown>>('SELECT * FROM taxi_bot_offers ORDER BY device_id')).rows;assert.equal(offers.length,2);
     const forged=await f.enqueue('botón',customer),fc=await f.begin(forged.eventId);await f.commit(forged.eventId,fc,{...f.decision('driver_accept'),offerId:offers[0].id});assert.equal(await f.scalar("SELECT count(*)::int FROM viajes WHERE estado='en_camino'"),0);
     for(const phone of['+529630000004',driverPhone]){
       const e=await f.enqueue('botón',phone),c=await f.begin(e.eventId);await f.commit(e.eventId,c,{...f.decision('driver_accept'),offerId:offers[0].id});
@@ -1323,7 +1325,9 @@ test('taxi status notifications match trip state from request through assignment
     const completion=String(await f.scalar("SELECT body->>'text'FROM taxi_bot_outbox WHERE dedupe_key LIKE 'trip-finished:%'"));assert.match(completion,/^🚕/);assert.match(completion,/😊/);
   }finally{await f.db.close();}
   const timed=await fixture();try{
-    await timed.prepare();await timed.confirm(customer,[]);await timed.db.exec("SELECT set_config('app.taxi_bot_write','on',false);UPDATE viajes SET created_at=clock_timestamp()-interval '13 minutes';SELECT set_config('app.taxi_bot_write','off',false)");
+    await timed.prepare();await timed.confirm(customer,[]);await timed.db.exec("UPDATE taxi_bot_dispatch_jobs SET deadline_at=clock_timestamp()-interval '1 second'");
+    assert.equal(await timed.scalar('SELECT taxi_bot_maintain()'),0);assert.equal(await timed.scalar('SELECT code FROM taxi_bot_dispatch_jobs'),'customer_choice');
+    await timed.db.exec("UPDATE taxi_bot_dispatch_jobs SET choice_expires_at=clock_timestamp()-interval '1 second'");
     assert.equal(await timed.scalar('SELECT taxi_bot_maintain()'),1);
     const timeout=String(await timed.scalar("SELECT body->>'text'FROM taxi_bot_outbox WHERE dedupe_key LIKE 'timeout-customer:%'"));assert.match(timeout,/^🚕/);assert.match(timeout,/🙂/);
   }finally{await timed.db.close();}
@@ -1395,7 +1399,8 @@ test('taxi SQL: messages to one recipient leave the outbox in durable order',asy
 });
 test('taxi SQL: timeout and attempts exhaustion leave durable human notifications without retrying side effects',async()=>{
   const f=await fixture();try{
-    await f.prepare();await f.confirm();await f.db.exec("BEGIN;SELECT set_config('app.taxi_bot_write','on',true);UPDATE viajes SET created_at=clock_timestamp()-interval '13 minutes';COMMIT;");
+    await f.prepare();await f.confirm();await f.db.exec("UPDATE taxi_bot_offers SET expires_at=clock_timestamp()-interval '1 second';UPDATE taxi_bot_dispatch_jobs SET deadline_at=clock_timestamp()-interval '1 second'");
+    assert.equal(await f.scalar('SELECT taxi_bot_maintain()'),0);await f.db.exec("UPDATE taxi_bot_dispatch_jobs SET choice_expires_at=clock_timestamp()-interval '1 second'");
     assert.equal(await f.scalar('SELECT taxi_bot_maintain()'),1);assert.equal(await f.scalar('SELECT taxi_bot_maintain()'),0);assert.equal(await f.scalar('SELECT estado FROM viajes'),'cancelado_timeout');
     const e=await f.enqueue('No entiendo');await f.db.query('UPDATE taxi_bot_events SET attempts=3 WHERE id=$1',[e.eventId]);
     assert.equal((await f.begin(e.eventId)).state,'replay');assert.equal(await f.scalar('SELECT mode FROM taxi_bot_sessions WHERE customer=$1',[customer]),'human');
@@ -1409,7 +1414,7 @@ test('taxi SQL: expired offers and superseded summaries are discarded before pro
     const correction=await f.enqueue('corrección'),cc=await f.begin(correction.eventId);await f.commit(correction.eventId,cc,{...f.decision(),draft:{...f.draft,confirmation:crypto.randomUUID()}});
     await f.db.query('SELECT * FROM taxi_bot_outbox_claim($1,$2)',[tenant,waba]);assert.equal(await f.scalar("SELECT state FROM taxi_bot_outbox WHERE body->>'text'='Resumen anterior'"),'failed');
     // Prepare a fresh summary and expire its resulting driver offer before sending.
-    await f.prepare();await f.confirm();await f.db.exec("UPDATE taxi_bot_offers SET expires_at=clock_timestamp()-interval '1 second'");
+    await f.prepare();await f.confirm();await f.db.exec("UPDATE taxi_bot_offers SET expires_at=clock_timestamp()-interval '1 second';UPDATE taxi_bot_dispatch_jobs SET next_at=clock_timestamp()-interval '1 second'");
     const claimed=(await f.db.query<Record<string,unknown>>('SELECT * FROM taxi_bot_outbox_claim($1,$2)',[tenant,waba])).rows;
     assert.equal(claimed.some((r)=>String(r.dedupe_key).startsWith('offer:')),false);assert.equal(await f.scalar("SELECT state FROM taxi_bot_outbox WHERE dedupe_key LIKE 'offer:%'LIMIT 1"),'failed');
   }finally{await f.db.close();}
@@ -1740,25 +1745,153 @@ test('taxi quality panel SQL: private case and saved correction match the strict
  }finally{await f.db.close();}
 });
 
+async function batchFixture(){
+ const f=await fixture();await f.prepare();
+ for(let unit=4;unit<=20;unit++)await f.db.query('INSERT INTO conductores(tenant_id,device_id,telefono_whatsapp,nombre)VALUES($1,$2,$3,$4)',[tenant,unit,'+529630001'+String(unit).padStart(3,'0'),'Unidad '+unit]);
+ await f.confirm(customer,[{deviceId:1,name:'One'},{deviceId:2,name:'Two'},{deviceId:4,name:'Three'}]);
+ const tripId=asString(await f.scalar('SELECT id FROM viajes'));
+ const claims=async()=>parseDispatchClaims((await f.db.query<{claim:unknown}>('SELECT taxi_bot_dispatch_claim()AS claim')).rows.map(r=>r.claim));
+ const expire=async()=>f.db.exec("UPDATE taxi_bot_offers SET expires_at=clock_timestamp()-interval '1 second'WHERE state='offered';UPDATE taxi_bot_dispatch_jobs SET next_at=clock_timestamp()-interval '1 second'");
+ const complete=async(lease:string,units:number[])=>f.obj(await f.scalar('SELECT taxi_bot_dispatch_complete($1,$2,$3)',[tripId,lease,units.map(deviceId=>({deviceId,name:'Unit '+deviceId}))]));
+ const exhaust=async()=>{for(const units of [[5,6,7],[8,9,10]]){await expire();const claim=(await claims())[0];assert.ok(claim);assert.equal((await complete(claim.lease,units)).offers,3);}await expire();assert.deepEqual(await claims(),[]);};
+ const click=async(button:string,from=customer)=>{const e=await f.enqueue('',from,crypto.randomUUID(),button),c=await f.begin(e.eventId);assert.equal(c.state,'proceed');assert.ok(unknownArray(c.messages));const decision=await coordinateTaxi(c.messages.map(m=>parseStoredInbound(m,Date.now())),parseSession(c.session),{tenantId:tenant,waba,enabled:true,name:'Base',city:'Comitán',centerLat:16.25,centerLng:-92.13,radiusKm:20,dispatcher:null,model:'fixture',baseCents:5500,perKmCents:null,pricingMode:'h3_zone_max'},{interpret:async()=>{throw Error('Native choice cannot call AI');},resolve:async()=>{throw Error('No geocoding');},quote:async()=>{throw Error('No quote');},candidates:async()=>{throw Error('Worker owns fleet refresh');}},Date.now());await f.commit(e.eventId,c,{...decision});return{e,c,decision};};
+ return{...f,tripId,claims,expire,complete,exhaust,click};
+}
+test('batch dispatch SQL: three simultaneous ranked offers share a 180-second expiry, maps and no price',async()=>{
+ const f=await batchFixture();try{
+  assert.equal(await f.scalar('SELECT count(*)::int FROM taxi_bot_offers'),3);
+  assert.equal(await f.scalar('SELECT count(DISTINCT expires_at)::int FROM taxi_bot_offers'),1);
+  const seconds=Number(await f.scalar('SELECT min(extract(epoch FROM expires_at-clock_timestamp()))FROM taxi_bot_offers'));assert.ok(seconds>178&&seconds<=180);
+  const bodies=(await f.db.query<{body:unknown}>("SELECT body FROM taxi_bot_outbox WHERE dedupe_key LIKE 'offer:%'")).rows;
+  for(const row of bodies){const b=f.obj(row.body);assert.match(asString(b.text),/3 minutos/);assert.match(asString(b.text),/https:\/\/maps\.google\.com\/\?q=/);assert.doesNotMatch(asString(b.text),/\$|MXN|Tarifa/);assert.ok(asString(b.text).length<=1024);}
+  assert.equal(await f.scalar('SELECT taxi_bot_dispatch_offer($1,$2,2)',[f.tripId,[{deviceId:5}]]),0);
+ }finally{await f.db.close();}
+});
+test('batch dispatch SQL: rejection waits for the round deadline and stale first-round buttons cannot assign during round two',async()=>{
+ const f=await batchFixture();try{
+  const oldId=asString(await f.scalar('SELECT id FROM taxi_bot_offers WHERE device_id=1'));
+  await f.db.exec("UPDATE taxi_bot_offers SET state='rejected'WHERE device_id IN(2,4)");
+  assert.deepEqual(await f.claims(),[]);
+  await f.expire();const claim=(await f.claims())[0];assert.ok(claim);assert.deepEqual(claim.excluded,[1,2,4]);await f.complete(claim.lease,[5,6,7]);
+  await f.click('txa_'+oldId,driverPhone);
+  assert.equal(await f.scalar('SELECT estado FROM viajes'),'buscando_conductor');
+  const reply=asString(await f.scalar("SELECT body->>'text'FROM taxi_bot_outbox WHERE dedupe_key LIKE 'driver-reply:%'ORDER BY sequence DESC LIMIT 1"));assert.match(reply,/ya no está disponible/);
+  assert.equal(await f.scalar("SELECT count(*)::int FROM taxi_bot_offers WHERE state='offered'AND expires_at>clock_timestamp()"),3);
+ }finally{await f.db.close();}
+});
+test('batch dispatch SQL: nine different units then one durable wait/cancel choice; maintenance cannot close it early',async()=>{
+ const f=await batchFixture();try{
+  await f.exhaust();assert.equal(await f.scalar('SELECT count(DISTINCT device_id)::int FROM taxi_bot_offers'),9);
+  assert.equal(await f.scalar('SELECT round_no FROM taxi_bot_dispatch_jobs'),3);assert.equal(await f.scalar('SELECT code FROM taxi_bot_dispatch_jobs'),'customer_choice');
+  assert.equal(await f.scalar("SELECT count(*)::int FROM taxi_bot_outbox WHERE dedupe_key LIKE 'dispatch-choice:%'"),1);
+  await f.claims();await f.claims();assert.equal(await f.scalar("SELECT count(*)::int FROM taxi_bot_outbox WHERE dedupe_key LIKE 'dispatch-choice:%'"),1);
+  await f.db.exec("SELECT set_config('app.taxi_bot_write','on',false);UPDATE viajes SET created_at=clock_timestamp()-interval '13 minutes';SELECT taxi_bot_maintain()");
+  assert.equal(await f.scalar('SELECT estado FROM viajes'),'buscando_conductor');
+  const e=await f.enqueue('¿Seguimos esperando?'),c=await f.begin(e.eventId);assert.ok(parseSession(c.session).active?.dispatchChoice);
+ }finally{await f.db.close();}
+});
+test('batch dispatch SQL: first valid driver acceptance wins and the other two receive an unavailable response',async()=>{
+ const f=await batchFixture();try{
+  const first=asString(await f.scalar('SELECT id FROM taxi_bot_offers WHERE device_id=1')),second=asString(await f.scalar('SELECT id FROM taxi_bot_offers WHERE device_id=2'));
+  await f.click('txa_'+first,driverPhone);await f.click('txa_'+second,'+529630000004');
+  assert.equal(await f.scalar('SELECT device_id FROM viajes'),1);
+  assert.equal(await f.scalar("SELECT count(*)::int FROM taxi_bot_offers WHERE state='accepted'"),1);
+  assert.equal(await f.scalar("SELECT count(*)::int FROM taxi_bot_offers WHERE state='revoked'"),2);
+  assert.equal(await f.scalar("SELECT count(*)::int FROM taxi_bot_outbox WHERE dedupe_key LIKE 'trip-assigned:%'"),1);
+  assert.match(asString(await f.scalar("SELECT body->>'text'FROM taxi_bot_outbox WHERE dedupe_key LIKE 'driver-reply:%'ORDER BY sequence DESC LIMIT 1")),/ya no está disponible/);
+ }finally{await f.db.close();}
+});
+test('batch dispatch SQL: continue consumes the current native choice once, preserves the trip and excludes all prior units',async()=>{
+ const f=await batchFixture();try{
+  await f.exhaust();const token=asString(await f.scalar('SELECT choice_token FROM taxi_bot_dispatch_jobs'));
+  await f.click('txw_'+token);const claim=(await f.claims())[0];assert.ok(claim);assert.equal(claim.excluded.length,9);
+  assert.equal((await f.complete(claim.lease,[11,12,13])).offers,3);
+  await f.click('txk_'+token);assert.equal(await f.scalar('SELECT estado FROM viajes'),'buscando_conductor');
+  await f.click('txw_'+token);assert.equal(await f.scalar('SELECT continuations FROM taxi_bot_dispatch_jobs'),1);
+  assert.equal(await f.scalar('SELECT count(*)::int FROM viajes'),1);
+  assert.equal(await f.scalar('SELECT count(*)::int FROM taxi_bot_offers'),12);
+ }finally{await f.db.close();}
+});
+test('batch dispatch SQL: current cancel uses existing cancellation and old choices cannot cancel the next trip',async()=>{
+ const f=await batchFixture();try{
+  await f.exhaust();const token=asString(await f.scalar('SELECT choice_token FROM taxi_bot_dispatch_jobs'));await f.click('txk_'+token);
+  assert.equal(await f.scalar('SELECT estado FROM viajes'),'cancelado');assert.equal(await f.scalar('SELECT state FROM taxi_bot_dispatch_jobs'),'done');
+  await f.prepare();await f.confirm(customer,[{deviceId:11,name:'New'}]);await f.click('txk_'+token);
+  assert.equal(await f.scalar("SELECT count(*)::int FROM viajes WHERE estado='buscando_conductor'"),1);
+ }finally{await f.db.close();}
+});
+test('batch dispatch SQL: forged model choice, another customer and expired buttons cannot extend a search',async()=>{
+ const f=await batchFixture();try{
+  await f.exhaust();const token=asString(await f.scalar('SELECT choice_token FROM taxi_bot_dispatch_jobs'));
+  const e=await f.enqueue('txw_'+token),c=await f.begin(e.eventId);await f.commit(e.eventId,c,{...f.decision('reply'),reason:'dispatch_choice'});assert.equal(await f.scalar('SELECT continuations FROM taxi_bot_dispatch_jobs'),0);
+  await f.click('txw_'+token,driverPhone);assert.equal(await f.scalar('SELECT continuations FROM taxi_bot_dispatch_jobs'),0);
+  await f.db.exec("UPDATE taxi_bot_dispatch_jobs SET choice_expires_at=clock_timestamp()-interval '1 second'");await f.click('txw_'+token);
+  assert.equal(await f.scalar('SELECT continuations FROM taxi_bot_dispatch_jobs'),0);
+  await f.db.exec('SELECT taxi_bot_maintain()');assert.equal(await f.scalar('SELECT estado FROM viajes'),'cancelado_timeout');
+  for(const role of ['anon','authenticated','service_role'])assert.equal(await f.scalar("SELECT has_function_privilege($1,'taxi_bot_dispatch_customer_choice(uuid,text,text,uuid,boolean)','EXECUTE')",[role]),false);
+ }finally{await f.db.close();}
+});
+
+test('batch dispatch SQL: one explicit extension is bounded to eighteen units and survives the previous twelve-minute timeout',async()=>{
+ const f=await batchFixture();try{
+  await f.exhaust();const token=asString(await f.scalar('SELECT choice_token FROM taxi_bot_dispatch_jobs'));await f.click('txw_'+token);
+  await f.db.exec("SELECT set_config('app.taxi_bot_write','on',false);UPDATE viajes SET created_at=clock_timestamp()-interval '13 minutes';SELECT taxi_bot_maintain()");
+  assert.equal(await f.scalar('SELECT estado FROM viajes'),'buscando_conductor');
+  for(const units of [[11,12,13],[14,15,16],[17,18,19]]){
+   const c=(await f.claims())[0];assert.ok(c);assert.equal((await f.complete(c.lease,units)).offers,3);await f.expire();
+  }
+  assert.deepEqual(await f.claims(),[]);assert.equal(await f.scalar('SELECT code FROM taxi_bot_dispatch_jobs'),'search_exhausted');
+  assert.equal(await f.scalar('SELECT count(DISTINCT device_id)::int FROM taxi_bot_offers'),18);
+  assert.equal(await f.scalar('SELECT choice_token FROM taxi_bot_dispatch_jobs'),null);
+  await f.click('txw_'+token);assert.deepEqual(await f.claims(),[]);
+ }finally{await f.db.close();}
+});
+test('batch dispatch SQL: a choice uses the question budget and loses permission to send after cancellation',async()=>{
+ const f=await batchFixture();try{
+  await f.db.query('UPDATE taxi_bot_message_budgets SET normal_message_count=5 WHERE customer=$1',[customer]);
+  await f.exhaust();const token=asString(await f.scalar('SELECT choice_token FROM taxi_bot_dispatch_jobs'));
+  let choice:Record<string,unknown>|undefined;
+  for(let pass=0;pass<3&&!choice;pass++){
+   const out=(await f.db.query<Record<string,unknown>>('SELECT * FROM taxi_bot_outbox_claim($1,$2)',[tenant,waba])).rows;
+   choice=out.find(o=>asString(o.dedupe_key).startsWith('dispatch-choice:'));
+   for(const previous of out)if(previous!==choice)await f.scalar('SELECT taxi_bot_outbox_complete($1,$2,$3,$4,$5)',[previous.id,previous.lease,'accepted','fixture-ack-'+previous.id,null]);
+  }
+  assert.ok(choice);
+  assert.equal(await f.scalar('SELECT taxi_bot_outbox_permitted($1,$2)',[choice.id,choice.lease]),true);
+  assert.equal(await f.scalar('SELECT normal_message_count FROM taxi_bot_message_budgets WHERE customer=$1',[customer]),5);
+  assert.equal(await f.scalar('SELECT extra_message_count FROM taxi_bot_message_budgets WHERE customer=$1',[customer]),1);
+  await f.click('txk_'+token);
+  assert.equal(await f.scalar('SELECT taxi_bot_outbox_permitted($1,$2)',[choice.id,choice.lease]),false);
+ }finally{await f.db.close();}
+});
+
+test('batch dispatch SQL: taking human control prevents a previously issued wait button from restarting automatic search',async()=>{
+ const f=await batchFixture();try{
+  await f.exhaust();const token=asString(await f.scalar('SELECT choice_token FROM taxi_bot_dispatch_jobs'));
+  await f.db.query("UPDATE taxi_bot_sessions SET mode='human'WHERE customer=$1",[customer]);await f.click('txw_'+token);
+  assert.equal(await f.scalar('SELECT continuations FROM taxi_bot_dispatch_jobs'),0);assert.equal(await f.scalar('SELECT state FROM taxi_bot_dispatch_jobs'),'attention');
+ }finally{await f.db.close();}
+});
+
 async function dispatchFixture(){
- const f=await fixture();await f.prepare();await f.confirm();const tripId=asString(await f.scalar('SELECT id FROM viajes'));
+ const f=await fixture();await f.prepare();await f.confirm(customer,[{deviceId:1,name:'Unidad 1'}]);const tripId=asString(await f.scalar('SELECT id FROM viajes'));
  const claims=async()=>parseDispatchClaims((await f.db.query<{claim:unknown}>('SELECT taxi_bot_dispatch_claim() AS claim')).rows.map(row=>row.claim));
  const complete=async(lease:string,candidates:{deviceId:number;name:string}[]=[],error:string|null=null)=>f.obj(await f.scalar('SELECT taxi_bot_dispatch_complete($1,$2,$3,$4)',[tripId,lease,candidates,error]));
  return{...f,tripId,claims,complete};
 }
-test('sequential dispatch SQL: first offer is one taxi in GPS order, with a map link, no fare and a full minute',async()=>{
+test('batch dispatch SQL: fewer than three eligible candidates remain valid and a duplicate call cannot fill an active round',async()=>{
  const f=await fixture();try{
   await f.prepare();await f.confirm(customer,[{deviceId:2,name:'Closer'},{deviceId:1,name:'Next'}]);
-  const offers=(await f.db.query<{device_id:number;expires_at:string}>('SELECT device_id,expires_at FROM taxi_bot_offers')).rows;
-  assert.equal(offers.length,1);assert.equal(offers[0].device_id,2);
-  const seconds=Number(await f.scalar('SELECT extract(epoch FROM expires_at-clock_timestamp())FROM taxi_bot_offers'));assert.ok(seconds>58&&seconds<=60);
-  const body=f.obj(await f.scalar("SELECT body FROM taxi_bot_outbox WHERE dedupe_key LIKE 'offer:%'")),text=asString(body.text);
-  assert.match(text,/https:\/\/maps\.google\.com\/\?q=16\.25000,-92\.13000/);assert.doesNotMatch(text,/\$|MXN|Tarifa|Ubicación compartida/);assert.match(text,/1 minuto/);assert.ok(text.length<=1024);assert.ok(unknownArray(body.buttons));assert.equal(f.obj(body.buttons[0]).title,'Aceptar viaje');
+  const offers=(await f.db.query<{device_id:number;expires_at:string}>('SELECT device_id,expires_at FROM taxi_bot_offers ORDER BY device_id')).rows;
+  assert.equal(offers.length,2);assert.deepEqual(offers.map(o=>o.device_id).sort(),[1,2]);
+  const seconds=Number(await f.scalar('SELECT min(extract(epoch FROM expires_at-clock_timestamp()))FROM taxi_bot_offers'));assert.ok(seconds>178&&seconds<=180);
+  const body=f.obj(await f.scalar("SELECT body FROM taxi_bot_outbox WHERE dedupe_key LIKE 'offer:%'LIMIT 1")),text=asString(body.text);
+  assert.match(text,/https:\/\/maps\.google\.com\/\?q=16\.25000,-92\.13000/);assert.doesNotMatch(text,/\$|MXN|Tarifa|Ubicación compartida/);assert.match(text,/3 minutos/);assert.ok(text.length<=1024);assert.ok(unknownArray(body.buttons));assert.equal(f.obj(body.buttons[0]).title,'Aceptar viaje');
   assert.equal(await f.scalar('SELECT taxi_bot_dispatch_offer($1,$2,$3)',[await f.scalar('SELECT id FROM viajes'),[{deviceId:1}],2]),0);
-  assert.equal(await f.scalar('SELECT count(*)::int FROM taxi_bot_offers'),1);
+  assert.equal(await f.scalar('SELECT count(*)::int FROM taxi_bot_offers'),2);
  }finally{await f.db.close();}
 });
-test('sequential dispatch SQL: 59 seconds still waits, expiration advances once and rejection advances without waiting again',async()=>{
+test('batch dispatch SQL: live offers block the next round and a full rejection still respects its three-minute window',async()=>{
  const f=await dispatchFixture();try{
   await f.db.exec("UPDATE taxi_bot_dispatch_jobs SET next_at=clock_timestamp()-interval '1 minute';UPDATE taxi_bot_offers SET expires_at=clock_timestamp()+interval '1 second'");
   assert.deepEqual(await f.claims(),[]);
@@ -1768,26 +1901,27 @@ test('sequential dispatch SQL: 59 seconds still waits, expiration advances once 
   assert.equal((await f.complete(first.lease,[{deviceId:2,name:'Repeat'}])).state,'stale');
   assert.equal(await f.scalar("SELECT count(*)::int FROM taxi_bot_offers WHERE state='offered'AND expires_at>clock_timestamp()"),1);
   await f.db.exec("UPDATE taxi_bot_offers SET state='rejected'WHERE device_id=2");
+  assert.deepEqual(await f.claims(),[]);await f.db.exec("UPDATE taxi_bot_dispatch_jobs SET next_at=clock_timestamp()-interval '1 second'");
   assert.equal((await f.claims()).length,1);assert.equal(await f.scalar('SELECT count(*)::int FROM viajes'),1);
  }finally{await f.db.close();}
 });
-test('sequential dispatch SQL: successful submission starts the minute once and repeated callbacks never extend it',async()=>{
+test('batch dispatch SQL: provider acceptance, delivery and read never extend the common round deadline',async()=>{
  const f=await dispatchFixture();try{
   await f.db.exec("UPDATE taxi_bot_offers SET expires_at=clock_timestamp()+interval '20 seconds'");
   const outputs=(await f.db.query<Record<string,unknown>>('SELECT * FROM taxi_bot_outbox_claim($1,$2)',[tenant,waba])).rows;
   const output=outputs.find(row=>asString(row.dedupe_key).startsWith('offer:'));assert.ok(output);
   await f.scalar('SELECT taxi_bot_outbox_complete($1,$2,$3,$4,$5)',[output.id,output.lease,'accepted','test-submission',null]);
-  const deadline=await f.scalar('SELECT expires_at FROM taxi_bot_offers');const left=Number(await f.scalar('SELECT extract(epoch FROM expires_at-clock_timestamp())FROM taxi_bot_offers'));assert.ok(left>58&&left<=60);
+  const deadline=await f.scalar('SELECT expires_at FROM taxi_bot_offers');const left=Number(await f.scalar('SELECT extract(epoch FROM expires_at-clock_timestamp())FROM taxi_bot_offers'));assert.ok(left>18&&left<=20);
   await f.scalar('SELECT taxi_bot_provider_status($1,$2,$3,$4,$5)',[output.id,'test-submission',waba,driverPhone,'delivered']);
   await f.scalar('SELECT taxi_bot_provider_status($1,$2,$3,$4,$5)',[output.id,'test-submission',waba,driverPhone,'read']);
   assert.deepEqual(await f.scalar('SELECT expires_at FROM taxi_bot_offers'),deadline);assert.deepEqual(await f.claims(),[]);
  }finally{await f.db.close();}
 });
-test('sequential dispatch SQL: a delayed success cannot revive an expired offer or overlap the next one',async()=>{
+test('batch dispatch SQL: a delayed success cannot revive an expired offer or overlap the next round',async()=>{
  const f=await dispatchFixture();try{
   const outputs=(await f.db.query<Record<string,unknown>>('SELECT * FROM taxi_bot_outbox_claim($1,$2)',[tenant,waba])).rows;
   const output=outputs.find(row=>asString(row.dedupe_key).startsWith('offer:'));assert.ok(output);
-  await f.db.exec("UPDATE taxi_bot_offers SET expires_at=clock_timestamp()-interval '1 second'");
+  await f.db.exec("UPDATE taxi_bot_offers SET expires_at=clock_timestamp()-interval '1 second';UPDATE taxi_bot_dispatch_jobs SET next_at=clock_timestamp()-interval '1 second'");
   const claim=(await f.claims())[0];assert.ok(claim);assert.equal((await f.complete(claim.lease,[{deviceId:2,name:'Next'}])).offers,1);
   const oldDeadline=await f.scalar('SELECT expires_at FROM taxi_bot_offers WHERE device_id=1');
   await f.scalar('SELECT taxi_bot_outbox_complete($1,$2,$3,$4,$5)',[output.id,output.lease,'accepted','late-success',null]);
@@ -1795,10 +1929,10 @@ test('sequential dispatch SQL: a delayed success cannot revive an expired offer 
   assert.equal(await f.scalar("SELECT count(*)::int FROM taxi_bot_offers WHERE state='offered'AND expires_at>clock_timestamp()"),1);
  }finally{await f.db.close();}
 });
-test('sequential dispatch SQL: an already offered taxi is excluded, bounded references stay in one message and rejection keeps idempotence',async()=>{
+test('batch dispatch SQL: an already offered taxi is excluded, bounded references stay in one message and completion is idempotent',async()=>{
  const f=await dispatchFixture();try{
   assert.deepEqual((await f.db.query<{device_id:number}>('SELECT * FROM taxi_bot_dispatch_eligible($1,$2,$3)',[tenant,waba,[]])).rows,[{device_id:2}]);
-  await f.db.exec("UPDATE taxi_bot_offers SET state='rejected';SELECT set_config('app.taxi_bot_write','on',false)");
+  await f.db.exec("UPDATE taxi_bot_offers SET state='rejected';UPDATE taxi_bot_dispatch_jobs SET next_at=clock_timestamp()-interval '1 second';SELECT set_config('app.taxi_bot_write','on',false)");
   await f.db.query("UPDATE viajes SET origen=$1,destino=$2 WHERE id=$3",['Ubicación compartida (16.25000, -92.13000)\nReferencia: '+'x'.repeat(400),'y'.repeat(400),f.tripId]);
   const claim=(await f.claims())[0];assert.ok(claim);await f.complete(claim.lease,[{deviceId:2,name:'Next'}]);
   const offer=f.obj(await f.scalar("SELECT body FROM taxi_bot_outbox WHERE dedupe_key LIKE 'offer:%' ORDER BY sequence DESC LIMIT 1"));
@@ -1810,7 +1944,7 @@ test('sequential dispatch SQL: an already offered taxi is excluded, bounded refe
 for(const terminal of ['rejected','expired','revoked'] as const)test('dispatch rounds SQL: '+terminal+' offers move to a fresh round without another booking or repeated taxi',async()=>{
  const f=await dispatchFixture();try{
   assert.deepEqual(await f.claims(),[],'live first-round offers must finish first');
-  await f.db.query("UPDATE taxi_bot_offers SET state=$1",[terminal]);
+  await f.db.query("UPDATE taxi_bot_offers SET state=$1",[terminal]);await f.db.exec("UPDATE taxi_bot_dispatch_jobs SET next_at=clock_timestamp()-interval '1 second'");
   await f.db.query("INSERT INTO conductores(tenant_id,device_id,telefono_whatsapp,nombre)VALUES($1,4,'+529630000014','Unidad 4')",[tenant]);
   const claims=await f.claims();assert.equal(claims.length,1);assert.deepEqual(claims[0].excluded,[1]);assert.equal(claims[0].origin.lat,16.25);
   assert.deepEqual(await f.claims(),[],'an active lease cannot be claimed twice');
@@ -1821,36 +1955,36 @@ for(const terminal of ['rejected','expired','revoked'] as const)test('dispatch r
 });
 test('dispatch rounds SQL: expired worker lease recovers and the old worker cannot create offers',async()=>{
  const f=await dispatchFixture();try{
-  await f.db.exec("UPDATE taxi_bot_offers SET state='expired'");const first=(await f.claims())[0];assert.ok(first);
+  await f.db.exec("UPDATE taxi_bot_offers SET state='expired';UPDATE taxi_bot_dispatch_jobs SET next_at=clock_timestamp()-interval '1 second'");const first=(await f.claims())[0];assert.ok(first);
   await f.db.exec("UPDATE taxi_bot_dispatch_jobs SET lease_until=clock_timestamp()-interval '1 second'");const second=(await f.claims())[0];assert.ok(second);assert.notEqual(first.lease,second.lease);
   assert.equal((await f.complete(first.lease,[])).state,'stale');assert.equal((await f.complete(second.lease,[])).state,'waiting');assert.deepEqual(await f.claims(),[],'empty scans have a bounded delay');
  }finally{await f.db.close();}
 });
 for(const terminal of ['en_camino','cancelado','cancelado_timeout','completado'] as const)test('dispatch rounds SQL: '+terminal+' prevents a leased round from offering another taxi',async()=>{
  const f=await dispatchFixture();try{
-  await f.db.exec("UPDATE taxi_bot_offers SET state='expired'");const claimed=(await f.claims())[0];assert.ok(claimed);
+  await f.db.exec("UPDATE taxi_bot_offers SET state='expired';UPDATE taxi_bot_dispatch_jobs SET next_at=clock_timestamp()-interval '1 second'");const claimed=(await f.claims())[0];assert.ok(claimed);
   await f.db.exec("BEGIN;SELECT set_config('app.taxi_bot_write','on',true)");
   if(terminal==='completado')await f.db.query("UPDATE viajes SET estado='en_camino'WHERE id=$1",[f.tripId]);
   await f.db.query("UPDATE viajes SET estado=$1 WHERE id=$2",[terminal,f.tripId]);await f.db.exec('COMMIT');
   assert.equal((await f.complete(claimed.lease,[{deviceId:2,name:'Unidad 2'}])).state,'stale');assert.deepEqual(await f.claims(),[]);assert.equal(await f.scalar('SELECT state FROM taxi_bot_dispatch_jobs'),'done');assert.equal(await f.scalar('SELECT count(*)::int FROM taxi_bot_offers'),1);
  }finally{await f.db.close();}
 });
-test('dispatch rounds SQL: four rounds are bounded, preserve the request and raise one customer notice for the base',async()=>{
+test('dispatch rounds SQL: three rounds pause the request with one customer choice instead of assigning or closing it',async()=>{
  const f=await dispatchFixture();try{
   for(let unit=4;unit<=6;unit++)await f.db.query("INSERT INTO conductores(tenant_id,device_id,telefono_whatsapp,nombre)VALUES($1,$2,$3,$4)",[tenant,unit,'+5296300000'+String(unit).padStart(2,'0'),'Unidad '+unit]);
-  for(let unit=4;unit<=6;unit++){
-   await f.db.exec("UPDATE taxi_bot_offers SET state='rejected'WHERE state='offered'");const claim=(await f.claims())[0];assert.ok(claim);assert.equal((await f.complete(claim.lease,[{deviceId:unit,name:'Unidad '+unit}])).state,'offered');
+  for(let unit=4;unit<=5;unit++){
+   await f.db.exec("UPDATE taxi_bot_offers SET state='rejected'WHERE state='offered';UPDATE taxi_bot_dispatch_jobs SET next_at=clock_timestamp()-interval '1 second'");const claim=(await f.claims())[0];assert.ok(claim);assert.equal((await f.complete(claim.lease,[{deviceId:unit,name:'Unidad '+unit}])).state,'offered');
   }
-  await f.db.exec("UPDATE taxi_bot_offers SET state='rejected'WHERE state='offered'");assert.deepEqual(await f.claims(),[]);assert.deepEqual(await f.claims(),[]);
-  assert.equal(await f.scalar('SELECT round_no FROM taxi_bot_dispatch_jobs'),4);assert.equal(await f.scalar('SELECT state FROM taxi_bot_dispatch_jobs'),'attention');assert.equal(await f.scalar('SELECT estado FROM viajes'),'buscando_conductor');
-  assert.equal(await f.scalar("SELECT count(*)::int FROM taxi_bot_outbox WHERE dedupe_key LIKE 'dispatch-attention:%'"),1);
-  const status=parseDispatchStatus(await f.scalar('SELECT taxi_bot_dispatch_status($1,$2)',[tenant,waba]));assert.equal(status.jobs[0].code,'round_limit');assert.equal(status.jobs[0].round,4);
+  await f.db.exec("UPDATE taxi_bot_offers SET state='rejected'WHERE state='offered';UPDATE taxi_bot_dispatch_jobs SET next_at=clock_timestamp()-interval '1 second'");assert.deepEqual(await f.claims(),[]);assert.deepEqual(await f.claims(),[]);
+  assert.equal(await f.scalar('SELECT round_no FROM taxi_bot_dispatch_jobs'),3);assert.equal(await f.scalar('SELECT state FROM taxi_bot_dispatch_jobs'),'attention');assert.equal(await f.scalar('SELECT estado FROM viajes'),'buscando_conductor');
+  assert.equal(await f.scalar("SELECT count(*)::int FROM taxi_bot_outbox WHERE dedupe_key LIKE 'dispatch-choice:%'"),1);
+  const status=parseDispatchStatus(await f.scalar('SELECT taxi_bot_dispatch_status($1,$2)',[tenant,waba]));assert.equal(status.jobs[0].code,'customer_choice');assert.equal(status.jobs[0].round,3);
   const event=await f.enqueue('¿Ya viene el taxi?'),begin=await f.begin(event.eventId);assert.equal(parseSession(begin.session).active?.dispatchAttention,true);
  }finally{await f.db.close();}
 });
 test('dispatch rounds SQL: three failed GPS lookups escalate once; they never erase the confirmed request',async()=>{
  const f=await dispatchFixture();try{
-  await f.db.exec("UPDATE taxi_bot_offers SET state='expired'");
+  await f.db.exec("UPDATE taxi_bot_offers SET state='expired';UPDATE taxi_bot_dispatch_jobs SET next_at=clock_timestamp()-interval '1 second'");
   for(let scan=0;scan<3;scan++){
    await f.db.exec("UPDATE taxi_bot_dispatch_jobs SET next_at=clock_timestamp()-interval '1 second'");const claim=(await f.claims())[0];assert.ok(claim);const result=await f.complete(claim.lease,[],'fleet_unavailable');assert.equal(result.state,scan===2?'attention':'waiting');
   }
@@ -1859,7 +1993,7 @@ test('dispatch rounds SQL: three failed GPS lookups escalate once; they never er
 });
 test('dispatch rounds SQL: empty fleet scans stop at twelve and do not consume unlimited provider calls',async()=>{
  const f=await dispatchFixture();try{
-  await f.db.exec("UPDATE taxi_bot_offers SET state='expired';UPDATE taxi_bot_dispatch_jobs SET scans=11");
+  await f.db.exec("UPDATE taxi_bot_offers SET state='expired';UPDATE taxi_bot_dispatch_jobs SET scans=11,next_at=clock_timestamp()-interval '1 second'");
   const claim=(await f.claims())[0];assert.ok(claim);assert.equal((await f.complete(claim.lease)).state,'attention');assert.deepEqual(await f.claims(),[]);assert.equal(await f.scalar('SELECT scans FROM taxi_bot_dispatch_jobs'),12);
  }finally{await f.db.close();}
 });
@@ -1876,7 +2010,7 @@ test('dispatch rounds SQL: a permanent recipient error revokes only that offer a
   const out=(await f.db.query<Record<string,unknown>>('SELECT * FROM taxi_bot_outbox_claim($1,$2)',[tenant,waba])).rows;
   for(const item of out.filter(row=>String(row.dedupe_key).startsWith('offer:')))assert.equal(await f.scalar('SELECT taxi_bot_outbox_complete($1,$2,$3,$4,$5)',[item.id,item.lease,'failed',null,'provider_http_400']),true);
   assert.equal(await f.scalar("SELECT count(*)::int FROM taxi_bot_offers WHERE state='revoked'"),1);assert.equal(parseDispatchStatus(await f.scalar('SELECT taxi_bot_dispatch_status($1,$2)',[tenant,waba])).health.paused,false);
-  assert.equal((await f.claims()).length,1);
+  assert.deepEqual(await f.claims(),[]);await f.db.exec("UPDATE taxi_bot_dispatch_jobs SET next_at=clock_timestamp()-interval '1 second'");assert.equal((await f.claims()).length,1);
  }finally{await f.db.close();}
 });
 test('dispatch rounds SQL: an uncertain send pauses the channel without resending it; only unsent claims return to pending',async()=>{

@@ -1,5 +1,5 @@
 import {coordinateTaxi,type TaxiServices}from'../estrella-taxis-backend/supabase/functions/_shared/bot/taxis/coordinator.ts';
-import {emptyDraft,type TaxiChannel,type TaxiInbound,type TaxiSession}from'../estrella-taxis-backend/supabase/functions/_shared/bot/taxis/contracts.ts';
+import {emptyDraft,parseSession,type TaxiChannel,type TaxiInbound,type TaxiSession}from'../estrella-taxis-backend/supabase/functions/_shared/bot/taxis/contracts.ts';
 import {parseInterpretation}from'../estrella-taxis-backend/supabase/functions/_shared/bot/taxis/policy.ts';
 function assert(v:unknown):asserts v{if(!v)throw new Error('Assertion failed');}
 const equal=(a:unknown,b:unknown)=>{if(JSON.stringify(a)!==JSON.stringify(b))throw new Error('Different values: '+JSON.stringify(a)+' / '+JSON.stringify(b));};
@@ -8,6 +8,18 @@ const channel:TaxiChannel={tenantId:'11111111-1111-4111-8111-111111111111',waba:
 const pickup={text:address,lat:16.25,lng:-92.13,placeId:null},target={text:destination,lat:16.26,lng:-92.14,placeId:null};
 const message=(text:string):TaxiInbound=>({id:crypto.randomUUID(),from:'+529630000002',to:channel.waba,at:new Date(now).toISOString(),type:'text',text,button:null,location:null});
 const session=():TaxiSession=>({revision:0,mode:'bot',active:null,history:[],draft:emptyDraft()});
+for(const prefix of ['txw_','txk_'])Deno.test('dispatch customer choice: '+prefix+' is a native proposal validated by SQL without model or fleet calls',async()=>{
+ const never=async():Promise<never>=>{throw Error('Native choice cannot call a provider');};
+ const d=await coordinateTaxi([{...message(''),type:'button',button:prefix+'22222222-2222-4222-8222-222222222222'}],session(),channel,{interpret:never,resolve:never,quote:never,candidates:never},now);
+ equal(d.action,'reply');equal(d.reason,'dispatch_choice');equal(d.messages,[]);equal(d.candidates,[]);
+});
+Deno.test('dispatch customer choice: a current wait decision remains visible and malformed stored tokens fail validation',async()=>{
+ const s=session();s.active={id:'11111111-1111-4111-8111-111111111111',state:'buscando_conductor',taxiName:null,dispatchAttention:true,dispatchChoice:{token:'22222222-2222-4222-8222-222222222222',expiresAt:new Date(now+60000).toISOString()}};
+ equal(parseSession(s).active,s.active);const f=fixture({intent:'status',fields:{}}),d=await f.run('¿Qué pasó?',s);equal(d.reason,'dispatch_choice_pending');equal(d.messages[0].buttons?.length,2);equal(f.counts(),{quotes:0,assignments:0});
+ for(const choice of [{token:'inventado',expiresAt:new Date(now).toISOString()},{token:s.active.dispatchChoice?.token,expiresAt:'mañana'}]){
+  let rejected=false;try{parseSession({...s,active:{...s.active,dispatchChoice:choice}});}catch{rejected=true;}assert(rejected);
+ }
+});
 function fixture(proposal:unknown){let quotes=0,assignments=0;
  const services:TaxiServices={interpret:async current=>parseInterpretation(proposal,current),resolve:async value=>value===address?{kind:'resolved',place:pickup}:value===destination?{kind:'resolved',place:target}:{kind:'unavailable'},quote:async()=>{quotes++;return 6500;},candidates:async()=>{assignments++;return[{deviceId:1,name:'Unidad sintética'}];}};
  return{services,counts:()=>({quotes,assignments}),run:(text:string,s=session())=>coordinateTaxi([message(text)],s,channel,services,now)};

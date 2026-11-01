@@ -208,6 +208,9 @@ async function decideTaxi(messages:TaxiInbound[],session:TaxiSession,channel:Tax
   if(buttons.length) {
     if(buttons.length!==1||messages.length!==1)return {...reply('Llegaron respuestas distintas. Revisa el viaje y dime qué quieres hacer.','mixed_button_turn'),action:'draft',draft:{...session.draft,confirmation:null,expiresAt:null,destinationPrompt:null}};
     const id=buttons[0].button??'';
+    // The commit validates ownership, token, expiry and native event atomically.
+    // This remains a reply proposal; the model cannot authorize continuation.
+    if(/^tx[wk]_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(id))return {...base,reason:'dispatch_choice',replyClass:'change'};
     if(id.startsWith('txd_')){
       if(live(session.active)||!session.draft.destinationPrompt||id!=='txd_'+session.draft.destinationPrompt||session.draft.awaitingLocation!=='destination'||!session.draft.expiresAt||Date.parse(session.draft.expiresAt)<=now){
         if(!live(session.active)&&session.draft.awaitingLocation==='destination'&&!hasDestination(session.draft))return askDestination(session.draft,'stale_destination_choice');
@@ -238,6 +241,8 @@ async function decideTaxi(messages:TaxiInbound[],session:TaxiSession,channel:Tax
   if(cancellationQuestion(current))return reply(live(session.active)?'¿Quieres cancelar tu solicitud actual? Si es así, escribe «Cancela mi taxi».':'Todavía no tienes un taxi solicitado para cancelar.','cancellation_question');
   if(live(session.active)) {
     if(activeRideChange(current)||messages.some((m)=>m.location!==null))return human('active_trip_change','Tu viaje ya está solicitado. Paso el cambio a la base para que lo revisen antes de mover la unidad.');
+    const choice=session.active?.dispatchChoice;
+    if(choice&&Date.parse(choice.expiresAt)>now)return {...reply('🚕 Todavía no conseguimos una unidad. ¿Seguimos buscando o prefieres cancelar? 😊','dispatch_choice_pending'),replyClass:'question',messages:[{to:latest.from,text:'🚕 Todavía no conseguimos una unidad. ¿Seguimos buscando o prefieres cancelar? 😊',buttons:[{id:'txw_'+choice.token,title:'Seguir esperando'},{id:'txk_'+choice.token,title:'Cancelar solicitud'}]}]};
     return reply(session.active?.state==='en_camino'?`🚕 La unidad ${session.active.taxiName??'asignada'} ya aceptó tu viaje. Aún no tengo una llegada confirmada.`:session.active?.dispatchAttention?'🚕 Tu solicitud sigue registrada y necesita revisión de la base. Todavía no hay una unidad confirmada.':'🚕 Tu solicitud sigue en búsqueda. Todavía no hay una unidad confirmada.','active_status');
   }
   if(messages.every((m)=>m.type==='unsupported'))return clarifyPending('unsupported_media');

@@ -10,7 +10,7 @@ const code=(v:unknown):v is string|null=>v===null||typeof v==='string'&&/^[a-z0-
 export function parseDispatchClaims(value:unknown):DispatchClaim[]{
  if(!Array.isArray(value)||value.length>2)throw Error('invalid_dispatch_claim');
  const result=value.map((v):DispatchClaim=>{
-  if(!record(v)||!phone(v.waba)||!record(v.origin)||!coord(v.origin.lat,v.origin.lng)||typeof v.origin.lng!=='number'||!text(v.origin.text,900)||v.origin.source!=='gps'||!Array.isArray(v.excluded)||v.excluded.length>12||!v.excluded.every(positiveId))throw Error('invalid_dispatch_claim');
+  if(!record(v)||!phone(v.waba)||!record(v.origin)||!coord(v.origin.lat,v.origin.lng)||typeof v.origin.lng!=='number'||!text(v.origin.text,900)||v.origin.source!=='gps'||!Array.isArray(v.excluded)||v.excluded.length>18||!v.excluded.every(positiveId))throw Error('invalid_dispatch_claim');
   const excluded:number[]=v.excluded;if(new Set(excluded).size!==excluded.length)throw Error('invalid_dispatch_claim');
   return{tripId:uuid(v.tripId),tenantId:uuid(v.tenantId),waba:String(v.waba),lease:uuid(v.lease),origin:{text:String(v.origin.text),lat:v.origin.lat,lng:v.origin.lng,placeId:null,source:'gps'},excluded};
  });

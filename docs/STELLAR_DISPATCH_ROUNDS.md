@@ -1,5 +1,7 @@
 # Asignación por rondas y recuperación de WhatsApp
 
+> Política posterior: [tres rondas de hasta tres unidades simultáneas, con tres minutos por ronda y elección de esperar o cancelar](STELLAR_THREE_ROUND_BATCHES_20261031.md). Los límites y tiempos anteriores son historial.
+
 > Estado posterior: [Wialon se actualiza antes de seleccionar una unidad; funciones v41 y prueba real de recepción/aceptación/finalización de la 0540](STELLAR_GPS_REFRESH_20261031.md).
 
 > Actualización del 31-10-2026: [la ocupación desconocida ya no se convierte en libre y queda excluida del despacho](STELLAR_GPS_OCCUPANCY_20261031.md). Las cifras y versiones anteriores se conservan como historial.
