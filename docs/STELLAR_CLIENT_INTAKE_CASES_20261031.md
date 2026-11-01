@@ -38,3 +38,11 @@ GitHub `main`: `b92eaf2` (nombres, referencias y ejemplos) y `0053aad` (aclaraci
 Por instrucción expresa del administrador se añadió únicamente el teléfono terminado en **9156**, normalizado con el prefijo de México. Se verificó al administrador existente y se usó `taxi_bot_customer_access_apply`, preservando los números que pudieran existir, revisión, auditoría e idempotencia de la ruta. La consulta final mostró canal activo, un autorizado y acceso permitido para ese teléfono. La atención sigue restringida; otros clientes deben añadirse en Autorizados. No se publicó el número completo en esta documentación.
 
 Ante una regresión, las funciones v45 anteriores a esta intervención se conservaron en `intake-before`, privado. Restaurar sólo las fuentes revisadas y verificar salud; no deshacer la autorización solicitada ni restaurar datos de viajes para revertir código. Evidencia agregada: `STELLAR_CLIENT_INTAKE_CASES_20261031.evidence.json`.
+
+## Verificación posterior
+
+Se volvieron a descargar las funciones publicadas: siguen en v47 y los 31 módulos de cada función coinciden con el manifiesto revisado; ambas respondieron OPTIONS 200. El consumidor de taxis y el puente Wialon mantienen sus procesos activos. La consulta de acceso confirmó canal habilitado y el único autorizado terminado en 9156; no se modificó la lista.
+
+Se reforzó el recorrido automatizado existente con turnos separados por 30 segundos, relectura de la sesión mediante su contrato, historial acotado y contadores sintéticos de mensajes. Petición, pin y nombre consumen tres respuestas normales; las dos referencias posteriores permanecen como aclaraciones sin derivación humana ni repetición del pin. El botón antiguo para omitir destino se rechaza, el actual prepara el resumen sin precio y sólo el botón vigente de confirmación permite una consulta de candidatos. El texto «Sí, mándalo» y una confirmación anterior no la permiten.
+
+Pasaron las 15 pruebas dirigidas de recepción y presupuesto, con comprobación de tipos, y el control estático de 142 archivos. Esta ampliación sustituye intérprete y proveedores por contratos declarados; **no es una prueba física ni una prueba de commit PostgreSQL**. No cambió la lógica de producción, no hizo falta otro despliegue de Supabase y no se enviaron mensajes ni se crearon viajes.

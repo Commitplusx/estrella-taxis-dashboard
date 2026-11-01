@@ -100,5 +100,70 @@
   "temporaryEvaluatorDeleted": true,
   "physicalCustomerTest": false,
   "whatsAppMessagesSentByEvaluation": 0,
-  "tripsCreatedByEvaluation": 0
+  "tripsCreatedByEvaluation": 0,
+  "followup": {
+    "checkedAt": "2026-11-01T00:31:22.902Z",
+    "runtimeChanged": false,
+    "supabaseRedeployed": false,
+    "functions": [
+      {
+        "name": "ycloud-webhook",
+        "version": 47,
+        "status": "ACTIVE"
+      },
+      {
+        "name": "process-queue",
+        "version": 47,
+        "status": "ACTIVE"
+      },
+      {
+        "name": "taxi-bot-admin",
+        "version": 37,
+        "status": "ACTIVE"
+      }
+    ],
+    "freshDownloadVerification": [
+      {
+        "name": "process-queue",
+        "files": 31,
+        "hashesMatch": true,
+        "options": 200
+      },
+      {
+        "name": "ycloud-webhook",
+        "files": 31,
+        "hashesMatch": true,
+        "options": 200
+      }
+    ],
+    "authorization": {
+      "authorizedCount": 1,
+      "enabled": true,
+      "requestedCustomerAllowed": true
+    },
+    "vpsProcessesRunning": [
+      "stellar-taxi-bot",
+      "wialon-bridge"
+    ],
+    "typedFocusedTests": {
+      "passed": 15,
+      "failed": 0
+    },
+    "qualityFiles": 142,
+    "sessionRoundTrip": true,
+    "syntheticMessageLedger": true,
+    "turnSpacingSeconds": 30,
+    "cases": [
+      "separate-name-pin-and-two-landmarks",
+      "stale-destination-button",
+      "current-destination-deferral",
+      "typed-assent-does-not-dispatch",
+      "stale-confirmation",
+      "current-confirmation-only"
+    ],
+    "actualPostgresCommitTest": false,
+    "physicalCustomerTest": false,
+    "whatsAppMessagesSent": 0,
+    "tripsCreated": 0
+  }
 }
